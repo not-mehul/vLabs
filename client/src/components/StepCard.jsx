@@ -1,0 +1,53 @@
+import Markdown from './Markdown.jsx';
+import HintBox from './HintBox.jsx';
+import Checkpoint from './Checkpoint.jsx';
+
+const TYPE_META = {
+  desk: { label: 'Desk Action', icon: '🛠️' },
+  computer: { label: 'Computer Action', icon: '💻' },
+};
+
+/**
+ * Structured content card. Desk vs Computer actions are visually distinct
+ * (spec §1) via the `card--<type>` modifier. Renders collapsible hints and an
+ * optional state checkpoint.
+ */
+export default function StepCard({ step, total, onCheckpoint }) {
+  const meta = TYPE_META[step.type] || TYPE_META.desk;
+  return (
+    <article className={`card card--${step.type}`} id={`step-${step.index}`}>
+      <header className="card__head">
+        <span className="card__kind">
+          <span aria-hidden="true">{meta.icon}</span> {meta.label}
+        </span>
+        <span className="card__count">
+          Step {step.index + 1}
+          {total ? ` of ${total}` : ''}
+        </span>
+      </header>
+
+      <h2 className="card__title">{step.title}</h2>
+
+      <div className="card__body">
+        <Markdown>{step.body}</Markdown>
+      </div>
+
+      {step.hints && step.hints.length > 0 && (
+        <div className="card__hints">
+          {step.hints.map((h, i) => (
+            <HintBox key={i} label={h.label} text={h.text} />
+          ))}
+        </div>
+      )}
+
+      {step.checkpoint && (
+        <Checkpoint
+          prompt={step.checkpoint.prompt}
+          placeholder={step.checkpoint.placeholder}
+          completed={step.checkpoint.completed}
+          onSubmit={(answer) => onCheckpoint(step.index, answer)}
+        />
+      )}
+    </article>
+  );
+}

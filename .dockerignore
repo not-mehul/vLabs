@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/data
+**/*.sqlite
+**/*.sqlite3
+**/*.log
+.git
+.github
+*.md
+!README.md
+.env
+.env.*
+scratchpad
