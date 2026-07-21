@@ -52,21 +52,67 @@ function noStore(res) {
 
 /**
  * POST /api/participant/join
- * Body: { room_code, seat_id }
- * Validates the live session and registers (or resumes) a seat. Returns a
- * participant token plus lightweight session metadata — never the manual body.
+ * Body: { room_code, first_name, last_name }
+ *
+ * Registers a participant by name and assigns the next ascending seat number
+ * (1-100) in join order. Rejoining with the same name resumes the same seat
+ * and progress, so a participant who closes their browser can come straight
+ * back in. Returns a participant token plus lightweight session metadata —
+ * never the manual body.
  */
+const MAX_PARTICIPANTS = 100;
+
+// Assign the next seat number atomically inside a transaction so concurrent
+// joins can never collide on a number.
+const registerParticipant = db.transaction((session, firstName, lastName, nameKey) => {
+  const existing = db
+    .prepare('SELECT * FROM participants WHERE session_id = ? AND name_key = ?')
+    .get(session.id, nameKey);
+  if (existing) {
+    db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
+      nowIso(),
+      existing.id,
+    );
+    return { participant: existing, resumed: true };
+  }
+
+  const { maxSeat, count } = db
+    .prepare(
+      'SELECT COALESCE(MAX(seat_number), 0) AS maxSeat, COUNT(*) AS count FROM participants WHERE session_id = ?',
+    )
+    .get(session.id);
+  if (count >= MAX_PARTICIPANTS) {
+    throw httpError(409, `This session is full (${MAX_PARTICIPANTS} participants max).`);
+  }
+  const seatNumber = maxSeat + 1;
+  const info = db
+    .prepare(
+      `INSERT INTO participants
+         (session_id, seat_number, first_name, last_name, name_key, step_entered_at, joined_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(session.id, seatNumber, firstName, lastName, nameKey, nowIso(), nowIso(), nowIso());
+  const participant = db
+    .prepare('SELECT * FROM participants WHERE id = ?')
+    .get(info.lastInsertRowid);
+  return { participant, resumed: false };
+});
+
 router.post(
   '/join',
   joinLimiter,
   asyncHandler(async (req, res) => {
     const roomCode = String(req.body?.room_code || '').trim();
-    const seatId = String(req.body?.seat_id || '').trim();
+    const firstName = String(req.body?.first_name || '').trim().replace(/\s+/g, ' ');
+    const lastName = String(req.body?.last_name || '').trim().replace(/\s+/g, ' ');
     if (!/^\d{6}$/.test(roomCode)) {
       throw httpError(400, 'Enter a valid 6-digit room code');
     }
-    if (!seatId || seatId.length > 32) {
-      throw httpError(400, 'Enter a valid seat ID');
+    if (!firstName || firstName.length > 60) {
+      throw httpError(400, 'Enter your first name');
+    }
+    if (!lastName || lastName.length > 60) {
+      throw httpError(400, 'Enter your last name');
     }
 
     const session = db
@@ -78,33 +124,23 @@ router.post(
       throw httpError(401, 'Invalid or expired room code');
     }
 
-    // Resume an existing seat (kiosk reload) or create a fresh one.
-    let participant = db
-      .prepare('SELECT * FROM participants WHERE session_id = ? AND seat_id = ?')
-      .get(session.id, seatId);
-    if (!participant) {
-      const info = db
-        .prepare(
-          `INSERT INTO participants (session_id, seat_id, step_entered_at, joined_at, last_seen_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(session.id, seatId, nowIso(), nowIso(), nowIso());
-      participant = db
-        .prepare('SELECT * FROM participants WHERE id = ?')
-        .get(info.lastInsertRowid);
-    } else {
-      db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
-        nowIso(),
-        participant.id,
-      );
-    }
+    const nameKey = `${firstName} ${lastName}`.toLowerCase();
+    const { participant, resumed } = registerParticipant(
+      session,
+      firstName,
+      lastName,
+      nameKey,
+    );
 
     const { steps } = loadManual(session);
     const token = signParticipantToken(participant, session);
     noStore(res);
     res.json({
       token,
-      seat_id: participant.seat_id,
+      resumed,
+      seat_number: participant.seat_number,
+      first_name: participant.first_name,
+      last_name: participant.last_name,
       session: {
         title: session.title,
         expires_at: session.expires_at,
@@ -128,7 +164,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const p = req.participant;
     const { steps, variables } = loadManual(req.session);
-    const context = resolveVariables(variables, p.seat_id);
+    const context = resolveVariables(variables, p.seat_number);
     const completed = new Set(JSON.parse(p.completed_checkpoints));
     const visibleThrough = computeVisibleThrough(steps, completed);
 
@@ -150,7 +186,9 @@ router.get(
 
     noStore(res);
     res.json({
-      seat_id: p.seat_id,
+      seat_number: p.seat_number,
+      first_name: p.first_name,
+      last_name: p.last_name,
       total_steps: steps.length,
       unlocked_through: visibleThrough,
       current_step: p.current_step,
@@ -191,7 +229,7 @@ router.post(
       throw httpError(403, 'Step is locked');
     }
 
-    const context = resolveVariables(variables, p.seat_id);
+    const context = resolveVariables(variables, p.seat_number);
     const expected = checkpointAnswer(step, context);
     const correct = normaliseAnswer(answer) === expected;
 

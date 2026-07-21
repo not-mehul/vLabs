@@ -29,7 +29,8 @@ export function signParticipantToken(participant, session) {
   return jwt.sign(
     {
       sub: participant.id,
-      seat: participant.seat_id,
+      seat: participant.seat_number,
+      name: `${participant.first_name} ${participant.last_name}`.trim(),
       session: session.id,
       role: 'participant',
     },

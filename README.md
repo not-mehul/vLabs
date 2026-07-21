@@ -9,11 +9,19 @@ eliminate physical PDF provisioning, enforce strict IP protection (no
 downloadable materials), and deliver per-seat instructions live to classroom
 devices.
 
+The UI ships with a clean, Verkada-inspired design language (signature blue,
+deep-navy dark tone, cool-gray neutrals, Inter type) and **full light & dark
+modes**.
+
 ## Screenshots
 
-| Participant lab (per-seat, gated) | Instructor session monitor |
+| Participant lab — dark | Participant lab — light |
 | --- | --- |
-| ![Participant lab view](docs/screenshots/participant-lab.png) | ![Session monitor](docs/screenshots/session-monitor.png) |
+| ![Participant lab, dark](docs/screenshots/participant-lab.png) | ![Participant lab, light](docs/screenshots/participant-lab-light.png) |
+
+| Instructor session monitor | Resume after an accidental close |
+| --- | --- |
+| ![Session monitor](docs/screenshots/session-monitor.png) | ![Join with resume banner](docs/screenshots/join-resume.png) |
 
 | Template authoring + live preview | Landing |
 | --- | --- |
@@ -46,14 +54,16 @@ devices.
 | Spec requirement | Where it lives |
 | --- | --- |
 | **Instructor Portal** — create sessions, generate 6-digit codes, monitor & terminate | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js` |
-| **Participant Portal** — join by code + seat, view personalised steps | `client/src/pages/Join.jsx`, `Lab.jsx`; `server/src/routes/participant.js` |
+| **Participant registration** — first + last name, auto-assigned number (1–100) in join order | `client/src/pages/Join.jsx`; `server/src/routes/participant.js` |
+| **Resume after close** — a participant who closes their browser returns to the same seat & progress | persisted token (`participantSession`) + idempotent name-based rejoin |
 | **Dynamic templating** — inject seat/IP/port variables at render time | `server/src/lib/templating.js` |
 | **Structured cards** — Desk Action vs Computer Action | `client/src/components/StepCard.jsx` |
 | **Collapsible hints** (`<HintBox>`) — progressive disclosure | `client/src/components/HintBox.jsx` |
 | **State checkpoints** — validation string unlocks next step | `client/src/components/Checkpoint.jsx`; server-side validation |
 | **Analytics** — real-time per-seat progress & time-on-step | `SessionMonitor.jsx`; `step_events` table |
 | **Authoring environment** — Markdown editor with live per-seat preview | `client/src/pages/TemplateEditor.jsx` |
-| **Zero data footprint** — DOM-only, no file downloads | no download endpoints; `no-store` headers; memory-only tokens |
+| **Light & dark themes** — Verkada-inspired design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
+| **IP protection** — no file downloads, in-memory content, progressive delivery | no download endpoints; `no-store` headers |
 | **Session gating** — time-limited PIN, instant revocation | `server/src/middleware/auth.js` |
 | **Rate limiting & anti-scraping** | `server/src/middleware/rateLimit.js`; progressive content delivery |
 | **Dockerization** | `Dockerfile`, `docker-compose.yml` |
@@ -127,13 +137,16 @@ Try it end-to-end:
 
 1. Sign in to the instructor portal → **Launch a session** from the seeded
    *Network Bench Setup* template. A 6-digit room code appears.
-2. In another tab/device, open **Join**, enter the code and a seat number
-   (e.g. `7`).
-3. The lab renders personalised for that seat (gateway `192.168.1.107`, host
-   `10.0.0.107`, port `7`…). Expand hints, clear the checkpoint to unlock the
-   final step.
-4. Back in the instructor **session monitor**, watch the seat's live progress
-   and time-on-step; **End session** to revoke access instantly.
+2. In another tab/device, open **Join**, enter the code and register with a
+   first and last name. The server assigns the next number in join order (the
+   first participant is `#1`).
+3. The lab renders personalised for that number (participant `#1` → gateway
+   `192.168.1.101`, host `10.0.0.101`, port `1`…). Expand hints, clear the
+   checkpoint to unlock the final step. Close the tab and reopen — a **Resume**
+   banner brings you straight back to the same seat and progress.
+4. Back in the instructor **session monitor**, watch each named participant's
+   live progress and time-on-step; **End session** to revoke access instantly.
+5. Toggle **light / dark mode** from the ☾/☀ control in any screen's corner.
 
 ## Running with Docker
 
@@ -206,11 +219,38 @@ payload. Submissions are validated against the per-seat expected value. This
 doubles as the anti-scraping mechanism — locked steps and answers simply never
 reach the browser.
 
+### Participant registration & resume
+
+Participants register with a **first and last name**. The server assigns the
+next **ascending number (1–100)** in join order inside a transaction, so
+concurrent joins never collide, and rejects the 101st join with a "session
+full" error. That number is what the templating engine uses as `seat`.
+
+Two mechanisms let a participant who **accidentally closes their browser**
+return to exactly where they were:
+
+1. **Persisted token** — the participant's access token (only the token, never
+   any lab content) is stored in `localStorage`, so reopening the app restores
+   the session and shows a **Resume** banner.
+2. **Idempotent rejoin** — registering again with the same name in the same
+   session returns the *same* number and progress (even from a different
+   device or after clearing storage), because the seat is keyed on a normalised
+   name.
+
+### Theming
+
+A `ThemeContext` provides **light and dark modes** built on CSS custom
+properties toggled on `<html data-theme>`. The initial theme follows the OS
+`prefers-color-scheme`; the user's manual choice is persisted to `localStorage`.
+The palette is an original interpretation of the Verkada brand language
+(signature blue, deep-navy dark tone, cool-gray neutrals) with the self-hosted
+Inter typeface (CSP-safe, no external requests).
+
 ### Security & IP protection
 
 | Requirement | Implementation |
 | --- | --- |
-| **Zero data footprint** | Content is delivered as JSON to the DOM only. No PDF/DOCX/file endpoints exist. Rendered content is served with `Cache-Control: no-store`. Participant tokens live in memory (React state), never `localStorage`/disk — a refresh drops the seat back to the join screen. |
+| **IP protection** | Lab content is delivered as JSON to the DOM only. No PDF/DOCX/file endpoints exist and rendered content is served with `Cache-Control: no-store`, so no lab files are ever written to the device. (An access token is persisted to enable resume — content never is.) |
 | **Session gating** | Access requires a time-limited 6-digit PIN. Every participant request re-validates the live session (`is_active` + `expires_at`), so a token is rejected the instant an instructor terminates or the session expires — no token blocklist needed. |
 | **Anti-scraping / rate limiting** | Layered `express-rate-limit` (join brute-force, checkpoint guessing, content pull, login). Progressive content delivery caps what any seat can pull. |
 | **Transport** | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP, `noindex`. |
@@ -227,8 +267,11 @@ SQLite tables (`server/src/db/index.js`):
 - **`sessions`** — `id`, `room_code` (6-digit), `title`, `template_id` (FK),
   `template_version`, `is_active`, `expires_at`. A partial unique index keeps
   one active session per room code while freeing terminated codes for reuse.
-- **`participants`** — one seat per `(session_id, seat_id)`: `current_step`,
-  `unlocked_step`, `completed_checkpoints`, `step_entered_at`, `last_seen_at`.
+- **`participants`** — one registered participant per session: `seat_number`
+  (ascending 1–100), `first_name`, `last_name`, `name_key` (for idempotent
+  resume), `current_step`, `unlocked_step`, `completed_checkpoints`,
+  `step_entered_at`, `last_seen_at`. Unique on both `(session_id, seat_number)`
+  and `(session_id, name_key)`.
 - **`step_events`** — append-only per-step timing log powering analytics.
 
 ## API reference
@@ -264,7 +307,7 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 ### Participant
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/participant/join` | Join by `room_code` + `seat_id` → participant token |
+| `POST` | `/api/participant/join` | Register with `room_code` + `first_name` + `last_name` → assigned number + participant token (resumes if the name already joined) |
 | `GET` | `/api/participant/steps` | Unlocked, per-seat rendered steps |
 | `POST` | `/api/participant/checkpoint` | Submit unlock string (validated server-side) |
 | `POST` | `/api/participant/progress` | Report active step (analytics) |
@@ -314,8 +357,9 @@ Per the spec's deployment section:
 3. **Kiosk-mode iPads.** Provision classroom iPads with an MDM / Apple
    Configurator to lock Safari to Single App Mode pointing at
    `https://labs.internal`, hiding the URL bar, tabs and sharing. The
-   participant view's memory-only tokens and content deterrents complement
-   this.
+   participant view's content deterrents complement this, while the persisted
+   resume token means a device that reloads or sleeps returns to the same seat
+   without re-registering.
 
 ## Project layout
 
@@ -338,8 +382,10 @@ vLabs/
     └── src/
         ├── pages/             # Landing, Join, Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin
-        ├── components/        # StepCard, HintBox, Checkpoint, Markdown, PortalShell
+        ├── components/        # StepCard, HintBox, Checkpoint, Markdown,
+        │                      #   PortalShell, ThemeToggle
         ├── hooks/             # content protection, instructor API
-        ├── context/           # AuthContext
-        └── api.js             # typed fetch client
+        ├── context/           # AuthContext, ThemeContext (light/dark)
+        ├── styles.css         # design system + light & dark themes
+        └── api.js             # typed fetch client (+ participant resume storage)
 ```

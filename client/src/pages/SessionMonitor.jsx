@@ -166,7 +166,8 @@ export default function SessionMonitor() {
           <table className="table">
             <thead>
               <tr>
-                <th>Seat</th>
+                <th>#</th>
+                <th>Participant</th>
                 <th>Current step</th>
                 <th>Progress</th>
                 <th>Time on step</th>
@@ -177,7 +178,8 @@ export default function SessionMonitor() {
             <tbody>
               {data.participants.map((p) => (
                 <tr key={p.id} className={stuckClass(p.seconds_on_current_step)}>
-                  <td className="mono">{p.seat_id}</td>
+                  <td className="mono seat-num">{p.seat_number}</td>
+                  <td className="table__primary">{p.name}</td>
                   <td>
                     {p.current_step + 1}
                     <span className="muted"> / {data.step_count}</span>

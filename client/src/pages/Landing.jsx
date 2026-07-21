@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function Landing() {
   return (
     <div className="landing">
+      <ThemeToggle className="theme-toggle--corner" />
       <div className="landing__inner">
         <div className="brand brand--lg">
-          <span className="brand__mark">v</span>
-          <span className="brand__name">Labs</span>
+          <span className="brand__mark" aria-hidden="true" />
+          <span className="brand__name">vLabs</span>
         </div>
         <p className="landing__tagline">
           Dynamic, session-gated lab manuals. Personalised for every seat, live
@@ -17,7 +19,7 @@ export default function Landing() {
           <Link to="/join" className="portal-card portal-card--participant">
             <span className="portal-card__icon" aria-hidden="true">🎫</span>
             <h2>I'm a Participant</h2>
-            <p>Join a live session with your 6-digit room code and seat ID.</p>
+            <p>Register with your name and a 6-digit room code to get your seat.</p>
             <span className="portal-card__cta">Enter a session →</span>
           </Link>
 

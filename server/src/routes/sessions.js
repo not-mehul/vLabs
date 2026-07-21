@@ -34,7 +34,10 @@ function participantView(p, stepCount) {
   const onStepSeconds = secondsBetween(p.step_entered_at, nowIso());
   return {
     id: p.id,
-    seat_id: p.seat_id,
+    seat_number: p.seat_number,
+    first_name: p.first_name,
+    last_name: p.last_name,
+    name: `${p.first_name} ${p.last_name}`.trim(),
     current_step: p.current_step,
     unlocked_step: p.unlocked_step,
     completed_checkpoints: JSON.parse(p.completed_checkpoints),
@@ -137,7 +140,7 @@ router.get('/:id', (req, res) => {
   const steps = JSON.parse(row.template_content);
   const stepCount = steps.length;
   const participants = db
-    .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_id')
+    .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number')
     .all(row.id)
     .map((p) => participantView(p, stepCount));
 

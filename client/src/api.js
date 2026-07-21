@@ -1,14 +1,16 @@
 /**
  * Thin fetch wrapper around the vLabs REST API.
  *
- * Tokens live in memory (module-scope) by default. The instructor token is
- * additionally persisted to sessionStorage so a portal refresh doesn't force a
- * re-login. Participant tokens are deliberately NOT persisted to storage — they
- * live only in React state, reinforcing the "zero data footprint" requirement
- * (nothing is written to disk that could outlive the tab).
+ * The instructor token is persisted to sessionStorage so a portal refresh
+ * doesn't force a re-login. The participant token is persisted to localStorage
+ * so a participant who accidentally closes their browser can return and resume
+ * their session and progress. Only the access token is stored — never any lab
+ * content — and the server still gates every request against the live session,
+ * so the stored token is worthless the moment the session ends or expires.
  */
 
 const INSTRUCTOR_KEY = 'vlabs.instructor.token';
+const PARTICIPANT_KEY = 'vlabs.participant.session';
 
 export class ApiError extends Error {
   constructor(message, status, code) {
@@ -64,6 +66,26 @@ export const instructorToken = {
   clear: () => sessionStorage.removeItem(INSTRUCTOR_KEY),
 };
 
+/**
+ * Persisted participant session (token + display metadata) enabling resume
+ * after an accidental browser close. Stored in localStorage so it survives a
+ * full browser restart; cleared automatically when the session ends.
+ */
+export const participantSession = {
+  get() {
+    try {
+      const raw = localStorage.getItem(PARTICIPANT_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+  set(session) {
+    localStorage.setItem(PARTICIPANT_KEY, JSON.stringify(session));
+  },
+  clear: () => localStorage.removeItem(PARTICIPANT_KEY),
+};
+
 export const api = {
   login: (username, password) =>
     request('/auth/login', { method: 'POST', body: { username, password } }),
@@ -95,10 +117,10 @@ export const api = {
 
   /* ------------------------------ Participant --------------------------- */
 
-  join: (roomCode, seatId) =>
+  join: (roomCode, firstName, lastName) =>
     request('/participant/join', {
       method: 'POST',
-      body: { room_code: roomCode, seat_id: seatId },
+      body: { room_code: roomCode, first_name: firstName, last_name: lastName },
     }),
   steps: (token) => request('/participant/steps', { token }),
   submitCheckpoint: (token, stepIndex, answer) =>

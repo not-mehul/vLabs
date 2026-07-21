@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function InstructorLogin() {
   const { login } = useAuth();
@@ -28,10 +29,11 @@ export default function InstructorLogin() {
 
   return (
     <div className="auth-screen">
+      <ThemeToggle className="theme-toggle--corner" />
       <div className="auth-card">
         <Link to="/" className="brand brand--sm">
-          <span className="brand__mark">v</span>
-          <span className="brand__name">Labs</span>
+          <span className="brand__mark" aria-hidden="true" />
+          <span className="brand__name">vLabs</span>
         </Link>
         <h1 className="auth-card__title">Instructor sign in</h1>
         <p className="auth-card__sub">Author templates and run live sessions.</p>

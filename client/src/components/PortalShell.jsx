@@ -1,5 +1,6 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 /** Chrome for the instructor portal: top nav + logout. */
 export default function PortalShell({ children }) {
@@ -15,8 +16,8 @@ export default function PortalShell({ children }) {
     <div className="portal">
       <header className="portal__nav">
         <Link to="/instructor" className="brand brand--sm">
-          <span className="brand__mark">v</span>
-          <span className="brand__name">Labs</span>
+          <span className="brand__mark" aria-hidden="true" />
+          <span className="brand__name">vLabs</span>
           <span className="brand__tag">Instructor</span>
         </Link>
         <nav className="portal__links">
@@ -27,9 +28,12 @@ export default function PortalShell({ children }) {
             Templates
           </NavLink>
         </nav>
-        <button className="btn btn--ghost btn--sm" onClick={handleLogout}>
-          Sign out
-        </button>
+        <div className="portal__actions">
+          <ThemeToggle />
+          <button className="btn btn--ghost btn--sm" onClick={handleLogout}>
+            Sign out
+          </button>
+        </div>
       </header>
       <main className="portal__main">{children}</main>
     </div>

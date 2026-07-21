@@ -62,21 +62,28 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_active_code
   ON sessions(room_code) WHERE is_active = 1;
 
--- A seat within a session. current_step and step_entered_at power the live
--- analytics ("Seat 7 has been on Step 4 for 15 minutes"). unlocked_step is the
--- highest step index the server has released to this seat (progressive
--- disclosure / anti-scraping). completed_checkpoints is a JSON array of indices.
+-- A registered participant within a session. Each participant registers with
+-- their first + last name and is assigned an ascending seat_number (1-100) in
+-- join order; that number is what the templating engine uses as the seat value.
+-- name_key (lowercased "first last") makes rejoin idempotent so a participant
+-- who closes their browser can return and resume the same seat and progress.
+-- current_step and step_entered_at power the live analytics; unlocked_step is
+-- the highest step index released to this seat (progressive disclosure).
 CREATE TABLE IF NOT EXISTS participants (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id             INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  seat_id                TEXT NOT NULL,
+  seat_number            INTEGER NOT NULL,
+  first_name             TEXT NOT NULL DEFAULT '',
+  last_name              TEXT NOT NULL DEFAULT '',
+  name_key               TEXT NOT NULL,
   current_step           INTEGER NOT NULL DEFAULT 0,
   unlocked_step          INTEGER NOT NULL DEFAULT 0,
   completed_checkpoints  TEXT NOT NULL DEFAULT '[]',
   step_entered_at        TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (session_id, seat_id)
+  UNIQUE (session_id, seat_number),
+  UNIQUE (session_id, name_key)
 );
 
 -- Append-only analytics log: how long each seat spent on each step.
@@ -90,6 +97,25 @@ CREATE TABLE IF NOT EXISTS step_events (
   seconds_spent  INTEGER
 );
 `;
+
+/**
+ * Migration guard: the participants table gained name/seat_number columns.
+ * A legacy table (with the old `seat_id` column) can't be reshaped by
+ * CREATE TABLE IF NOT EXISTS, so drop it — participant rows are ephemeral,
+ * session-scoped data that is safe to recreate.
+ */
+const participantsExists = db
+  .prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='participants'",
+  )
+  .get();
+if (participantsExists) {
+  const cols = db.prepare('PRAGMA table_info(participants)').all();
+  const hasSeatNumber = cols.some((c) => c.name === 'seat_number');
+  if (!hasSeatNumber) {
+    db.exec('DROP TABLE IF EXISTS step_events; DROP TABLE IF EXISTS participants;');
+  }
+}
 
 db.exec(SCHEMA);
 

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, participantSession } from '../api.js';
 import { useContentProtection } from '../hooks/useContentProtection.js';
 import StepCard from '../components/StepCard.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 function useCountdown(expiresAt) {
   const [remaining, setRemaining] = useState('');
@@ -28,7 +29,15 @@ function useCountdown(expiresAt) {
 export default function Lab() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { token, seatId, session } = location.state || {};
+  // Resume path: fall back to the persisted session so a participant who closed
+  // their browser lands straight back in the lab.
+  const resumed = location.state || participantSession.get();
+  const { token, seatNumber, name, session } = resumed || {};
+
+  // Keep the persisted copy fresh (e.g. when arriving via router state).
+  useEffect(() => {
+    if (token) participantSession.set({ token, seatNumber, name, session });
+  }, [token, seatNumber, name, session]);
 
   useContentProtection(Boolean(token));
 
@@ -50,7 +59,9 @@ export default function Lab() {
       setData(res);
       setError('');
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
+      if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+        // Session ended/expired/invalid — the stored token is now useless.
+        participantSession.clear();
         setEnded({ reason: err.message });
       } else {
         setError(err.message || 'Could not load your lab steps.');
@@ -110,6 +121,7 @@ export default function Lab() {
   if (ended) {
     return (
       <div className="ended-screen">
+        <ThemeToggle className="theme-toggle--corner" />
         <div className="ended-card">
           <span className="ended-card__icon" aria-hidden="true">🔒</span>
           <h1>Session closed</h1>
@@ -126,18 +138,21 @@ export default function Lab() {
 
   const total = data?.total_steps ?? session?.step_count ?? 0;
   const unlocked = data ? data.unlocked_through + 1 : 0;
+  const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
 
   return (
     <div className="lab">
       <header className="lab__bar">
         <div className="lab__bar-left">
-          <span className="lab__seat">Seat {seatId}</span>
+          <span className="lab__seat">#{seatNumber}</span>
+          <span className="lab__name">{displayName}</span>
           <span className="lab__session">{session?.title}</span>
         </div>
         <div className="lab__bar-right">
           <span className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}>
             <span aria-hidden="true">⏱</span> {remaining || '—'}
           </span>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -176,8 +191,8 @@ export default function Lab() {
       </main>
 
       <footer className="lab__footprint">
-        Content is rendered in memory for your seat only. Nothing is stored on
-        this device.
+        Lab content is rendered in memory for your seat only — no files are
+        saved to this device.
       </footer>
     </div>
   );
