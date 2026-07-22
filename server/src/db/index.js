@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS participants (
   current_section        INTEGER NOT NULL DEFAULT 0,
   max_section            INTEGER NOT NULL DEFAULT 0,
   completed_checkpoints  TEXT NOT NULL DEFAULT '[]',
+  hints_taken            TEXT NOT NULL DEFAULT '[]',
+  revealed_solutions     TEXT NOT NULL DEFAULT '[]',
+  finished_at            TEXT,
   section_entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
@@ -110,5 +113,20 @@ if (participantsExists) {
 }
 
 db.exec(SCHEMA);
+
+/**
+ * Additive migrations: newer columns are added in place (non-destructive) so
+ * existing participant data survives an upgrade. Each entry is applied only if
+ * the column is absent.
+ */
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+addColumnIfMissing('participants', 'hints_taken', "TEXT NOT NULL DEFAULT '[]'");
+addColumnIfMissing('participants', 'revealed_solutions', "TEXT NOT NULL DEFAULT '[]'");
+addColumnIfMissing('participants', 'finished_at', 'TEXT');
 
 export default db;

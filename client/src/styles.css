@@ -267,9 +267,11 @@ select.field__input { appearance: none; cursor: pointer; }
 .seat-num { display: inline-grid; place-items: center; min-width: 1.9rem; height: 1.9rem; padding: 0 0.4rem; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-weight: 700; }
 .row--slow { background: var(--warn-soft); }
 .row--stuck { background: var(--danger-soft); }
+.row--done { background: var(--success-soft); }
+.status-live { color: var(--success); font-weight: 600; font-size: 0.85rem; }
 
 /* -------------------------------- Pills --------------------------------- */
-.pill { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: capitalize; }
+.pill { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: capitalize; }
 .pill--active { background: var(--success-soft); color: var(--success); }
 .pill--ended { background: var(--danger-soft); color: var(--danger); }
 .pill--expired { background: var(--warn-soft); color: var(--warn); }
@@ -288,14 +290,16 @@ select.field__input { appearance: none; cursor: pointer; }
 .create-session__row .field { flex: 1; min-width: 160px; }
 
 /* ------------------------------ Step cards ------------------------------ */
-.card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: var(--shadow-sm); }
+.card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: var(--shadow-sm); }
 .card--desk { border-left-color: var(--desk); }
 .card--computer { border-left-color: var(--computer); }
 .card__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-.card__kind { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.28rem 0.65rem; border-radius: 999px; }
-.card--desk .card__kind { background: var(--desk-soft); color: var(--desk); }
-.card--computer .card__kind { background: var(--computer-soft); color: var(--computer); }
-.card__count { color: var(--text-3); font-size: 0.8rem; font-weight: 600; }
+/* Subtle activity-type indicator: small tinted icon tile + a quiet label. */
+.card__kind { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; font-weight: 500; color: var(--text-2); }
+.card__kind-tile { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 7px; flex: none; }
+.card--desk .card__kind-tile { background: var(--desk-soft); color: var(--desk); }
+.card--computer .card__kind-tile { background: var(--computer-soft); color: var(--computer); }
+.card__count { color: var(--text-3); font-size: 0.8rem; font-weight: 500; }
 .card__title { font-size: 1.28rem; }
 .card__body { color: var(--text); }
 .card__hints { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -339,6 +343,10 @@ select.field__input { appearance: none; cursor: pointer; }
 .checkpoint--done { align-items: center; background: var(--success-soft); border-color: var(--success); color: var(--text-2); }
 .checkpoint__badge { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
 .checkpoint--done { padding: 0.85rem 1.1rem; }
+.checkpoint__reveal { align-self: flex-start; margin-top: 0.6rem; background: none; border: none; padding: 0; color: var(--text-2); font: inherit; font-size: 0.85rem; text-decoration: underline; cursor: pointer; }
+.checkpoint__reveal:hover { color: var(--brand); }
+.checkpoint__solution { display: flex; align-items: center; gap: 0.4rem; margin: 0.7rem 0 0; font-size: 0.9rem; color: var(--text-2); }
+.checkpoint__solution code { background: var(--surface-3); border: 1px solid var(--border); padding: 0.1em 0.45em; border-radius: 5px; color: var(--text); }
 
 /* ------------------------------- Lab view ------------------------------- */
 .lab { min-height: 100%; display: flex; flex-direction: column; background: var(--page-bg); }
@@ -390,9 +398,12 @@ select.field__input { appearance: none; cursor: pointer; }
 .section-nav__done { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
 
 /* ----------------------------- Ended screen ----------------------------- */
-.ended-card { text-align: center; max-width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem 2rem; box-shadow: var(--shadow); }
-.ended-card__icon { font-size: 3rem; display: block; margin-bottom: 1rem; }
+.ended-card { text-align: center; max-width: 460px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem 2rem; box-shadow: var(--shadow); }
+.ended-card__icon { display: inline-flex; margin-bottom: 1rem; color: var(--text-3); }
+.ended-card--done { border-color: var(--success); }
+.ended-card__icon--done { color: var(--success); }
 .ended-card p { color: var(--text-2); margin-bottom: 1.5rem; }
+.ended-actions { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
 
 /* -------------------------------- Editor -------------------------------- */
 .io-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }

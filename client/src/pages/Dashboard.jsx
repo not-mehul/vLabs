@@ -1,8 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { downloadFile } from '../lib/templateFormat.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
+import Icon from '../components/Icon.jsx';
+
+const slug = (s) => (s || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function StatusPill({ status }) {
   return <span className={`pill pill--${status}`}>{status}</span>;
@@ -126,6 +130,27 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  const handleDelete = useCallback(
+    async (s) => {
+      if (!window.confirm(`Delete session "${s.title}" (${s.room_code}) and its data?`)) return;
+      try {
+        await call((t) => api.deleteSession(t, s.id));
+        refresh();
+      } catch {
+        /* 401 handled upstream */
+      }
+    },
+    [call, refresh],
+  );
+
+  const handleExport = useCallback(
+    async (s) => {
+      const doc = await call((t) => api.exportSession(t, s.id));
+      downloadFile(`${slug(doc.session.title)}.json`, JSON.stringify(doc, null, 2), 'application/json');
+    },
+    [call],
+  );
+
   return (
     <PortalShell>
       <div className="page-head">
@@ -185,6 +210,22 @@ export default function Dashboard() {
                     <Link className="btn btn--sm btn--ghost" to={`/instructor/sessions/${s.id}`}>
                       Monitor
                     </Link>
+                    <button
+                      className="btn btn--sm btn--ghost"
+                      onClick={() => handleExport(s)}
+                      title="Export session data (JSON)"
+                    >
+                      <Icon name="download" size={14} />
+                    </button>
+                    {s.status !== 'active' && (
+                      <button
+                        className="btn btn--sm btn--danger-ghost"
+                        onClick={() => handleDelete(s)}
+                        title="Delete session"
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

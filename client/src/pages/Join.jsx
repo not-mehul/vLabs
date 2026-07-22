@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { api, participantSession } from '../api.js';
+import { api, ApiError, participantSession } from '../api.js';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import Icon from '../components/Icon.jsx';
 
 /**
  * Participant entry point. Registers by 6-digit room code + first/last name;
  * the server assigns an ascending seat number. If a previous session token is
- * stored locally, a "resume" banner lets a participant who closed their browser
- * jump straight back in.
+ * stored locally AND still valid, a "resume" banner lets a participant who
+ * closed their browser jump straight back in. If that session has since been
+ * ended/expired/deleted by the instructor, the stored session is cleared so it
+ * never shows here.
  */
 export default function Join() {
   const navigate = useNavigate();
@@ -17,8 +19,19 @@ export default function Join() {
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [stored, setStored] = useState(() => participantSession.get());
 
-  const stored = participantSession.get();
+  // Validate the stored session on mount; drop it if it's no longer live.
+  useEffect(() => {
+    const s = participantSession.get();
+    if (!s) return;
+    api.content(s.token).catch((err) => {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        participantSession.clear();
+        setStored(null);
+      }
+    });
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();

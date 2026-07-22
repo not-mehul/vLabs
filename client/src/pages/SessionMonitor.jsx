@@ -1,9 +1,28 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, copyToClipboard } from '../api.js';
+import { downloadFile } from '../lib/templateFormat.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
+
+const slug = (s) => (s || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** Build a CSV from the export participant rows. */
+function participantsToCsv(rows) {
+  const cols = [
+    'number', 'name', 'first_name', 'last_name', 'current_section', 'sections_completed',
+    'total_sections', 'progress_pct', 'checkpoints_cleared', 'hints_taken',
+    'solutions_revealed', 'finished', 'finished_at', 'total_seconds', 'joined_at', 'last_seen_at',
+  ];
+  const esc = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = cols.join(',');
+  const lines = rows.map((r) => cols.map((c) => esc(r[c])).join(','));
+  return [header, ...lines].join('\n') + '\n';
+}
 
 function fmtDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -105,6 +124,27 @@ export default function SessionMonitor() {
     }
   }
 
+  async function remove() {
+    if (!window.confirm('Delete this session and all its participant data? This cannot be undone.')) return;
+    setBusy(true);
+    try {
+      await call((t) => api.deleteSession(t, id));
+      navigate('/instructor');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportData(format) {
+    const doc = await call((t) => api.exportSession(t, id));
+    const base = slug(doc.session.title || 'session');
+    if (format === 'csv') {
+      downloadFile(`${base}.csv`, participantsToCsv(doc.participants), 'text/csv');
+    } else {
+      downloadFile(`${base}.json`, JSON.stringify(doc, null, 2), 'application/json');
+    }
+  }
+
   if (!data) {
     return (
       <PortalShell>
@@ -171,6 +211,17 @@ export default function SessionMonitor() {
               </button>
             </>
           )}
+          <button className="btn btn--ghost btn--sm" onClick={() => exportData('csv')} disabled={busy}>
+            <Icon name="download" size={15} /> CSV
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={() => exportData('json')} disabled={busy}>
+            <Icon name="download" size={15} /> JSON
+          </button>
+          {!active && (
+            <button className="btn btn--danger-ghost btn--sm" onClick={remove} disabled={busy}>
+              <Icon name="trash" size={15} /> Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -215,14 +266,15 @@ export default function SessionMonitor() {
                 <th>Participant</th>
                 <th>Section</th>
                 <th>Progress</th>
+                <th>Hints</th>
                 <th>Time on section</th>
                 <th>Total time</th>
-                <th>Last seen</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {data.participants.map((p) => (
-                <tr key={p.id} className={stuckClass(p.seconds_on_current_section)}>
+                <tr key={p.id} className={p.finished ? 'row--done' : stuckClass(p.seconds_on_current_section)}>
                   <td className="mono seat-num">{p.seat_number}</td>
                   <td className="table__primary">{p.name}</td>
                   <td>
@@ -234,14 +286,22 @@ export default function SessionMonitor() {
                       <div className="minibar__fill" style={{ width: `${p.progress_pct}%` }} />
                     </div>
                   </td>
-                  <td className={p.seconds_on_current_section >= 15 * 60 ? 'text-warn' : ''}>
-                    {fmtDuration(p.seconds_on_current_section)}
+                  <td className={p.solutions_revealed > 0 ? 'text-warn' : 'muted'}>
+                    {p.hints_taken}
+                    {p.solutions_revealed > 0 ? ` · ${p.solutions_revealed} sol` : ''}
+                  </td>
+                  <td className={p.seconds_on_current_section >= 15 * 60 && !p.finished ? 'text-warn' : ''}>
+                    {p.finished ? '—' : fmtDuration(p.seconds_on_current_section)}
                   </td>
                   <td className="muted">{fmtDuration(p.total_seconds)}</td>
-                  <td className="muted">
-                    {p.seconds_since_seen < 90
-                      ? 'active'
-                      : `${fmtDuration(p.seconds_since_seen)} ago`}
+                  <td>
+                    {p.finished ? (
+                      <span className="pill pill--active"><Icon name="check" size={12} /> Finished</span>
+                    ) : p.seconds_since_seen < 90 ? (
+                      <span className="status-live">● active</span>
+                    ) : (
+                      <span className="muted">{fmtDuration(p.seconds_since_seen)} ago</span>
+                    )}
                   </td>
                 </tr>
               ))}

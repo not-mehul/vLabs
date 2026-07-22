@@ -41,9 +41,12 @@ export default function Lab() {
   const [ended, setEnded] = useState(null);
   const [view, setView] = useState(0); // section index being viewed
   const [dir, setDir] = useState('next'); // animation direction
+  const [finishedLocal, setFinishedLocal] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
-  const remaining = useCountdown(session?.expires_at);
+  // Countdown uses the live expiry from /content (reflects instructor "+30").
+  const remaining = useCountdown(data?.expires_at || session?.expires_at);
 
   useEffect(() => {
     if (!token) navigate('/', { replace: true });
@@ -55,6 +58,13 @@ export default function Lab() {
       const res = await api.content(token);
       setData(res);
       setError('');
+      // Keep the persisted session's expiry fresh so resume shows the right time.
+      participantSession.set({
+        token,
+        seatNumber,
+        name,
+        session: { ...session, expires_at: res.expires_at, section_count: res.total_sections },
+      });
       // On first load, resume at the participant's last section.
       if (!initialisedRef.current) {
         initialisedRef.current = true;
@@ -68,7 +78,7 @@ export default function Lab() {
         setError(err.message || 'Could not load your lab.');
       }
     }
-  }, [token]);
+  }, [token, seatNumber, name, session]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -77,12 +87,16 @@ export default function Lab() {
     return () => clearInterval(id);
   }, [token, load]);
 
-  // Report the section being viewed (drives analytics + progress high-water mark).
+  // Report the section being viewed (drives analytics + progress high-water
+  // mark), then refresh so the progress bar / Finish button update promptly.
   useEffect(() => {
     if (!data || reportedRef.current === view) return;
     reportedRef.current = view;
-    api.reportProgress(token, view).catch(() => {});
-  }, [view, data, token]);
+    api
+      .reportProgress(token, view)
+      .then(() => load())
+      .catch(() => {});
+  }, [view, data, token, load]);
 
   const handleCheckpoint = useCallback(
     async (sectionIndex, stepIndex, answer) => {
@@ -95,6 +109,31 @@ export default function Lab() {
     },
     [token, load],
   );
+
+  const handleHintOpen = useCallback(
+    (sectionIndex, stepIndex, hintIndex) => {
+      api.recordHint(token, sectionIndex, stepIndex, hintIndex).catch(() => {});
+    },
+    [token],
+  );
+
+  const handleReveal = useCallback(
+    async (sectionIndex, stepIndex) => {
+      const res = await api.revealSolution(token, sectionIndex, stepIndex);
+      return res.solution;
+    },
+    [token],
+  );
+
+  const handleFinish = useCallback(async () => {
+    try {
+      await api.finish(token);
+    } catch {
+      /* still show completion locally */
+    }
+    setFinishedLocal(true);
+    window.scrollTo({ top: 0 });
+  }, [token]);
 
   function goTo(next) {
     setDir(next > view ? 'next' : 'prev');
@@ -135,6 +174,34 @@ export default function Lab() {
   const blockedByCheckpoint = section && !section.cleared && view >= unlocked;
   const isLast = view === total - 1;
   const allDone = completed >= total && total > 0;
+  const finished = finishedLocal || data?.finished;
+
+  // Completion screen: shown once the lab is finished (unless reviewing).
+  if (finished && !reviewing) {
+    return (
+      <div className="ended-screen">
+        <ThemeToggle className="theme-toggle--corner" />
+        <div className="ended-card ended-card--done">
+          <span className="ended-card__icon ended-card__icon--done">
+            <Icon name="check-circle" size={44} strokeWidth={1.9} />
+          </span>
+          <h1>Lab complete</h1>
+          <p>
+            Nice work, {displayName || `#${seatNumber}`}. You finished all {total}{' '}
+            section{total === 1 ? '' : 's'}.
+          </p>
+          <div className="ended-actions">
+            <button className="btn btn--ghost" onClick={() => setReviewing(true)}>
+              Review sections
+            </button>
+            <button className="btn btn--primary" onClick={logout}>
+              Finish &amp; log out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="lab">
@@ -211,6 +278,8 @@ export default function Lab() {
                 sectionIndex={view}
                 total={section.total_steps}
                 onCheckpoint={handleCheckpoint}
+                onHintOpen={handleHintOpen}
+                onRevealSolution={handleReveal}
               />
             ))}
 
@@ -219,23 +288,21 @@ export default function Lab() {
                 <Icon name="chevronLeft" size={17} /> Previous
               </button>
 
-              {blockedByCheckpoint ? (
+              {blockedByCheckpoint && (
                 <span className="section-nav__hint">
                   <Icon name="lock" size={15} /> Complete the checkpoint to continue
                 </span>
-              ) : isLast ? (
-                allDone ? (
-                  <span className="section-nav__done">
-                    <Icon name="check-circle" size={17} /> Lab complete
-                  </span>
-                ) : (
-                  <span className="section-nav__hint">Final section</span>
-                )
-              ) : null}
+              )}
 
-              <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
-                Next <Icon name="chevronRight" size={17} />
-              </button>
+              {isLast && allDone ? (
+                <button className="btn btn--primary" onClick={handleFinish}>
+                  <Icon name="check-circle" size={17} /> Finish lab
+                </button>
+              ) : (
+                <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
+                  Next <Icon name="chevronRight" size={17} />
+                </button>
+              )}
             </div>
           </div>
         )}

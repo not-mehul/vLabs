@@ -15,6 +15,8 @@ import {
   computeSectionVisibleThrough,
   checkpointKey,
   countSteps,
+  injectVariables,
+  stepHasCheckpoint,
 } from '../lib/templating.js';
 
 const router = Router();
@@ -161,6 +163,9 @@ router.get(
       p.id,
     );
 
+    const hintsTaken = new Set(JSON.parse(p.hints_taken || '[]'));
+    const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
+
     // Send sections 0..unlockedSection. Cleared sections send all steps; the
     // furthest (current) section reveals steps up to its first open checkpoint.
     const rendered = [];
@@ -171,6 +176,29 @@ router.get(
         : computeSectionVisibleThrough(sections[s], s, completed);
       const section = renderSection(sections[s], context, s, completed, stepLimit);
       section.cleared = cleared;
+
+      // Augment each step with hint-taken state and, for checkpoint steps whose
+      // every hint has been taken, the solution (revealed on request only).
+      section.steps.forEach((step) => {
+        const raw = sections[s].steps[step.index];
+        const hintCount = (raw.hints || []).length;
+        step.hints = (step.hints || []).map((h, hi) => ({
+          ...h,
+          taken: hintsTaken.has(`${s}.${step.index}.${hi}`),
+        }));
+        if (step.checkpoint && !step.checkpoint.completed) {
+          const allHintsTaken =
+            hintCount > 0 &&
+            step.hints.every((h) => h.taken);
+          step.checkpoint.solution_available = allHintsTaken;
+          if (revealed.has(`${s}.${step.index}`)) {
+            step.checkpoint.solution = injectVariables(
+              String(raw.checkpoint.answer),
+              context,
+            );
+          }
+        }
+      });
       rendered.push(section);
     }
 
@@ -197,6 +225,8 @@ router.get(
       completed_sections: completedSections,
       progress_pct: total > 0 ? Math.round((completedSections / total) * 100) : 0,
       completed_checkpoints: [...completed],
+      finished: Boolean(p.finished_at),
+      expires_at: req.session.expires_at,
       sections: rendered,
     });
   }),
@@ -298,6 +328,102 @@ router.post(
       );
     }
     res.json({ current_section: sectionIndex });
+  }),
+);
+
+/**
+ * POST /api/participant/hint
+ * Body: { section_index, step_index, hint_index }
+ * Records that a participant opened a hint (drives "hints taken" analytics and
+ * gates the reveal-solution feature).
+ */
+router.post(
+  '/hint',
+  requireParticipant,
+  asyncHandler(async (req, res) => {
+    const p = req.participant;
+    const si = parseInt(req.body?.section_index, 10);
+    const sti = parseInt(req.body?.step_index, 10);
+    const hi = parseInt(req.body?.hint_index, 10);
+    const { sections } = loadManual(req.session);
+    const step = sections[si]?.steps?.[sti];
+    if (!step || Number.isNaN(hi) || !step.hints || hi < 0 || hi >= step.hints.length) {
+      throw httpError(400, 'Invalid hint');
+    }
+    const taken = new Set(JSON.parse(p.hints_taken || '[]'));
+    taken.add(`${si}.${sti}.${hi}`);
+    db.prepare(
+      'UPDATE participants SET hints_taken = ?, last_seen_at = ? WHERE id = ?',
+    ).run(JSON.stringify([...taken]), nowIso(), p.id);
+    res.json({ ok: true, hints_taken: taken.size });
+  }),
+);
+
+/**
+ * POST /api/participant/solution
+ * Body: { section_index, step_index }
+ * Reveals a checkpoint's answer — but ONLY once every hint on that step has been
+ * taken. Until then the answer never leaves the server.
+ */
+router.post(
+  '/solution',
+  requireParticipant,
+  asyncHandler(async (req, res) => {
+    const p = req.participant;
+    const si = parseInt(req.body?.section_index, 10);
+    const sti = parseInt(req.body?.step_index, 10);
+    const { sections, variables } = loadManual(req.session);
+    const step = sections[si]?.steps?.[sti];
+    if (!step || !stepHasCheckpoint(step)) throw httpError(400, 'No checkpoint here');
+
+    const hintCount = (step.hints || []).length;
+    if (hintCount === 0) throw httpError(403, 'No hints to exhaust on this step');
+    const taken = new Set(JSON.parse(p.hints_taken || '[]'));
+    const allTaken = step.hints.every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
+    if (!allTaken) throw httpError(403, 'Take all hints before revealing the solution');
+
+    const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
+    revealed.add(`${si}.${sti}`);
+    db.prepare(
+      'UPDATE participants SET revealed_solutions = ?, last_seen_at = ? WHERE id = ?',
+    ).run(JSON.stringify([...revealed]), nowIso(), p.id);
+
+    const context = resolveVariables(variables, p.seat_number);
+    const solution = injectVariables(String(step.checkpoint.answer), context);
+    noStore(res);
+    res.json({ solution });
+  }),
+);
+
+/**
+ * POST /api/participant/finish
+ * Marks the participant as finished (idempotent) — only once every section is
+ * complete. Powers the completion screen and the instructor "finished" status.
+ */
+router.post(
+  '/finish',
+  requireParticipant,
+  asyncHandler(async (req, res) => {
+    const p = req.participant;
+    const { sections } = loadManual(req.session);
+    const completed = new Set(JSON.parse(p.completed_checkpoints));
+    const total = sections.length;
+    // Require genuine completion: max_section reached the end and the last
+    // section is cleared.
+    const done =
+      total > 0 &&
+      p.max_section >= total - 1 &&
+      isSectionCleared(sections[total - 1], total - 1, completed);
+    if (!done) throw httpError(400, 'Lab is not complete yet');
+
+    if (!p.finished_at) {
+      db.prepare('UPDATE participants SET finished_at = ?, last_seen_at = ? WHERE id = ?').run(
+        nowIso(),
+        nowIso(),
+        p.id,
+      );
+    }
+    res.json({ finished: true });
   }),
 );
 

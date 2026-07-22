@@ -114,6 +114,9 @@ export const api = {
     request(`/sessions/${id}/terminate`, { method: 'POST', token }),
   extendSession: (token, id, minutes) =>
     request(`/sessions/${id}/extend`, { method: 'POST', body: { minutes }, token }),
+  deleteSession: (token, id) =>
+    request(`/sessions/${id}`, { method: 'DELETE', token }),
+  exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),
 
   /* ------------------------------ Participant --------------------------- */
 
@@ -135,6 +138,19 @@ export const api = {
       body: { section_index: sectionIndex },
       token,
     }),
+  recordHint: (token, sectionIndex, stepIndex, hintIndex) =>
+    request('/participant/hint', {
+      method: 'POST',
+      body: { section_index: sectionIndex, step_index: stepIndex, hint_index: hintIndex },
+      token,
+    }),
+  revealSolution: (token, sectionIndex, stepIndex) =>
+    request('/participant/solution', {
+      method: 'POST',
+      body: { section_index: sectionIndex, step_index: stepIndex },
+      token,
+    }),
+  finish: (token) => request('/participant/finish', { method: 'POST', token }),
   heartbeat: (token) => request('/participant/heartbeat', { method: 'POST', token }),
 };
 

@@ -46,6 +46,8 @@ function participantView(p, sections) {
   ) {
     completedSections = sectionCount;
   }
+  const finished = Boolean(p.finished_at);
+  const secondsSinceSeen = secondsBetween(p.last_seen_at, nowIso());
   return {
     id: p.id,
     seat_number: p.seat_number,
@@ -55,13 +57,20 @@ function participantView(p, sections) {
     current_section: p.current_section,
     completed_sections: completedSections,
     completed_checkpoints: [...completed],
+    hints_taken: JSON.parse(p.hints_taken || '[]').length,
+    solutions_revealed: JSON.parse(p.revealed_solutions || '[]').length,
+    finished,
+    finished_at: p.finished_at,
+    status: finished ? 'finished' : secondsSinceSeen < 90 ? 'active' : 'idle',
     seconds_on_current_section: secondsBetween(p.section_entered_at, nowIso()),
-    total_seconds: secondsBetween(p.joined_at, nowIso()),
+    total_seconds: finished
+      ? secondsBetween(p.joined_at, p.finished_at)
+      : secondsBetween(p.joined_at, nowIso()),
     progress_pct:
       sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
-    seconds_since_seen: secondsBetween(p.last_seen_at, nowIso()),
+    seconds_since_seen: secondsSinceSeen,
   };
 }
 
@@ -201,7 +210,12 @@ router.post('/:id/terminate', (req, res) => {
   res.json({ id: row.id, status: 'ended' });
 });
 
-/** POST /api/sessions/:id/extend — push back the expiry. */
+/**
+ * POST /api/sessions/:id/extend — ADD time to the current expiry.
+ * The new expiry is computed from whichever is later — the existing expiry or
+ * now — plus the requested minutes, so "+30" always grants 30 more minutes
+ * rather than resetting the clock.
+ */
 router.post('/:id/extend', (req, res) => {
   const minutes = Math.min(Math.max(parseInt(req.body?.minutes ?? 30, 10) || 30, 5), 24 * 60);
   const row = db
@@ -209,11 +223,80 @@ router.post('/:id/extend', (req, res) => {
     .get(req.params.id, req.instructor.id);
   if (!row) throw httpError(404, 'Session not found');
   if (!row.is_active) throw httpError(409, 'Cannot extend an ended session');
-  db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(
-    isoInMinutes(minutes),
-    row.id,
-  );
-  res.json({ id: row.id, expires_at: isoInMinutes(minutes) });
+  const base = Math.max(parseUtc(row.expires_at), Date.now());
+  const expiresAt = new Date(base + minutes * 60_000).toISOString();
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiresAt, row.id);
+  res.json({ id: row.id, expires_at: expiresAt });
+});
+
+/** DELETE /api/sessions/:id — permanently delete a session and its data. */
+router.delete('/:id', (req, res) => {
+  const row = db
+    .prepare('SELECT * FROM sessions WHERE id = ? AND instructor_id = ?')
+    .get(req.params.id, req.instructor.id);
+  if (!row) throw httpError(404, 'Session not found');
+  // Participants cascade-delete via the FK. The room code (if it was active) is
+  // freed for reuse.
+  db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id);
+  res.status(204).end();
+});
+
+/**
+ * GET /api/sessions/:id/export — full session data for archival/reporting.
+ * Returns a JSON document (meta + per-participant analytics). Handy for
+ * exporting a completed session.
+ */
+router.get('/:id/export', (req, res) => {
+  const row = db
+    .prepare(
+      `SELECT s.*, t.title AS template_title, t.content AS template_content
+         FROM sessions s JOIN templates t ON t.id = s.template_id
+        WHERE s.id = ? AND s.instructor_id = ?`,
+    )
+    .get(req.params.id, req.instructor.id);
+  if (!row) throw httpError(404, 'Session not found');
+
+  const sections = JSON.parse(row.template_content);
+  const participants = db
+    .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number')
+    .all(row.id)
+    .map((p) => {
+      const view = participantView(p, sections);
+      return {
+        number: view.seat_number,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        name: view.name,
+        current_section: view.current_section + 1,
+        sections_completed: view.completed_sections,
+        total_sections: sections.length,
+        progress_pct: view.progress_pct,
+        checkpoints_cleared: view.completed_checkpoints.length,
+        hints_taken: view.hints_taken,
+        solutions_revealed: view.solutions_revealed,
+        finished: view.finished,
+        finished_at: p.finished_at,
+        total_seconds: view.total_seconds,
+        joined_at: p.joined_at,
+        last_seen_at: p.last_seen_at,
+      };
+    });
+
+  res.json({
+    exported_at: nowIso(),
+    session: {
+      id: row.id,
+      title: row.title,
+      room_code: row.room_code,
+      template_title: row.template_title,
+      status: sessionStatus(row),
+      section_count: sections.length,
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+      ended_at: row.ended_at,
+    },
+    participants,
+  });
 });
 
 export default router;

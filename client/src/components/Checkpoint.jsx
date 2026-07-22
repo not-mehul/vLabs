@@ -3,13 +3,27 @@ import Icon from './Icon.jsx';
 
 /**
  * State checkpoint. The participant must enter a validation string to unlock the
- * next section. Validation happens server-side — the expected answer is never
- * present in the client bundle or network payload.
+ * next section. Validation happens server-side — the expected answer is never in
+ * the client bundle or network payload.
+ *
+ * Once every hint on the step has been taken, `solutionAvailable` turns on and a
+ * "Reveal solution" control lets the participant fetch the answer (server-gated
+ * on all hints being taken). The revealed answer pre-fills the input.
  */
-export default function Checkpoint({ prompt, placeholder, completed, onSubmit }) {
+export default function Checkpoint({
+  prompt,
+  placeholder,
+  completed,
+  solution: initialSolution,
+  solutionAvailable,
+  onReveal,
+  onSubmit,
+}) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState('idle'); // idle | checking | wrong
   const [error, setError] = useState('');
+  const [solution, setSolution] = useState(initialSolution || '');
+  const [revealing, setRevealing] = useState(false);
 
   if (completed) {
     return (
@@ -32,10 +46,25 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
         setStatus('wrong');
         setError('Not quite — check your work and try again.');
       }
-      // On success the parent re-renders with completed=true.
     } catch (err) {
       setStatus('wrong');
       setError(err.message || 'Could not verify. Try again.');
+    }
+  }
+
+  async function handleReveal() {
+    if (revealing) return;
+    setRevealing(true);
+    try {
+      const sol = await onReveal();
+      if (sol) {
+        setSolution(sol);
+        setValue(sol);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not reveal the solution.');
+    } finally {
+      setRevealing(false);
     }
   }
 
@@ -61,15 +90,23 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
               if (status === 'wrong') setStatus('idle');
             }}
           />
-          <button
-            type="submit"
-            className="btn btn--primary"
-            disabled={status === 'checking' || !value.trim()}
-          >
+          <button type="submit" className="btn btn--primary" disabled={status === 'checking' || !value.trim()}>
             {status === 'checking' ? 'Checking…' : 'Unlock'}
           </button>
         </div>
         {error && <p className="checkpoint__error">{error}</p>}
+
+        {solution ? (
+          <p className="checkpoint__solution">
+            <Icon name="hint" size={14} /> Solution: <code>{solution}</code>
+          </p>
+        ) : (
+          solutionAvailable && (
+            <button type="button" className="checkpoint__reveal" onClick={handleReveal} disabled={revealing}>
+              {revealing ? 'Revealing…' : 'Stuck? Reveal the solution'}
+            </button>
+          )
+        )}
       </div>
     </form>
   );

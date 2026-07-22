@@ -61,9 +61,10 @@ Participant registration (the default landing page) is in
 | **Section-based progress** — progress bar + analytics count completed sections | `Lab.jsx`; `participantView` in `sessions.js` |
 | **Resume + logout** — close the browser and return to the same seat/section; explicit Exit | persisted token (`participantSession`) + idempotent name rejoin |
 | **Dynamic templating** — inject seat/IP/port variables at render time | `server/src/lib/templating.js` |
-| **Structured cards** — Desk Action vs Computer Action | `client/src/components/StepCard.jsx` |
-| **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side | `HintBox.jsx`, `Checkpoint.jsx` |
-| **Instructor analytics** — time remaining, one-click copy code, section distribution, per-seat total time & time-on-section | `SessionMonitor.jsx` |
+| **Structured cards** — Hands-On vs Workstation activities (subtle icon-tile indicator) | `client/src/components/StepCard.jsx` |
+| **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side; exhaust the hints to reveal the solution | `HintBox.jsx`, `Checkpoint.jsx` |
+| **Completion flow** — finish screen + graceful logout; participant shown as *finished* to the instructor | `Lab.jsx`; `finished_at` |
+| **Instructor analytics & lifecycle** — time remaining, copy code, section distribution, hints taken, total time, plus **delete** and **export** (JSON/CSV) of completed sessions | `SessionMonitor.jsx`, `Dashboard.jsx` |
 | **Template authoring** — in-page section editor, live per-seat preview, and JSON/Markdown import & export | `TemplateEditor.jsx`, `lib/templateFormat.js` |
 | **Light & dark themes** — professional slate + indigo design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
 | **IP protection** — no file downloads, in-memory content, progressive per-section delivery | no download endpoints; `no-store` headers |
@@ -242,6 +243,15 @@ done / current / locked sections.
   checkpoints cleared before the participant can advance to the next one. The
   server only ever delivers sections the participant has legitimately reached,
   and checkpoint answers are never sent to the browser.
+- **Hints & solutions.** Opening a hint is recorded server-side (surfaced to the
+  instructor as "hints taken"). Once *every* hint on a checkpoint step has been
+  taken, a "Reveal solution" control appears; the answer is fetched from the
+  server only then — it stays private until the hints are exhausted.
+- **Completion.** When all sections are complete the participant gets a **Finish
+  lab** button leading to a completion screen; finishing marks them **finished**
+  (shown on the instructor monitor) and gracefully logs them out. An **Exit**
+  button leaves at any time, and a stored session that the instructor has since
+  ended/expired/deleted is validated away so it never lingers on the login page.
 
 ### Participant registration, resume & logout
 
@@ -345,17 +355,22 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | --- | --- | --- |
 | `POST` | `/api/sessions` | Create session → 6-digit code |
 | `GET` | `/api/sessions` | List sessions with live counts |
-| `GET` | `/api/sessions/:id` | Detail + analytics (per-seat progress, total time, section distribution) |
+| `GET` | `/api/sessions/:id` | Detail + analytics (per-seat progress, hints taken, total time, finished status, section distribution) |
 | `POST` | `/api/sessions/:id/terminate` | End now (instant revocation) |
-| `POST` | `/api/sessions/:id/extend` | Push back expiry |
+| `POST` | `/api/sessions/:id/extend` | **Add** time to the current expiry (e.g. +30 min) |
+| `DELETE` | `/api/sessions/:id` | Delete a session and its participant data |
+| `GET` | `/api/sessions/:id/export` | Export full session data (JSON; the UI also builds CSV) |
 
 ### Participant
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/participant/join` | Register with `room_code` + `first_name` + `last_name` → assigned number + participant token (resumes if the name already joined) |
-| `GET` | `/api/participant/content` | Unlocked sections, rendered per-seat, with section progress |
+| `POST` | `/api/participant/join` | Register with `room_code` + `first_name` + `last_name` → assigned number + participant token (case-insensitive name; resumes if the name already joined) |
+| `GET` | `/api/participant/content` | Unlocked sections rendered per-seat, plus section progress, live `expires_at`, hint state and any revealed solutions |
 | `POST` | `/api/participant/checkpoint` | Submit unlock string for `section_index`/`step_index` (validated server-side) |
 | `POST` | `/api/participant/progress` | Report active `section_index` (analytics + progress) |
+| `POST` | `/api/participant/hint` | Record a hint as taken (`section_index`/`step_index`/`hint_index`) |
+| `POST` | `/api/participant/solution` | Reveal a checkpoint's answer — only after every hint on that step is taken |
+| `POST` | `/api/participant/finish` | Mark the participant finished (only once every section is complete) |
 | `POST` | `/api/participant/heartbeat` | Presence keep-alive |
 
 ### Health
