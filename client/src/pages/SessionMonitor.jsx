@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, copyToClipboard } from '../api.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
+import Icon from '../components/Icon.jsx';
 
 function fmtDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -52,7 +53,9 @@ function CopyCode({ code }) {
   return (
     <button className="roomcode roomcode--xl roomcode--copy" onClick={copy} title="Copy room code">
       <span>{code}</span>
-      <span className="roomcode__copy">{copied ? '✓ Copied' : '⧉ Copy'}</span>
+      <span className="roomcode__copy">
+        <Icon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copied' : 'Copy'}
+      </span>
     </button>
   );
 }
@@ -186,7 +189,9 @@ export default function SessionMonitor() {
                   <span className="dist__index">{s.index + 1}</span>
                   {s.title}
                   <span className="dist__meta">{s.step_count} steps</span>
-                  {s.has_checkpoint && <span className="dist__lock" title="Has a checkpoint">🔒</span>}
+                  {s.has_checkpoint && (
+                    <span className="dist__lock" title="Has a checkpoint"><Icon name="lock" size={13} /></span>
+                  )}
                 </span>
                 <div className="dist__bar">
                   <div className="dist__bar-fill" style={{ width: `${pct}%` }} />

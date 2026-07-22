@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import Icon from './Icon.jsx';
 
 /**
- * State Checkpoint component (spec §6). The participant must enter a validation
- * string to unlock the next step. Validation happens server-side — the expected
- * answer is never present in the client bundle or network payload.
+ * State checkpoint. The participant must enter a validation string to unlock the
+ * next section. Validation happens server-side — the expected answer is never
+ * present in the client bundle or network payload.
  */
 export default function Checkpoint({ prompt, placeholder, completed, onSubmit }) {
   const [value, setValue] = useState('');
@@ -13,8 +14,9 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
   if (completed) {
     return (
       <div className="checkpoint checkpoint--done">
-        <span className="checkpoint__badge">✓ Unlocked</span>
-        <span>Checkpoint cleared — the next step is available below.</span>
+        <span className="checkpoint__badge">
+          <Icon name="check" size={16} /> Checkpoint cleared
+        </span>
       </div>
     );
   }
@@ -39,7 +41,7 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
 
   return (
     <form className="checkpoint" onSubmit={handleSubmit}>
-      <div className="checkpoint__lock" aria-hidden="true">🔒</div>
+      <div className="checkpoint__lock"><Icon name="lock" size={20} /></div>
       <div className="checkpoint__main">
         <label className="checkpoint__prompt" htmlFor="checkpoint-input">
           {prompt}

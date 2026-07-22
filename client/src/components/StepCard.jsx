@@ -1,10 +1,11 @@
 import Markdown from './Markdown.jsx';
 import HintBox from './HintBox.jsx';
 import Checkpoint from './Checkpoint.jsx';
+import Icon from './Icon.jsx';
 
 const TYPE_META = {
-  desk: { label: 'Desk Action', icon: '🖐' },
-  computer: { label: 'Computer Action', icon: '⌨' },
+  desk: { label: 'Desk', icon: 'desk' },
+  computer: { label: 'Computer', icon: 'computer' },
 };
 
 /**
@@ -18,10 +19,10 @@ export default function StepCard({ step, total, sectionIndex, onCheckpoint }) {
     <article className={`card card--${step.type}`} id={`step-${step.index}`}>
       <header className="card__head">
         <span className="card__kind">
-          <span aria-hidden="true">{meta.icon}</span> {meta.label}
+          <Icon name={meta.icon} size={15} /> {meta.label}
         </span>
         <span className="card__count">
-          Step {step.index + 1}
+          {step.index + 1}
           {total ? ` / ${total}` : ''}
         </span>
       </header>

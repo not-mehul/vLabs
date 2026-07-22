@@ -4,6 +4,7 @@ import { api, ApiError, participantSession } from '../api.js';
 import { useContentProtection } from '../hooks/useContentProtection.js';
 import StepCard from '../components/StepCard.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import Icon from '../components/Icon.jsx';
 
 function useCountdown(expiresAt) {
   const [remaining, setRemaining] = useState('');
@@ -111,7 +112,7 @@ export default function Lab() {
       <div className="ended-screen">
         <ThemeToggle className="theme-toggle--corner" />
         <div className="ended-card">
-          <span className="ended-card__icon" aria-hidden="true">🔒</span>
+          <span className="ended-card__icon"><Icon name="lock" size={40} /></span>
           <h1>Session closed</h1>
           <p>{ended.reason}</p>
           <button className="btn btn--primary" onClick={() => navigate('/', { replace: true })}>
@@ -146,11 +147,11 @@ export default function Lab() {
           </div>
           <div className="lab__bar-right">
             <span className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}>
-              <span aria-hidden="true">⏱</span> {remaining || '—'}
+              <Icon name="clock" size={16} /> {remaining || '—'}
             </span>
             <ThemeToggle />
-            <button className="btn btn--ghost btn--sm" onClick={logout}>
-              Exit
+            <button className="theme-toggle" onClick={logout} aria-label="Exit session" title="Exit session">
+              <Icon name="logout" size={18} />
             </button>
           </div>
         </header>
@@ -169,19 +170,23 @@ export default function Lab() {
                 aria-current={i === view}
                 title={`Section ${i + 1}`}
               >
-                <span className="stepper__dot">{state === 'done' ? '✓' : i + 1}</span>
+                <span className="stepper__dot">
+                {state === 'done' ? <Icon name="check" size={15} strokeWidth={2.25} /> : i + 1}
+              </span>
               </button>
             );
           })}
         </div>
 
         <div className="lab__progress">
-          <div
-            className="lab__progress-fill"
-            style={{ width: total ? `${(completed / total) * 100}%` : '0%' }}
-          />
+          <div className="lab__progress-track">
+            <div
+              className="lab__progress-fill"
+              style={{ width: total ? `${(completed / total) * 100}%` : '0%' }}
+            />
+          </div>
           <span className="lab__progress-label">
-            {completed} / {total} sections complete
+            {completed} / {total} complete
           </span>
         </div>
       </div>
@@ -211,23 +216,25 @@ export default function Lab() {
 
             <div className="section-nav">
               <button className="btn btn--ghost" disabled={!canPrev} onClick={() => goTo(view - 1)}>
-                ← Previous
+                <Icon name="chevronLeft" size={17} /> Previous
               </button>
 
               {blockedByCheckpoint ? (
                 <span className="section-nav__hint">
-                  🔒 Complete the checkpoint to continue
+                  <Icon name="lock" size={15} /> Complete the checkpoint to continue
                 </span>
               ) : isLast ? (
                 allDone ? (
-                  <span className="section-nav__done">🎉 Lab complete</span>
+                  <span className="section-nav__done">
+                    <Icon name="check-circle" size={17} /> Lab complete
+                  </span>
                 ) : (
                   <span className="section-nav__hint">Final section</span>
                 )
               ) : null}
 
               <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
-                Next section →
+                Next <Icon name="chevronRight" size={17} />
               </button>
             </div>
           </div>

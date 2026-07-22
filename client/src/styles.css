@@ -3,85 +3,89 @@
    Theme switches on <html data-theme> via CSS custom properties.
    ========================================================================== */
 
-/* ------------------------------- Light ---------------------------------- */
+/* ------------------------------- Light ----------------------------------
+   Verkada palette: lead with white, neutral grays, Blue 600 as the accent. */
 :root {
-  --page-bg: #f5f6f9;
+  --page-bg: #f7f9fb;        /* neutrals off-white */
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #eef1f6;
-  --border: #e6e9f0;
-  --border-strong: #d4dae4;
+  --surface-2: #f7f9fb;
+  --surface-3: #eff3f7;      /* neutrals 10 */
+  --border: #e6eaee;         /* neutrals 50 */
+  --border-strong: #dce0e4;  /* neutrals 75 */
 
-  --text: #10151f;
-  --text-2: #4b5567;
-  --text-3: #828d9f;
+  --text: #030e16;           /* neutrals off-black */
+  --text-2: #536573;         /* neutrals 600 */
+  --text-3: #838e98;         /* neutrals 400 */
 
-  --brand: #4f46e5;
-  --brand-hover: #4338ca;
+  --brand: #007faf;          /* Blue 600 */
+  --brand-hover: #115274;    /* Blue 700 */
   --brand-contrast: #ffffff;
-  --brand-soft: rgba(79, 70, 229, 0.09);
-  --brand-ring: rgba(79, 70, 229, 0.24);
-  --brand-grad: linear-gradient(135deg, #6366f1, #4f46e5 55%, #7c74ff);
+  --brand-soft: rgba(0, 127, 175, 0.08);
+  --brand-ring: rgba(0, 127, 175, 0.22);
+  --brand-grad: linear-gradient(135deg, #19a0d5, #007faf);  /* Blue 500 → 600 */
 
-  --desk: #c2670d;
-  --desk-soft: rgba(194, 103, 13, 0.1);
-  --computer: #0d8f86;
-  --computer-soft: rgba(13, 143, 134, 0.1);
+  --desk: #c2450a;           /* darkened Orange for legible pills */
+  --desk-soft: rgba(255, 85, 0, 0.1);
+  --computer: #007faf;       /* Blue 600 */
+  --computer-soft: rgba(0, 127, 175, 0.09);
 
-  --success: #15a34a;
-  --success-soft: rgba(21, 163, 74, 0.1);
-  --warn: #c47d0a;
-  --warn-soft: rgba(196, 125, 10, 0.12);
-  --danger: #dc2f45;
-  --danger-soft: rgba(220, 47, 69, 0.09);
+  --success: #0f8a58;        /* darkened Green 400 */
+  --success-soft: rgba(38, 204, 134, 0.14);
+  --warn: #b26a00;           /* darkened Yellow 400 */
+  --warn-soft: rgba(255, 171, 64, 0.16);
+  --danger: #de3243;         /* Red 500 */
+  --danger-hover: #b01d2b;   /* Red 700 */
+  --danger-soft: rgba(222, 50, 67, 0.09);
 
   --radius: 14px;
   --radius-sm: 9px;
   --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgba(16, 21, 31, 0.06);
-  --shadow: 0 1px 3px rgba(16, 21, 31, 0.06), 0 12px 28px rgba(16, 21, 31, 0.07);
-  --shadow-lg: 0 24px 60px rgba(16, 21, 31, 0.14);
+  --shadow-sm: 0 1px 2px rgba(3, 14, 22, 0.05);
+  --shadow: 0 1px 3px rgba(3, 14, 22, 0.05), 0 12px 28px rgba(3, 14, 22, 0.06);
+  --shadow-lg: 0 24px 60px rgba(3, 14, 22, 0.12);
 
-  --font: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   color-scheme: light;
 }
 
-/* ------------------------------- Dark ----------------------------------- */
+/* ------------------------------- Dark -----------------------------------
+   Verkada off-black lead with Blue 800/900 surfaces and a bright Blue accent. */
 :root[data-theme='dark'] {
-  --page-bg: #0b0f17;
-  --surface: #131a26;
-  --surface-2: #172131;
-  --surface-3: #1f2a3c;
-  --border: #253044;
-  --border-strong: #33415a;
+  --page-bg: #030e16;        /* neutrals off-black */
+  --surface: #0a1922;
+  --surface-2: #0e202b;
+  --surface-3: #15374c;      /* Blue 800 */
+  --border: #16303f;
+  --border-strong: #1e4459;
 
-  --text: #eef2f8;
-  --text-2: #a4b0c4;
-  --text-3: #6b7889;
+  --text: #f7f9fb;           /* neutrals off-white */
+  --text-2: #b0b6be;         /* neutrals 200 */
+  --text-3: #838e98;         /* neutrals 400 */
 
-  --brand: #7c74ff;
-  --brand-hover: #938cff;
-  --brand-contrast: #0a0d15;
-  --brand-soft: rgba(124, 116, 255, 0.15);
-  --brand-ring: rgba(124, 116, 255, 0.4);
-  --brand-grad: linear-gradient(135deg, #8b84ff, #6d63f5 55%, #a99fff);
+  --brand: #3ac1eb;          /* Blue 400 */
+  --brand-hover: #63d0f5;    /* Blue 300 */
+  --brand-contrast: #002033; /* Blue 900 */
+  --brand-soft: rgba(58, 193, 235, 0.14);
+  --brand-ring: rgba(58, 193, 235, 0.35);
+  --brand-grad: linear-gradient(135deg, #3ac1eb, #19a0d5);
 
-  --desk: #f2a24e;
-  --desk-soft: rgba(242, 162, 78, 0.14);
-  --computer: #2dd4bf;
-  --computer-soft: rgba(45, 212, 191, 0.15);
+  --desk: #ff7a33;
+  --desk-soft: rgba(255, 122, 51, 0.16);
+  --computer: #3ac1eb;
+  --computer-soft: rgba(58, 193, 235, 0.15);
 
-  --success: #34d399;
-  --success-soft: rgba(52, 211, 153, 0.15);
-  --warn: #f0b43e;
-  --warn-soft: rgba(240, 180, 62, 0.16);
-  --danger: #f4626f;
-  --danger-soft: rgba(244, 98, 111, 0.15);
+  --success: #26cc86;        /* Green 400 */
+  --success-soft: rgba(38, 204, 134, 0.15);
+  --warn: #ffab40;           /* Yellow 400 */
+  --warn-soft: rgba(255, 171, 64, 0.16);
+  --danger: #f2647a;
+  --danger-hover: #de3243;
+  --danger-soft: rgba(222, 50, 67, 0.16);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 42px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 18px 42px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.65);
   color-scheme: dark;
 }
 
@@ -101,9 +105,15 @@ body {
 body.no-select { user-select: none; -webkit-user-select: none; }
 a { color: var(--brand); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1, h2, h3 { margin: 0 0 0.35em; line-height: 1.2; letter-spacing: -0.018em; font-weight: 650; }
-h1 { letter-spacing: -0.025em; }
+h1, h2, h3 { margin: 0 0 0.35em; line-height: 1.22; letter-spacing: -0.01em; font-weight: 600; }
+h1 { letter-spacing: -0.02em; }
 code { font-family: var(--mono); font-size: 0.9em; }
+
+/* Icons inherit text colour; keep them optically centred beside text. */
+.icon { flex: none; vertical-align: -0.15em; }
+.btn .icon, .chip .icon, .card__kind .icon, .checkpoint__badge .icon,
+.section-nav__hint .icon, .section-nav__done .icon, .lab__timer .icon,
+.roomcode__copy .icon, .dist__lock .icon { vertical-align: middle; }
 .mono { font-family: var(--mono); }
 .small { font-size: 0.82rem; }
 .muted { color: var(--text-2); }
@@ -148,7 +158,7 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .btn--primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); color: var(--brand-contrast); }
 .btn--ghost { background: transparent; }
 .btn--danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-.btn--danger:hover { filter: brightness(1.06); color: #fff; border-color: var(--danger); }
+.btn--danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); color: #fff; }
 .btn--danger-ghost { background: transparent; color: var(--danger); border-color: transparent; }
 .btn--danger-ghost:hover { border-color: var(--danger); color: var(--danger); }
 .btn--block { width: 100%; }
@@ -271,7 +281,7 @@ select.field__input { appearance: none; cursor: pointer; }
 .roomcode--xl { font-size: 2rem; letter-spacing: 0.3em; }
 .roomcode--copy { cursor: pointer; display: inline-flex; align-items: center; gap: 0.7rem; transition: border-color 0.15s; }
 .roomcode--copy:hover { border-color: var(--brand); }
-.roomcode__copy { font-family: var(--font); font-size: 0.72rem; letter-spacing: 0; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 0.2rem 0.5rem; border-radius: 999px; }
+.roomcode__copy { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--font); font-size: 0.72rem; letter-spacing: 0; font-weight: 600; color: var(--brand); background: var(--brand-soft); padding: 0.25rem 0.55rem; border-radius: 999px; }
 
 /* --------------------------- Create session ----------------------------- */
 .create-session__row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
@@ -310,8 +320,11 @@ select.field__input { appearance: none; cursor: pointer; }
 .hint { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2); }
 .hint__toggle { display: flex; align-items: center; gap: 0.5rem; width: 100%; background: none; border: none; color: var(--text); font: inherit; font-weight: 600; padding: 0.6rem 0.8rem; cursor: pointer; text-align: left; }
 .hint__toggle:hover { background: var(--surface-3); }
-.hint__icon { color: var(--brand); width: 1em; }
-.hint__body { padding: 0 0.8rem 0.8rem 2.3rem; color: var(--text-2); }
+.hint__icon { color: var(--brand); flex: none; }
+.hint__label { flex: 1; }
+.hint__caret { color: var(--text-3); transition: transform 0.2s ease; }
+.hint__caret.is-open { transform: rotate(180deg); color: var(--brand); }
+.hint__body { padding: 0 0.8rem 0.8rem 2.4rem; color: var(--text-2); }
 .hint--open { border-color: var(--brand); }
 
 /* ----------------------------- Checkpoints ------------------------------ */
@@ -324,7 +337,8 @@ select.field__input { appearance: none; cursor: pointer; }
 .checkpoint__input.is-error { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
 .checkpoint__error { color: var(--danger); font-size: 0.85rem; margin: 0.5rem 0 0; }
 .checkpoint--done { align-items: center; background: var(--success-soft); border-color: var(--success); color: var(--text-2); }
-.checkpoint__badge { color: var(--success); font-weight: 700; }
+.checkpoint__badge { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
+.checkpoint--done { padding: 0.85rem 1.1rem; }
 
 /* ------------------------------- Lab view ------------------------------- */
 .lab { min-height: 100%; display: flex; flex-direction: column; background: var(--page-bg); }
@@ -335,7 +349,7 @@ select.field__input { appearance: none; cursor: pointer; }
 .lab__name { font-weight: 650; }
 .lab__session { color: var(--text-2); font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lab__bar-right { display: flex; align-items: center; gap: 0.75rem; }
-.lab__timer { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-2); }
+.lab__timer { display: inline-flex; align-items: center; gap: 0.35rem; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text-2); }
 .lab__timer.is-warn { color: var(--danger); }
 
 /* Section stepper */
@@ -350,9 +364,10 @@ select.field__input { appearance: none; cursor: pointer; }
 .stepper__node--open .stepper__dot { border-color: var(--brand); color: var(--brand); }
 .stepper__node--locked .stepper__dot { opacity: 0.55; }
 
-.lab__progress { position: relative; height: 24px; background: var(--surface-3); display: flex; align-items: center; justify-content: center; margin-top: 0.85rem; }
-.lab__progress-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--brand-grad); opacity: 0.85; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
-.lab__progress-label { position: relative; font-size: 0.78rem; color: #fff; font-weight: 600; mix-blend-mode: normal; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.lab__progress { display: flex; align-items: center; gap: 0.85rem; max-width: 780px; margin: 0 auto; width: 100%; padding: 0.65rem 1.25rem 0.9rem; }
+.lab__progress-track { flex: 1; height: 8px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.lab__progress-fill { height: 100%; background: var(--brand-grad); border-radius: 999px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+.lab__progress-label { font-size: 0.75rem; color: var(--text-3); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .lab__content { max-width: 780px; width: 100%; margin: 0 auto; padding: 1.75rem 1.25rem 3rem; flex: 1; }
 .lab__loading, .lab__error { text-align: center; padding: 2rem; }
 .lab__footprint { text-align: center; color: var(--text-3); font-size: 0.78rem; padding: 1rem; }
@@ -371,8 +386,8 @@ select.field__input { appearance: none; cursor: pointer; }
 .section-head__title { font-size: 1.75rem; }
 
 .section-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.75rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
-.section-nav__hint { color: var(--text-2); font-size: 0.9rem; font-weight: 600; }
-.section-nav__done { color: var(--success); font-weight: 700; }
+.section-nav__hint { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text-2); font-size: 0.9rem; font-weight: 500; }
+.section-nav__done { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
 
 /* ----------------------------- Ended screen ----------------------------- */
 .ended-card { text-align: center; max-width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem 2rem; box-shadow: var(--shadow); }

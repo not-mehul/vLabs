@@ -1,4 +1,5 @@
 import { useTheme } from '../context/ThemeContext.jsx';
+import Icon from './Icon.jsx';
 
 /** Small light/dark switch used across the app chrome. */
 export default function ThemeToggle({ className = '' }) {
@@ -12,7 +13,7 @@ export default function ThemeToggle({ className = '' }) {
       aria-label={`Switch to ${dark ? 'light' : 'dark'} mode`}
       title={`Switch to ${dark ? 'light' : 'dark'} mode`}
     >
-      <span aria-hidden="true">{dark ? '☀' : '☾'}</span>
+      <Icon name={dark ? 'sun' : 'moon'} size={18} />
     </button>
   );
 }

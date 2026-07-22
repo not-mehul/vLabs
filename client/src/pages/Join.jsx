@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, participantSession } from '../api.js';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import Icon from '../components/Icon.jsx';
 
 /**
  * Participant entry point. Registers by 6-digit room code + first/last name;
@@ -62,12 +63,12 @@ export default function Join() {
             className="resume-banner"
             onClick={() => navigate('/lab', { replace: true, state: stored })}
           >
-            <span className="resume-banner__icon" aria-hidden="true">↻</span>
+            <span className="resume-banner__icon"><Icon name="refresh" size={18} /></span>
             <span className="resume-banner__text">
               <strong>Welcome back, {stored.name}</strong>
               <span>Resume “{stored.session?.title}” as #{stored.seatNumber}</span>
             </span>
-            <span className="resume-banner__cta">Resume →</span>
+            <span className="resume-banner__cta"><Icon name="chevronRight" size={18} /></span>
           </button>
         )}
 

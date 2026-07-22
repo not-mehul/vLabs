@@ -10,8 +10,10 @@ downloadable materials), and deliver per-seat instructions live to classroom
 devices.
 
 Labs are organised into **sections** (each a page of steps) that participants
-move through one at a time. The UI is a polished, professional design system
-with **full light & dark modes** (slate + indigo, Inter type).
+move through one at a time. The UI follows the Verkada brand system — a
+white-led palette with a Blue 600 accent (off-black in dark mode), the Poppins
+typeface, and a clean geometric line-icon set — with **full light & dark
+modes**.
 
 ## Screenshots
 
@@ -281,9 +283,12 @@ imported from a file:
 A `ThemeContext` provides **light and dark modes** built on CSS custom
 properties toggled on `<html data-theme>`. The initial theme follows the OS
 `prefers-color-scheme`; the user's manual choice is persisted to `localStorage`
-and a toggle is available on every screen. The palette is a professional slate +
-indigo system with the self-hosted Inter typeface (CSP-safe, no external
-requests).
+and a toggle is available on every screen. Colours follow the Verkada palette
+(white / neutral grays led by Blue 600 `#007faf`; off-black `#030e16` with a
+brighter Blue 400 accent in dark mode), the self-hosted **Poppins** typeface
+(CSP-safe, no external requests), and an original set of geometric line icons
+(`components/Icon.jsx`) that replaced all emoji. The vLabs mark is our own — the
+Verkada logo/symbol is never reproduced.
 
 ### Security & IP protection
 
@@ -423,7 +428,7 @@ vLabs/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin
         ├── components/        # StepCard, HintBox, Checkpoint, Markdown,
-        │                      #   PortalShell, ThemeToggle
+        │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
         ├── hooks/             # content protection, instructor API
         ├── context/           # AuthContext, ThemeContext (light/dark)
         ├── lib/               # templateFormat (JSON/Markdown import & export)

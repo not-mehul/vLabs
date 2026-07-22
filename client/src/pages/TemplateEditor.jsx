@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import StepCard from '../components/StepCard.jsx';
+import Icon from '../components/Icon.jsx';
 import {
   templateToJson,
   templateToMarkdown,
@@ -142,14 +143,14 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
             className={`chip ${step.type === 'desk' ? 'chip--active' : ''}`}
             onClick={() => set({ type: 'desk' })}
           >
-            🖐 Desk
+            <Icon name="desk" size={15} /> Desk
           </button>
           <button
             type="button"
             className={`chip ${step.type === 'computer' ? 'chip--active' : ''}`}
             onClick={() => set({ type: 'computer' })}
           >
-            ⌨ Computer
+            <Icon name="computer" size={15} /> Computer
           </button>
         </div>
         <div className="step-editor__move">
@@ -345,9 +346,9 @@ function ImportExport({ tpl, onImport }) {
   return (
     <div className="io-bar">
       <input ref={fileRef} type="file" accept=".md,.markdown,.json,text/markdown,application/json" hidden onChange={handleFile} />
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}>⬆ Import file</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.md`, templateToMarkdown(tpl), 'text/markdown')}>⬇ Export .md</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.json`, templateToJson(tpl), 'application/json')}>⬇ Export .json</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}><Icon name="upload" size={15} /> Import file</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={15} /> Export .md</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={15} /> Export .json</button>
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile('sample-lab.md', SAMPLE_MARKDOWN, 'text/markdown')}>Download sample</button>
       {msg && <span className="io-bar__msg">{msg}</span>}
     </div>
