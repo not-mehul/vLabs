@@ -37,37 +37,28 @@ export function validateTemplatePayload(payload) {
     }
   }
 
-  // ---- Steps -------------------------------------------------------------
+  // ---- Sections & steps --------------------------------------------------
+  // content is an ordered list of sections; each section has ordered steps.
   const content = [];
-  const rawSteps = Array.isArray(payload?.content) ? payload.content : [];
-  if (rawSteps.length === 0) errors.push('At least one step is required');
-  for (const [i, s] of rawSteps.entries()) {
-    const step = {
-      type: s?.type === 'computer' ? 'computer' : 'desk',
-      title: String(s?.title || '').trim().slice(0, 200),
-      body: String(s?.body || ''),
-      hints: [],
+  const rawSections = Array.isArray(payload?.content) ? payload.content : [];
+  if (rawSections.length === 0) errors.push('At least one section is required');
+
+  for (const [si, rawSection] of rawSections.entries()) {
+    const section = {
+      title: String(rawSection?.title || '').trim().slice(0, 200),
+      steps: [],
     };
-    if (!step.body.trim()) errors.push(`Step ${i + 1} has an empty body`);
+    if (!section.title) errors.push(`Section ${si + 1} needs a title`);
 
-    const rawHints = Array.isArray(s?.hints) ? s.hints : [];
-    for (const h of rawHints) {
-      step.hints.push({
-        label: String(h?.label || 'Hint').trim().slice(0, 120),
-        text: String(h?.text || ''),
-      });
+    const rawSteps = Array.isArray(rawSection?.steps) ? rawSection.steps : [];
+    if (rawSteps.length === 0) {
+      errors.push(`Section ${si + 1} ("${section.title}") has no steps`);
     }
-
-    if (s?.checkpoint && String(s.checkpoint.answer || '').trim()) {
-      step.checkpoint = {
-        prompt: String(s.checkpoint.prompt || 'Enter the value to continue')
-          .trim()
-          .slice(0, 300),
-        placeholder: String(s.checkpoint.placeholder || '').trim().slice(0, 120),
-        answer: String(s.checkpoint.answer).trim(),
-      };
+    for (const [i, s] of rawSteps.entries()) {
+      const step = validateStep(s, si, i, errors);
+      section.steps.push(step);
     }
-    content.push(step);
+    content.push(section);
   }
 
   if (errors.length) {
@@ -76,4 +67,36 @@ export function validateTemplatePayload(payload) {
     throw err;
   }
   return { title, description, content, variables };
+}
+
+/** Validate & normalise a single step. */
+function validateStep(s, sectionIndex, stepIndex, errors) {
+  const step = {
+    type: s?.type === 'computer' ? 'computer' : 'desk',
+    title: String(s?.title || '').trim().slice(0, 200),
+    body: String(s?.body || ''),
+    hints: [],
+  };
+  if (!step.body.trim()) {
+    errors.push(`Section ${sectionIndex + 1} · step ${stepIndex + 1} has an empty body`);
+  }
+
+  const rawHints = Array.isArray(s?.hints) ? s.hints : [];
+  for (const h of rawHints) {
+    step.hints.push({
+      label: String(h?.label || 'Hint').trim().slice(0, 120),
+      text: String(h?.text || ''),
+    });
+  }
+
+  if (s?.checkpoint && String(s.checkpoint.answer || '').trim()) {
+    step.checkpoint = {
+      prompt: String(s.checkpoint.prompt || 'Enter the value to continue')
+        .trim()
+        .slice(0, 300),
+      placeholder: String(s.checkpoint.placeholder || '').trim().slice(0, 120),
+      answer: String(s.checkpoint.answer).trim(),
+    };
+  }
+  return step;
 }

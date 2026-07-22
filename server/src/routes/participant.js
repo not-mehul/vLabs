@@ -7,39 +7,25 @@ import { signParticipantToken } from '../lib/tokens.js';
 import { nowIso, parseUtc } from '../lib/time.js';
 import {
   resolveVariables,
-  renderStep,
   checkpointAnswer,
   normaliseAnswer,
+  renderSection,
+  isSectionCleared,
+  computeUnlockedSection,
+  computeSectionVisibleThrough,
+  checkpointKey,
+  countSteps,
 } from '../lib/templating.js';
 
 const router = Router();
 
-/**
- * Compute the highest step index a seat may view.
- *
- * Progressive disclosure: walk forward from step 0. A step that carries a
- * checkpoint blocks progression until that checkpoint index is in the
- * completed set. The blocking checkpoint step itself is visible (so the seat
- * can read the task and submit an answer) but nothing beyond it is.
- */
-function computeVisibleThrough(steps, completedSet) {
-  let i = 0;
-  while (i < steps.length - 1) {
-    const step = steps[i];
-    const gated = step.checkpoint && step.checkpoint.answer;
-    if (gated && !completedSet.has(i)) break; // stop AT this checkpoint step
-    i += 1;
-  }
-  return Math.min(i, Math.max(steps.length - 1, 0));
-}
-
-/** Load the parsed manual (steps + variables) behind a session. */
+/** Load the parsed manual (sections + variables) behind a session. */
 function loadManual(session) {
   const template = db
     .prepare('SELECT content, variables FROM templates WHERE id = ?')
     .get(session.template_id);
   return {
-    steps: JSON.parse(template.content),
+    sections: JSON.parse(template.content),
     variables: JSON.parse(template.variables),
   };
 }
@@ -88,7 +74,7 @@ const registerParticipant = db.transaction((session, firstName, lastName, nameKe
   const info = db
     .prepare(
       `INSERT INTO participants
-         (session_id, seat_number, first_name, last_name, name_key, step_entered_at, joined_at, last_seen_at)
+         (session_id, seat_number, first_name, last_name, name_key, section_entered_at, joined_at, last_seen_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(session.id, seatNumber, firstName, lastName, nameKey, nowIso(), nowIso(), nowIso());
@@ -132,7 +118,7 @@ router.post(
       nameKey,
     );
 
-    const { steps } = loadManual(session);
+    const { sections } = loadManual(session);
     const token = signParticipantToken(participant, session);
     noStore(res);
     res.json({
@@ -144,44 +130,60 @@ router.post(
       session: {
         title: session.title,
         expires_at: session.expires_at,
-        step_count: steps.length,
+        section_count: sections.length,
+        step_count: countSteps(sections),
       },
     });
   }),
 );
 
 /**
- * GET /api/participant/steps
- * Returns ONLY the steps this seat has unlocked, rendered for the seat.
- * Checkpoint answers are stripped by renderStep. This progressive delivery is
- * the anti-scraping / IP-protection core: a seat can never pull steps it has
- * not legitimately reached.
+ * GET /api/participant/content
+ * Returns ONLY the sections this seat has unlocked, rendered for the seat.
+ * Within the furthest section, steps reveal progressively up to the first
+ * uncompleted checkpoint. Checkpoint answers are stripped. This progressive
+ * delivery is the anti-scraping / IP-protection core: a seat can never pull
+ * sections it has not legitimately reached.
  */
 router.get(
-  '/steps',
+  '/content',
   contentLimiter,
   requireParticipant,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const { steps, variables } = loadManual(req.session);
+    const { sections, variables } = loadManual(req.session);
     const context = resolveVariables(variables, p.seat_number);
     const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const visibleThrough = computeVisibleThrough(steps, completed);
+    const unlockedSection = computeUnlockedSection(sections, completed);
 
     db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
       nowIso(),
       p.id,
     );
 
-    const rendered = steps
-      .slice(0, visibleThrough + 1)
-      .map((s, i) => renderStep(s, context, i));
+    // Send sections 0..unlockedSection. Cleared sections send all steps; the
+    // furthest (current) section reveals steps up to its first open checkpoint.
+    const rendered = [];
+    for (let s = 0; s <= unlockedSection && s < sections.length; s += 1) {
+      const cleared = isSectionCleared(sections[s], s, completed);
+      const stepLimit = cleared
+        ? undefined
+        : computeSectionVisibleThrough(sections[s], s, completed);
+      const section = renderSection(sections[s], context, s, completed, stepLimit);
+      section.cleared = cleared;
+      rendered.push(section);
+    }
 
-    // Mark which visible checkpoint steps are already satisfied.
-    for (const step of rendered) {
-      if (step.checkpoint) {
-        step.checkpoint.completed = completed.has(step.index);
-      }
+    // Monotonic completed-section count for the progress bar (mirrors the
+    // instructor analytics in sessions.js).
+    const total = sections.length;
+    let completedSections = Math.min(p.max_section, total);
+    if (
+      total > 0 &&
+      p.max_section >= total - 1 &&
+      isSectionCleared(sections[total - 1], total - 1, completed)
+    ) {
+      completedSections = total;
     }
 
     noStore(res);
@@ -189,20 +191,22 @@ router.get(
       seat_number: p.seat_number,
       first_name: p.first_name,
       last_name: p.last_name,
-      total_steps: steps.length,
-      unlocked_through: visibleThrough,
-      current_step: p.current_step,
+      total_sections: total,
+      unlocked_section: unlockedSection,
+      current_section: p.current_section,
+      completed_sections: completedSections,
+      progress_pct: total > 0 ? Math.round((completedSections / total) * 100) : 0,
       completed_checkpoints: [...completed],
-      steps: rendered,
+      sections: rendered,
     });
   }),
 );
 
 /**
  * POST /api/participant/checkpoint
- * Body: { step_index, answer }
+ * Body: { section_index, step_index, answer }
  * Validates the seat-specific unlock string server-side and, on success,
- * reveals the next step.
+ * records completion (which may clear the section and unlock the next).
  */
 router.post(
   '/checkpoint',
@@ -210,24 +214,28 @@ router.post(
   requireParticipant,
   asyncHandler(async (req, res) => {
     const p = req.participant;
+    const sectionIndex = parseInt(req.body?.section_index, 10);
     const stepIndex = parseInt(req.body?.step_index, 10);
     const answer = req.body?.answer;
 
-    const { steps, variables } = loadManual(req.session);
-    if (Number.isNaN(stepIndex) || stepIndex < 0 || stepIndex >= steps.length) {
-      throw httpError(400, 'Invalid step index');
+    const { sections, variables } = loadManual(req.session);
+    const section = sections[sectionIndex];
+    if (!section || Number.isNaN(sectionIndex)) {
+      throw httpError(400, 'Invalid section index');
     }
-    const step = steps[stepIndex];
+    const step = section.steps?.[stepIndex];
+    if (!step || Number.isNaN(stepIndex)) throw httpError(400, 'Invalid step index');
     if (!step.checkpoint || !step.checkpoint.answer) {
       throw httpError(400, 'This step has no checkpoint');
     }
 
-    // Can only attempt a checkpoint on a step you can actually see.
+    // Can only attempt a checkpoint in a section you can actually reach.
     const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const visibleThrough = computeVisibleThrough(steps, completed);
-    if (stepIndex > visibleThrough) {
-      throw httpError(403, 'Step is locked');
-    }
+    const unlockedSection = computeUnlockedSection(sections, completed);
+    if (sectionIndex > unlockedSection) throw httpError(403, 'Section is locked');
+    // ...and only up to the first open checkpoint within that section.
+    const visibleThrough = computeSectionVisibleThrough(section, sectionIndex, completed);
+    if (stepIndex > visibleThrough) throw httpError(403, 'Step is locked');
 
     const context = resolveVariables(variables, p.seat_number);
     const expected = checkpointAnswer(step, context);
@@ -238,68 +246,58 @@ router.post(
       return res.status(200).json({ correct: false });
     }
 
-    completed.add(stepIndex);
-    const newVisible = computeVisibleThrough(steps, completed);
+    completed.add(checkpointKey(sectionIndex, stepIndex));
+    const newUnlocked = computeUnlockedSection(sections, completed);
     db.prepare(
-      'UPDATE participants SET completed_checkpoints = ?, unlocked_step = ?, last_seen_at = ? WHERE id = ?',
-    ).run(JSON.stringify([...completed]), newVisible, nowIso(), p.id);
+      'UPDATE participants SET completed_checkpoints = ?, last_seen_at = ? WHERE id = ?',
+    ).run(JSON.stringify([...completed]), nowIso(), p.id);
 
     noStore(res);
-    res.json({ correct: true, unlocked_through: newVisible });
+    res.json({
+      correct: true,
+      section_cleared: isSectionCleared(section, sectionIndex, completed),
+      unlocked_section: newUnlocked,
+    });
   }),
 );
 
 /**
  * POST /api/participant/progress
- * Body: { step_index }
- * Records the step a seat is actively viewing (drives instructor analytics:
- * "Seat 7 has been on Step 4 for 15 minutes"). Closes the previous step_event
- * and opens a new one.
+ * Body: { section_index }
+ * Records the section a seat is actively viewing (drives instructor analytics:
+ * time-on-section and section distribution).
  */
 router.post(
   '/progress',
   requireParticipant,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const stepIndex = parseInt(req.body?.step_index, 10);
-    const { steps } = loadManual(req.session);
-    if (Number.isNaN(stepIndex) || stepIndex < 0 || stepIndex >= steps.length) {
-      throw httpError(400, 'Invalid step index');
+    const sectionIndex = parseInt(req.body?.section_index, 10);
+    const { sections } = loadManual(req.session);
+    if (Number.isNaN(sectionIndex) || sectionIndex < 0 || sectionIndex >= sections.length) {
+      throw httpError(400, 'Invalid section index');
     }
     const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const visibleThrough = computeVisibleThrough(steps, completed);
-    if (stepIndex > visibleThrough) throw httpError(403, 'Step is locked');
+    const unlockedSection = computeUnlockedSection(sections, completed);
+    if (sectionIndex > unlockedSection) throw httpError(403, 'Section is locked');
 
-    if (stepIndex !== p.current_step) {
+    if (sectionIndex !== p.current_section) {
       const now = nowIso();
-      // Close the open analytics event for the previous step.
-      const open = db
-        .prepare(
-          'SELECT * FROM step_events WHERE participant_id = ? AND left_at IS NULL ORDER BY id DESC LIMIT 1',
-        )
-        .get(p.id);
-      if (open) {
-        const seconds = Math.max(
-          0,
-          Math.round((parseUtc(now) - parseUtc(open.entered_at)) / 1000),
-        );
-        db.prepare(
-          'UPDATE step_events SET left_at = ?, seconds_spent = ? WHERE id = ?',
-        ).run(now, seconds, open.id);
-      }
+      // max_section is a monotonic high-water mark so progress never drops when
+      // a participant navigates back to review an earlier section.
       db.prepare(
-        'INSERT INTO step_events (participant_id, session_id, step_index, entered_at) VALUES (?, ?, ?, ?)',
-      ).run(p.id, req.session.id, stepIndex, now);
-      db.prepare(
-        'UPDATE participants SET current_step = ?, step_entered_at = ?, last_seen_at = ? WHERE id = ?',
-      ).run(stepIndex, now, now, p.id);
+        `UPDATE participants
+            SET current_section = ?, max_section = MAX(max_section, ?),
+                section_entered_at = ?, last_seen_at = ?
+          WHERE id = ?`,
+      ).run(sectionIndex, sectionIndex, now, now, p.id);
     } else {
       db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
         nowIso(),
         p.id,
       );
     }
-    res.json({ current_step: stepIndex });
+    res.json({ current_section: sectionIndex });
   }),
 );
 

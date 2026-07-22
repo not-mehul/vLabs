@@ -122,18 +122,47 @@ export const api = {
       method: 'POST',
       body: { room_code: roomCode, first_name: firstName, last_name: lastName },
     }),
-  steps: (token) => request('/participant/steps', { token }),
-  submitCheckpoint: (token, stepIndex, answer) =>
+  content: (token) => request('/participant/content', { token }),
+  submitCheckpoint: (token, sectionIndex, stepIndex, answer) =>
     request('/participant/checkpoint', {
       method: 'POST',
-      body: { step_index: stepIndex, answer },
+      body: { section_index: sectionIndex, step_index: stepIndex, answer },
       token,
     }),
-  reportProgress: (token, stepIndex) =>
+  reportProgress: (token, sectionIndex) =>
     request('/participant/progress', {
       method: 'POST',
-      body: { step_index: stepIndex },
+      body: { section_index: sectionIndex },
       token,
     }),
   heartbeat: (token) => request('/participant/heartbeat', { method: 'POST', token }),
 };
+
+/**
+ * Copy text to the clipboard with a fallback for non-secure contexts (e.g. a
+ * LAN deployment over plain HTTP, where navigator.clipboard is unavailable).
+ */
+export async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}

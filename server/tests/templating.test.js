@@ -7,6 +7,11 @@ import {
   renderStep,
   checkpointAnswer,
   renderManual,
+  isSectionCleared,
+  computeUnlockedSection,
+  computeSectionVisibleThrough,
+  checkpointKey,
+  countSteps,
 } from '../src/lib/templating.js';
 
 test('evaluateExpression handles arithmetic precedence', () => {
@@ -87,16 +92,64 @@ test('renderStep strips checkpoint answers but keeps the prompt', () => {
   assert.equal(checkpointAnswer(step, ctx), 'de:ad:be:ef:00:3');
 });
 
-test('renderManual renders every step with resolved context', () => {
+test('renderManual renders sections and steps with resolved context', () => {
   const content = [
-    { type: 'desk', title: 'Cable', body: 'Patch into Port {{ PORT_NUM }}' },
-    { type: 'computer', title: 'Ping', body: 'ping {{ GATEWAY_IP }}' },
+    {
+      title: 'Cabling',
+      steps: [
+        { type: 'desk', title: 'Cable', body: 'Patch into Port {{ PORT_NUM }}' },
+      ],
+    },
+    {
+      title: 'Verify',
+      steps: [{ type: 'computer', title: 'Ping', body: 'ping {{ GATEWAY_IP }}' }],
+    },
   ];
   const vars = [
     { name: 'PORT_NUM', expression: 'seat' },
     { name: 'GATEWAY_IP', expression: "'192.168.1.' + (100 + seat)" },
   ];
-  const { steps } = renderManual(content, vars, 9);
-  assert.equal(steps[0].body, 'Patch into Port 9');
-  assert.equal(steps[1].body, 'ping 192.168.1.109');
+  const { sections } = renderManual(content, vars, 9);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].title, 'Cabling');
+  assert.equal(sections[0].steps[0].body, 'Patch into Port 9');
+  assert.equal(sections[1].steps[0].body, 'ping 192.168.1.109');
+  assert.equal(countSteps(content), 2);
+});
+
+test('section gating: unlocked section advances only when checkpoints clear', () => {
+  const sections = [
+    {
+      title: 'S0',
+      steps: [
+        { type: 'desk', title: 'a', body: 'x' },
+        { type: 'computer', title: 'b', body: 'y', checkpoint: { answer: '42' } },
+      ],
+    },
+    { title: 'S1', steps: [{ type: 'desk', title: 'c', body: 'z' }] },
+  ];
+  const none = new Set();
+  // Section 0 has an uncompleted checkpoint -> it is the furthest reachable.
+  assert.equal(computeUnlockedSection(sections, none), 0);
+  assert.equal(isSectionCleared(sections[0], 0, none), false);
+  // Its second step (the checkpoint) is visible, but that's the end anyway.
+  assert.equal(computeSectionVisibleThrough(sections[0], 0, none), 1);
+
+  const done = new Set([checkpointKey(0, 1)]);
+  assert.equal(isSectionCleared(sections[0], 0, done), true);
+  assert.equal(computeUnlockedSection(sections, done), 1);
+});
+
+test('mid-section checkpoint hides later steps until cleared', () => {
+  const section = {
+    title: 'S',
+    steps: [
+      { type: 'desk', title: 'a', body: 'x', checkpoint: { answer: 'go' } },
+      { type: 'desk', title: 'b', body: 'y' },
+    ],
+  };
+  const none = new Set();
+  assert.equal(computeSectionVisibleThrough(section, 0, none), 0); // only step 0
+  const done = new Set([checkpointKey(0, 0)]);
+  assert.equal(computeSectionVisibleThrough(section, 0, done), 1); // both
 });

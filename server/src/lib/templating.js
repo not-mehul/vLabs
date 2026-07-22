@@ -244,17 +244,103 @@ export function normaliseAnswer(value) {
   return String(value ?? '').trim().toLowerCase();
 }
 
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+//
+// A manual's content is an ordered list of SECTIONS, each with an ordered list
+// of STEPS. Checkpoints live on steps. A checkpoint is identified globally by
+// the key "<sectionIndex>.<stepIndex>" so participant progress can be tracked
+// with a single flat set.
+
+export function checkpointKey(sectionIndex, stepIndex) {
+  return `${sectionIndex}.${stepIndex}`;
+}
+
+/** Does a step carry a real (answerable) checkpoint? */
+export function stepHasCheckpoint(step) {
+  return Boolean(step && step.checkpoint && step.checkpoint.answer);
+}
+
+/** True when every checkpoint in a section has been completed. */
+export function isSectionCleared(section, sectionIndex, completedSet) {
+  const steps = (section && section.steps) || [];
+  for (let i = 0; i < steps.length; i += 1) {
+    if (stepHasCheckpoint(steps[i]) && !completedSet.has(checkpointKey(sectionIndex, i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
- * Render every step of a manual for a seat. Used by the instructor preview.
- * Participant delivery uses renderStep directly with a slice for progressive
- * disclosure (see routes/participant.js).
+ * Highest section index a participant may access. You can only enter section
+ * n once every earlier section is fully cleared, so this returns the first
+ * not-yet-cleared section (capped at the last section).
+ */
+export function computeUnlockedSection(sections, completedSet) {
+  for (let s = 0; s < sections.length; s += 1) {
+    if (!isSectionCleared(sections[s], s, completedSet)) return s;
+  }
+  return Math.max(sections.length - 1, 0);
+}
+
+/**
+ * Within a section, the index of the last visible step. Steps reveal up to and
+ * including the first step whose checkpoint is not yet completed (mid-section
+ * gating); once that checkpoint clears, the rest of the section reveals.
+ */
+export function computeSectionVisibleThrough(section, sectionIndex, completedSet) {
+  const steps = (section && section.steps) || [];
+  for (let i = 0; i < steps.length - 1; i += 1) {
+    if (stepHasCheckpoint(steps[i]) && !completedSet.has(checkpointKey(sectionIndex, i))) {
+      return i;
+    }
+  }
+  return Math.max(steps.length - 1, 0);
+}
+
+/**
+ * Render one section for a seat. `stepLimit` optionally caps how many steps are
+ * returned (progressive within-section disclosure). Checkpoint answers are
+ * stripped by renderStep; each rendered step is tagged with its checkpoint key
+ * and completion state.
+ */
+export function renderSection(section, context, sectionIndex, completedSet, stepLimit) {
+  const steps = (section && section.steps) || [];
+  const limit = stepLimit === undefined ? steps.length - 1 : stepLimit;
+  const rendered = steps.slice(0, limit + 1).map((step, i) => {
+    const r = renderStep(step, context, i);
+    if (r.checkpoint) {
+      r.checkpoint.key = checkpointKey(sectionIndex, i);
+      r.checkpoint.completed = completedSet ? completedSet.has(r.checkpoint.key) : false;
+    }
+    return r;
+  });
+  return {
+    index: sectionIndex,
+    title: injectVariables(section?.title || `Section ${sectionIndex + 1}`, context),
+    total_steps: steps.length,
+    steps: rendered,
+  };
+}
+
+/** Total number of steps across all sections. */
+export function countSteps(sections) {
+  return (sections || []).reduce((n, s) => n + ((s.steps && s.steps.length) || 0), 0);
+}
+
+/**
+ * Render an entire manual (all sections, all steps) for a seat. Used by the
+ * instructor preview. Participant delivery renders a slice (see participant.js).
  */
 export function renderManual(content, variables, seatId) {
   const context = resolveVariables(variables, seatId);
-  const steps = Array.isArray(content) ? content : [];
+  const sections = Array.isArray(content) ? content : [];
+  const empty = new Set();
   return {
     context,
-    steps: steps.map((step, i) => renderStep(step, context, i)),
+    sections: sections.map((section, i) => renderSection(section, context, i, empty)),
   };
 }
 

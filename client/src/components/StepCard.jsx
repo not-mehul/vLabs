@@ -3,16 +3,16 @@ import HintBox from './HintBox.jsx';
 import Checkpoint from './Checkpoint.jsx';
 
 const TYPE_META = {
-  desk: { label: 'Desk Action', icon: '🛠️' },
-  computer: { label: 'Computer Action', icon: '💻' },
+  desk: { label: 'Desk Action', icon: '🖐' },
+  computer: { label: 'Computer Action', icon: '⌨' },
 };
 
 /**
- * Structured content card. Desk vs Computer actions are visually distinct
- * (spec §1) via the `card--<type>` modifier. Renders collapsible hints and an
- * optional state checkpoint.
+ * Structured content card. Desk vs Computer actions are visually distinct via
+ * the `card--<type>` modifier. Renders collapsible hints and an optional state
+ * checkpoint. `sectionIndex` scopes checkpoint submissions to their section.
  */
-export default function StepCard({ step, total, onCheckpoint }) {
+export default function StepCard({ step, total, sectionIndex, onCheckpoint }) {
   const meta = TYPE_META[step.type] || TYPE_META.desk;
   return (
     <article className={`card card--${step.type}`} id={`step-${step.index}`}>
@@ -22,7 +22,7 @@ export default function StepCard({ step, total, onCheckpoint }) {
         </span>
         <span className="card__count">
           Step {step.index + 1}
-          {total ? ` of ${total}` : ''}
+          {total ? ` / ${total}` : ''}
         </span>
       </header>
 
@@ -45,7 +45,7 @@ export default function StepCard({ step, total, onCheckpoint }) {
           prompt={step.checkpoint.prompt}
           placeholder={step.checkpoint.placeholder}
           completed={step.checkpoint.completed}
-          onSubmit={(answer) => onCheckpoint(step.index, answer)}
+          onSubmit={(answer) => onCheckpoint(sectionIndex, step.index, answer)}
         />
       )}
     </article>

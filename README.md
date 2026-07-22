@@ -9,23 +9,22 @@ eliminate physical PDF provisioning, enforce strict IP protection (no
 downloadable materials), and deliver per-seat instructions live to classroom
 devices.
 
-The UI ships with a clean, Verkada-inspired design language (signature blue,
-deep-navy dark tone, cool-gray neutrals, Inter type) and **full light & dark
-modes**.
+Labs are organised into **sections** (each a page of steps) that participants
+move through one at a time. The UI is a polished, professional design system
+with **full light & dark modes** (slate + indigo, Inter type).
 
 ## Screenshots
 
-| Participant lab — dark | Participant lab — light |
+| Participant lab — one section per page (dark) | Section with a checkpoint (light) |
 | --- | --- |
 | ![Participant lab, dark](docs/screenshots/participant-lab.png) | ![Participant lab, light](docs/screenshots/participant-lab-light.png) |
 
-| Instructor session monitor | Resume after an accidental close |
+| Instructor session monitor | Template authoring, import/export + live preview |
 | --- | --- |
-| ![Session monitor](docs/screenshots/session-monitor.png) | ![Join with resume banner](docs/screenshots/join-resume.png) |
+| ![Session monitor](docs/screenshots/session-monitor.png) | ![Template editor](docs/screenshots/template-editor.png) |
 
-| Template authoring + live preview | Landing |
-| --- | --- |
-| ![Template editor](docs/screenshots/template-editor.png) | ![Landing](docs/screenshots/landing.png) |
+Participant registration (the default landing page) is in
+[`docs/screenshots/register.png`](docs/screenshots/register.png).
 
 ---
 
@@ -53,17 +52,19 @@ modes**.
 
 | Spec requirement | Where it lives |
 | --- | --- |
-| **Instructor Portal** — create sessions, generate 6-digit codes, monitor & terminate | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js` |
+| **Instructor Portal** — create sessions, generate 6-digit codes, monitor, extend & terminate | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js` |
 | **Participant registration** — first + last name, auto-assigned number (1–100) in join order | `client/src/pages/Join.jsx`; `server/src/routes/participant.js` |
-| **Resume after close** — a participant who closes their browser returns to the same seat & progress | persisted token (`participantSession`) + idempotent name-based rejoin |
+| **Participant-first login** — registration is the default page; a small link goes to the instructor sign-in | `client/src/App.jsx`, `Join.jsx` |
+| **Sections** — labs are sections of steps, delivered one page at a time with a transition animation | `client/src/pages/Lab.jsx`; `server/src/lib/templating.js` |
+| **Section-based progress** — progress bar + analytics count completed sections | `Lab.jsx`; `participantView` in `sessions.js` |
+| **Resume + logout** — close the browser and return to the same seat/section; explicit Exit | persisted token (`participantSession`) + idempotent name rejoin |
 | **Dynamic templating** — inject seat/IP/port variables at render time | `server/src/lib/templating.js` |
 | **Structured cards** — Desk Action vs Computer Action | `client/src/components/StepCard.jsx` |
-| **Collapsible hints** (`<HintBox>`) — progressive disclosure | `client/src/components/HintBox.jsx` |
-| **State checkpoints** — validation string unlocks next step | `client/src/components/Checkpoint.jsx`; server-side validation |
-| **Analytics** — real-time per-seat progress & time-on-step | `SessionMonitor.jsx`; `step_events` table |
-| **Authoring environment** — Markdown editor with live per-seat preview | `client/src/pages/TemplateEditor.jsx` |
-| **Light & dark themes** — Verkada-inspired design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
-| **IP protection** — no file downloads, in-memory content, progressive delivery | no download endpoints; `no-store` headers |
+| **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side | `HintBox.jsx`, `Checkpoint.jsx` |
+| **Instructor analytics** — time remaining, one-click copy code, section distribution, per-seat total time & time-on-section | `SessionMonitor.jsx` |
+| **Template authoring** — in-page section editor, live per-seat preview, and JSON/Markdown import & export | `TemplateEditor.jsx`, `lib/templateFormat.js` |
+| **Light & dark themes** — professional slate + indigo design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
+| **IP protection** — no file downloads, in-memory content, progressive per-section delivery | no download endpoints; `no-store` headers |
 | **Session gating** — time-limited PIN, instant revocation | `server/src/middleware/auth.js` |
 | **Rate limiting & anti-scraping** | `server/src/middleware/rateLimit.js`; progressive content delivery |
 | **Dockerization** | `Dockerfile`, `docker-compose.yml` |
@@ -135,18 +136,22 @@ password: labmanual123
 
 Try it end-to-end:
 
-1. Sign in to the instructor portal → **Launch a session** from the seeded
-   *Network Bench Setup* template. A 6-digit room code appears.
-2. In another tab/device, open **Join**, enter the code and register with a
-   first and last name. The server assigns the next number in join order (the
-   first participant is `#1`).
-3. The lab renders personalised for that number (participant `#1` → gateway
-   `192.168.1.101`, host `10.0.0.101`, port `1`…). Expand hints, clear the
-   checkpoint to unlock the final step. Close the tab and reopen — a **Resume**
-   banner brings you straight back to the same seat and progress.
+1. Sign in to the instructor portal (small link on the registration page) →
+   **Launch a session** from the seeded *Network Bench Setup* template. A
+   6-digit room code appears (click it to copy).
+2. On the default registration page, enter the code and register with a first
+   and last name. The server assigns the next number in join order (the first
+   participant is `#1`).
+3. The lab opens **section by section**, personalised for that number
+   (participant `#1` → gateway `192.168.1.101`, host `10.0.0.101`, port `1`…).
+   Expand hints, and in section 2 clear the checkpoint to unlock the next
+   section. Close the tab and reopen — a **Resume** banner brings you straight
+   back to the same seat and section, or use **Exit** to leave.
 4. Back in the instructor **session monitor**, watch each named participant's
-   live progress and time-on-step; **End session** to revoke access instantly.
-5. Toggle **light / dark mode** from the ☾/☀ control in any screen's corner.
+   live section progress, time-on-section, total time and the session's time
+   remaining; **End session** to revoke access instantly.
+5. In **Templates**, edit sections in-page, import/export a `.md`/`.json`, and
+   toggle **light / dark mode** from the ☾/☀ control on any screen.
 
 ## Running with Docker
 
@@ -219,15 +224,35 @@ payload. Submissions are validated against the per-seat expected value. This
 doubles as the anti-scraping mechanism — locked steps and answers simply never
 reach the browser.
 
-### Participant registration & resume
+### Sections & navigation
+
+A lab's content is an ordered list of **sections**, each containing an ordered
+list of **steps**. Participants move through **one section per page** — a new
+section is never just more scroll below the previous one; it is a distinct page
+with its own header and a slide/fade transition, plus a section stepper showing
+done / current / locked sections.
+
+- **Progress is section-based.** The progress bar and the instructor analytics
+  count *completed sections*, tracked with a monotonic high-water mark so
+  reviewing an earlier section never lowers progress.
+- **Checkpoints gate sections.** A step may carry a checkpoint (typically at the
+  end of a section, occasionally mid-section). A section must have all its
+  checkpoints cleared before the participant can advance to the next one. The
+  server only ever delivers sections the participant has legitimately reached,
+  and checkpoint answers are never sent to the browser.
+
+### Participant registration, resume & logout
 
 Participants register with a **first and last name**. The server assigns the
 next **ascending number (1–100)** in join order inside a transaction, so
 concurrent joins never collide, and rejects the 101st join with a "session
 full" error. That number is what the templating engine uses as `seat`.
+Registration is the app's **default landing page**; a small link leads to the
+instructor sign-in.
 
 Two mechanisms let a participant who **accidentally closes their browser**
-return to exactly where they were:
+return to exactly where they were, and an explicit **Exit** button clears the
+session:
 
 1. **Persisted token** — the participant's access token (only the token, never
    any lab content) is stored in `localStorage`, so reopening the app restores
@@ -237,14 +262,28 @@ return to exactly where they were:
    device or after clearing storage), because the seat is keyed on a normalised
    name.
 
+### Template import / export
+
+Templates can be authored entirely in the browser (in-page section editor) or
+imported from a file:
+
+- **Export** the current template as **JSON** (lossless canonical form) or
+  **Markdown** (human-friendly).
+- **Import** a `.json` or `.md` file to populate the editor, and **Download
+  sample** grabs a ready-to-edit example.
+- The Markdown convention (documented in `client/src/lib/templateFormat.js`)
+  uses YAML-ish frontmatter for `title`/`description`/`variables`, `#` for
+  sections, `## [desk|computer]` for steps, and `> hint:` / `> checkpoint:`
+  lines. Round-trips are lossless.
+
 ### Theming
 
 A `ThemeContext` provides **light and dark modes** built on CSS custom
 properties toggled on `<html data-theme>`. The initial theme follows the OS
-`prefers-color-scheme`; the user's manual choice is persisted to `localStorage`.
-The palette is an original interpretation of the Verkada brand language
-(signature blue, deep-navy dark tone, cool-gray neutrals) with the self-hosted
-Inter typeface (CSP-safe, no external requests).
+`prefers-color-scheme`; the user's manual choice is persisted to `localStorage`
+and a toggle is available on every screen. The palette is a professional slate +
+indigo system with the self-hosted Inter typeface (CSP-safe, no external
+requests).
 
 ### Security & IP protection
 
@@ -262,17 +301,18 @@ Inter typeface (CSP-safe, no external requests).
 SQLite tables (`server/src/db/index.js`):
 
 - **`instructors`** — `id`, `username`, `password_hash`.
-- **`templates`** — `id`, `title`, `description`, `content` (JSON steps with
-  `{{placeholders}}`), `variables` (JSON formulas), `version`.
+- **`templates`** — `id`, `title`, `description`, `content` (JSON: an array of
+  sections, each with a `steps[]` array whose bodies carry `{{placeholders}}`),
+  `variables` (JSON formulas), `version`.
 - **`sessions`** — `id`, `room_code` (6-digit), `title`, `template_id` (FK),
   `template_version`, `is_active`, `expires_at`. A partial unique index keeps
   one active session per room code while freeing terminated codes for reuse.
 - **`participants`** — one registered participant per session: `seat_number`
   (ascending 1–100), `first_name`, `last_name`, `name_key` (for idempotent
-  resume), `current_step`, `unlocked_step`, `completed_checkpoints`,
-  `step_entered_at`, `last_seen_at`. Unique on both `(session_id, seat_number)`
-  and `(session_id, name_key)`.
-- **`step_events`** — append-only per-step timing log powering analytics.
+  resume), `current_section`, `max_section` (monotonic progress high-water
+  mark), `completed_checkpoints` (JSON array of `"section.step"` keys),
+  `section_entered_at`, `joined_at` (total time), `last_seen_at`. Unique on both
+  `(session_id, seat_number)` and `(session_id, name_key)`.
 
 ## API reference
 
@@ -300,7 +340,7 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | --- | --- | --- |
 | `POST` | `/api/sessions` | Create session → 6-digit code |
 | `GET` | `/api/sessions` | List sessions with live counts |
-| `GET` | `/api/sessions/:id` | Detail + analytics (per-seat progress, step distribution) |
+| `GET` | `/api/sessions/:id` | Detail + analytics (per-seat progress, total time, section distribution) |
 | `POST` | `/api/sessions/:id/terminate` | End now (instant revocation) |
 | `POST` | `/api/sessions/:id/extend` | Push back expiry |
 
@@ -308,9 +348,9 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/api/participant/join` | Register with `room_code` + `first_name` + `last_name` → assigned number + participant token (resumes if the name already joined) |
-| `GET` | `/api/participant/steps` | Unlocked, per-seat rendered steps |
-| `POST` | `/api/participant/checkpoint` | Submit unlock string (validated server-side) |
-| `POST` | `/api/participant/progress` | Report active step (analytics) |
+| `GET` | `/api/participant/content` | Unlocked sections, rendered per-seat, with section progress |
+| `POST` | `/api/participant/checkpoint` | Submit unlock string for `section_index`/`step_index` (validated server-side) |
+| `POST` | `/api/participant/progress` | Report active `section_index` (analytics + progress) |
 | `POST` | `/api/participant/heartbeat` | Presence keep-alive |
 
 ### Health
@@ -380,12 +420,13 @@ vLabs/
 │   └── tests/                 # templating engine unit tests
 └── client/                    # React + Vite SPA
     └── src/
-        ├── pages/             # Landing, Join, Lab, Dashboard, Templates,
+        ├── pages/             # Join (default), Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin
         ├── components/        # StepCard, HintBox, Checkpoint, Markdown,
         │                      #   PortalShell, ThemeToggle
         ├── hooks/             # content protection, instructor API
         ├── context/           # AuthContext, ThemeContext (light/dark)
+        ├── lib/               # templateFormat (JSON/Markdown import & export)
         ├── styles.css         # design system + light & dark themes
         └── api.js             # typed fetch client (+ participant resume storage)
 ```

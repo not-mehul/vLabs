@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
+import { isSectionCleared, stepHasCheckpoint } from '../lib/templating.js';
 
 const router = Router();
 router.use(requireInstructor);
@@ -30,22 +31,34 @@ function sessionStatus(row) {
 }
 
 /** Build the analytics view for one participant. */
-function participantView(p, stepCount) {
-  const onStepSeconds = secondsBetween(p.step_entered_at, nowIso());
+function participantView(p, sections) {
+  const completed = new Set(JSON.parse(p.completed_checkpoints));
+  const sectionCount = sections.length;
+  // Completed = sections the participant has navigated past (monotonic high-
+  // water mark), plus the final section once it is cleared/reached. This avoids
+  // crediting not-yet-visited sections that happen to have no checkpoint.
+  const furthest = p.max_section;
+  let completedSections = Math.min(furthest, sectionCount);
+  if (
+    sectionCount > 0 &&
+    furthest >= sectionCount - 1 &&
+    isSectionCleared(sections[sectionCount - 1], sectionCount - 1, completed)
+  ) {
+    completedSections = sectionCount;
+  }
   return {
     id: p.id,
     seat_number: p.seat_number,
     first_name: p.first_name,
     last_name: p.last_name,
     name: `${p.first_name} ${p.last_name}`.trim(),
-    current_step: p.current_step,
-    unlocked_step: p.unlocked_step,
-    completed_checkpoints: JSON.parse(p.completed_checkpoints),
-    seconds_on_current_step: onStepSeconds,
+    current_section: p.current_section,
+    completed_sections: completedSections,
+    completed_checkpoints: [...completed],
+    seconds_on_current_section: secondsBetween(p.section_entered_at, nowIso()),
+    total_seconds: secondsBetween(p.joined_at, nowIso()),
     progress_pct:
-      stepCount > 0
-        ? Math.round(((p.current_step + 1) / stepCount) * 100)
-        : 0,
+      sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsBetween(p.last_seen_at, nowIso()),
@@ -137,20 +150,20 @@ router.get('/:id', (req, res) => {
     .get(req.params.id, req.instructor.id);
   if (!row) throw httpError(404, 'Session not found');
 
-  const steps = JSON.parse(row.template_content);
-  const stepCount = steps.length;
+  const sections = JSON.parse(row.template_content);
+  const sectionCount = sections.length;
   const participants = db
     .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number')
     .all(row.id)
-    .map((p) => participantView(p, stepCount));
+    .map((p) => participantView(p, sections));
 
-  // Aggregate: how many seats are currently on each step.
-  const stepDistribution = steps.map((s, i) => ({
+  // Aggregate: how many seats are currently on each section.
+  const sectionDistribution = sections.map((s, i) => ({
     index: i,
-    title: s.title || `Step ${i + 1}`,
-    type: s.type === 'computer' ? 'computer' : 'desk',
-    has_checkpoint: Boolean(s.checkpoint && s.checkpoint.answer),
-    seats_here: participants.filter((p) => p.current_step === i).length,
+    title: s.title || `Section ${i + 1}`,
+    step_count: (s.steps && s.steps.length) || 0,
+    has_checkpoint: (s.steps || []).some((step) => stepHasCheckpoint(step)),
+    seats_here: participants.filter((p) => p.current_section === i).length,
   }));
 
   res.json({
@@ -163,8 +176,8 @@ router.get('/:id', (req, res) => {
     expires_at: row.expires_at,
     created_at: row.created_at,
     ended_at: row.ended_at,
-    step_count: stepCount,
-    step_distribution: stepDistribution,
+    section_count: sectionCount,
+    section_distribution: sectionDistribution,
     participants,
   });
 });

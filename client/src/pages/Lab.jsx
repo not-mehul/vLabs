@@ -11,13 +11,10 @@ function useCountdown(expiresAt) {
     if (!expiresAt) return undefined;
     const tick = () => {
       const ms = new Date(expiresAt).getTime() - Date.now();
-      if (ms <= 0) {
-        setRemaining('expired');
-        return;
-      }
+      if (ms <= 0) return setRemaining('expired');
       const m = Math.floor(ms / 60000);
       const s = Math.floor((ms % 60000) / 1000);
-      setRemaining(`${m}:${String(s).padStart(2, '0')}`);
+      return setRemaining(`${m}:${String(s).padStart(2, '0')}`);
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -29,12 +26,9 @@ function useCountdown(expiresAt) {
 export default function Lab() {
   const location = useLocation();
   const navigate = useNavigate();
-  // Resume path: fall back to the persisted session so a participant who closed
-  // their browser lands straight back in the lab.
   const resumed = location.state || participantSession.get();
   const { token, seatNumber, name, session } = resumed || {};
 
-  // Keep the persisted copy fresh (e.g. when arriving via router state).
   useEffect(() => {
     if (token) participantSession.set({ token, seatNumber, name, session });
   }, [token, seatNumber, name, session]);
@@ -43,33 +37,38 @@ export default function Lab() {
 
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [ended, setEnded] = useState(null); // { reason }
-  const currentStepRef = useRef(-1);
+  const [ended, setEnded] = useState(null);
+  const [view, setView] = useState(0); // section index being viewed
+  const [dir, setDir] = useState('next'); // animation direction
+  const initialisedRef = useRef(false);
+  const reportedRef = useRef(-1);
   const remaining = useCountdown(session?.expires_at);
 
-  // Redirect out if arrived without a token (e.g. direct URL / refresh).
   useEffect(() => {
-    if (!token) navigate('/join', { replace: true });
+    if (!token) navigate('/', { replace: true });
   }, [token, navigate]);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await api.steps(token);
+      const res = await api.content(token);
       setData(res);
       setError('');
+      // On first load, resume at the participant's last section.
+      if (!initialisedRef.current) {
+        initialisedRef.current = true;
+        setView(Math.min(res.current_section || 0, res.unlocked_section));
+      }
     } catch (err) {
       if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
-        // Session ended/expired/invalid — the stored token is now useless.
         participantSession.clear();
         setEnded({ reason: err.message });
       } else {
-        setError(err.message || 'Could not load your lab steps.');
+        setError(err.message || 'Could not load your lab.');
       }
     }
   }, [token]);
 
-  // Initial load + polling to pick up newly unlocked steps / session end.
   useEffect(() => {
     if (!token) return undefined;
     load();
@@ -77,46 +76,35 @@ export default function Lab() {
     return () => clearInterval(id);
   }, [token, load]);
 
-  // Report which step is in view (drives instructor analytics).
-  const reportProgress = useCallback(
-    (index) => {
-      if (index === currentStepRef.current) return;
-      currentStepRef.current = index;
-      api.reportProgress(token, index).catch(() => {});
-    },
-    [token],
-  );
-
-  // Observe cards; report the top-most visible step.
+  // Report the section being viewed (drives analytics + progress high-water mark).
   useEffect(() => {
-    if (!data || !data.steps.length) return undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (visible) {
-          const idx = Number(visible.target.getAttribute('data-index'));
-          reportProgress(idx);
-        }
-      },
-      { threshold: 0.4 },
-    );
-    document.querySelectorAll('[data-index]').forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [data, reportProgress]);
+    if (!data || reportedRef.current === view) return;
+    reportedRef.current = view;
+    api.reportProgress(token, view).catch(() => {});
+  }, [view, data, token]);
 
   const handleCheckpoint = useCallback(
-    async (stepIndex, answer) => {
-      const res = await api.submitCheckpoint(token, stepIndex, answer);
+    async (sectionIndex, stepIndex, answer) => {
+      const res = await api.submitCheckpoint(token, sectionIndex, stepIndex, answer);
       if (res.correct) {
-        await load(); // reveal the next step
+        await load();
         return true;
       }
       return false;
     },
     [token, load],
   );
+
+  function goTo(next) {
+    setDir(next > view ? 'next' : 'prev');
+    setView(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function logout() {
+    participantSession.clear();
+    navigate('/', { replace: true });
+  }
 
   if (ended) {
     return (
@@ -126,8 +114,8 @@ export default function Lab() {
           <span className="ended-card__icon" aria-hidden="true">🔒</span>
           <h1>Session closed</h1>
           <p>{ended.reason}</p>
-          <button className="btn btn--primary" onClick={() => navigate('/join', { replace: true })}>
-            Join another session
+          <button className="btn btn--primary" onClick={() => navigate('/', { replace: true })}>
+            Return to start
           </button>
         </div>
       </div>
@@ -136,63 +124,119 @@ export default function Lab() {
 
   if (!token) return null;
 
-  const total = data?.total_steps ?? session?.step_count ?? 0;
-  const unlocked = data ? data.unlocked_through + 1 : 0;
+  const total = data?.total_sections ?? session?.section_count ?? 0;
+  const completed = data?.completed_sections ?? 0;
+  const unlocked = data?.unlocked_section ?? 0;
+  const section = data?.sections?.[view];
   const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
+  const canPrev = view > 0;
+  const canNext = view < unlocked && view < total - 1;
+  const blockedByCheckpoint = section && !section.cleared && view >= unlocked;
+  const isLast = view === total - 1;
+  const allDone = completed >= total && total > 0;
 
   return (
     <div className="lab">
-      <header className="lab__bar">
-        <div className="lab__bar-left">
-          <span className="lab__seat">#{seatNumber}</span>
-          <span className="lab__name">{displayName}</span>
-          <span className="lab__session">{session?.title}</span>
-        </div>
-        <div className="lab__bar-right">
-          <span className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}>
-            <span aria-hidden="true">⏱</span> {remaining || '—'}
-          </span>
-          <ThemeToggle />
-        </div>
-      </header>
+      <div className="lab__header">
+        <header className="lab__bar">
+          <div className="lab__bar-left">
+            <span className="lab__seat">#{seatNumber}</span>
+            <span className="lab__name">{displayName}</span>
+            <span className="lab__session">{session?.title}</span>
+          </div>
+          <div className="lab__bar-right">
+            <span className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}>
+              <span aria-hidden="true">⏱</span> {remaining || '—'}
+            </span>
+            <ThemeToggle />
+            <button className="btn btn--ghost btn--sm" onClick={logout}>
+              Exit
+            </button>
+          </div>
+        </header>
 
-      <div className="lab__progress">
-        <div
-          className="lab__progress-fill"
-          style={{ width: total ? `${(unlocked / total) * 100}%` : '0%' }}
-        />
-        <span className="lab__progress-label">
-          {unlocked} / {total} steps unlocked
-        </span>
+        {/* Section stepper — clear delineation of section boundaries */}
+        <div className="stepper" role="tablist" aria-label="Sections">
+          {Array.from({ length: total }).map((_, i) => {
+            const state =
+              i < completed ? 'done' : i === view ? 'current' : i <= unlocked ? 'open' : 'locked';
+            return (
+              <button
+                key={i}
+                className={`stepper__node stepper__node--${state}`}
+                disabled={i > unlocked}
+                onClick={() => goTo(i)}
+                aria-current={i === view}
+                title={`Section ${i + 1}`}
+              >
+                <span className="stepper__dot">{state === 'done' ? '✓' : i + 1}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="lab__progress">
+          <div
+            className="lab__progress-fill"
+            style={{ width: total ? `${(completed / total) * 100}%` : '0%' }}
+          />
+          <span className="lab__progress-label">
+            {completed} / {total} sections complete
+          </span>
+        </div>
       </div>
 
       <main className="lab__content">
         {error && <p className="form__error lab__error">{error}</p>}
         {!data && !error && <p className="lab__loading">Loading your lab…</p>}
 
-        {data &&
-          data.steps.map((step) => (
-            <div data-index={step.index} key={step.index}>
-              <StepCard step={step} total={total} onCheckpoint={handleCheckpoint} />
+        {section && (
+          <div key={view} className={`section-view section-view--${dir}`}>
+            <div className="section-head">
+              <span className="section-head__eyebrow">
+                Section {view + 1} of {total}
+              </span>
+              <h1 className="section-head__title">{section.title}</h1>
             </div>
-          ))}
 
-        {data && data.unlocked_through < total - 1 && (
-          <div className="lab__locked">
-            <span aria-hidden="true">🔒</span> Clear the checkpoint above to
-            reveal the remaining {total - unlocked} step
-            {total - unlocked === 1 ? '' : 's'}.
+            {section.steps.map((step) => (
+              <StepCard
+                key={step.index}
+                step={step}
+                sectionIndex={view}
+                total={section.total_steps}
+                onCheckpoint={handleCheckpoint}
+              />
+            ))}
+
+            <div className="section-nav">
+              <button className="btn btn--ghost" disabled={!canPrev} onClick={() => goTo(view - 1)}>
+                ← Previous
+              </button>
+
+              {blockedByCheckpoint ? (
+                <span className="section-nav__hint">
+                  🔒 Complete the checkpoint to continue
+                </span>
+              ) : isLast ? (
+                allDone ? (
+                  <span className="section-nav__done">🎉 Lab complete</span>
+                ) : (
+                  <span className="section-nav__hint">Final section</span>
+                )
+              ) : null}
+
+              <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
+                Next section →
+              </button>
+            </div>
           </div>
-        )}
-
-        {data && data.unlocked_through === total - 1 && (
-          <div className="lab__done">🎉 You've reached the end of the lab.</div>
         )}
       </main>
 
       <footer className="lab__footprint">
-        Lab content is rendered in memory for your seat only — no files are
-        saved to this device.
+        Lab content is rendered in memory for your seat only — no files are saved
+        to this device.
       </footer>
     </div>
   );

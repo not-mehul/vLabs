@@ -67,8 +67,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_active_code
 -- join order; that number is what the templating engine uses as the seat value.
 -- name_key (lowercased "first last") makes rejoin idempotent so a participant
 -- who closes their browser can return and resume the same seat and progress.
--- current_step and step_entered_at power the live analytics; unlocked_step is
--- the highest step index released to this seat (progressive disclosure).
+-- Progress is tracked by SECTION: current_section is the section being viewed,
+-- section_entered_at powers time-on-section, joined_at powers total elapsed
+-- time, and completed_checkpoints is a JSON array of "<section>.<step>" keys.
 CREATE TABLE IF NOT EXISTS participants (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id             INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -76,34 +77,25 @@ CREATE TABLE IF NOT EXISTS participants (
   first_name             TEXT NOT NULL DEFAULT '',
   last_name              TEXT NOT NULL DEFAULT '',
   name_key               TEXT NOT NULL,
-  current_step           INTEGER NOT NULL DEFAULT 0,
-  unlocked_step          INTEGER NOT NULL DEFAULT 0,
+  current_section        INTEGER NOT NULL DEFAULT 0,
+  max_section            INTEGER NOT NULL DEFAULT 0,
   completed_checkpoints  TEXT NOT NULL DEFAULT '[]',
-  step_entered_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  section_entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (session_id, seat_number),
   UNIQUE (session_id, name_key)
 );
-
--- Append-only analytics log: how long each seat spent on each step.
-CREATE TABLE IF NOT EXISTS step_events (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  participant_id INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
-  session_id     INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  step_index     INTEGER NOT NULL,
-  entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  left_at        TEXT,
-  seconds_spent  INTEGER
-);
 `;
 
 /**
- * Migration guard: the participants table gained name/seat_number columns.
- * A legacy table (with the old `seat_id` column) can't be reshaped by
- * CREATE TABLE IF NOT EXISTS, so drop it — participant rows are ephemeral,
- * session-scoped data that is safe to recreate.
+ * Migration guard: the participants table moved from step-based tracking to
+ * section-based tracking (current_section column). A legacy table can't be
+ * reshaped by CREATE TABLE IF NOT EXISTS, so drop it — participant rows are
+ * ephemeral, session-scoped data that is safe to recreate. The old step_events
+ * table is likewise retired.
  */
+db.exec('DROP TABLE IF EXISTS step_events;');
 const participantsExists = db
   .prepare(
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='participants'",
@@ -111,9 +103,9 @@ const participantsExists = db
   .get();
 if (participantsExists) {
   const cols = db.prepare('PRAGMA table_info(participants)').all();
-  const hasSeatNumber = cols.some((c) => c.name === 'seat_number');
-  if (!hasSeatNumber) {
-    db.exec('DROP TABLE IF EXISTS step_events; DROP TABLE IF EXISTS participants;');
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has('current_section') || !names.has('max_section')) {
+    db.exec('DROP TABLE IF EXISTS participants;');
   }
 }
 

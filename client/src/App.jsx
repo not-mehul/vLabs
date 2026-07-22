@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
-import Landing from './pages/Landing.jsx';
 import Join from './pages/Join.jsx';
 import Lab from './pages/Lab.jsx';
 import InstructorLogin from './pages/InstructorLogin.jsx';
@@ -22,10 +21,9 @@ function RequireInstructor({ children }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-
-      {/* Participant portal */}
-      <Route path="/join" element={<Join />} />
+      {/* Participant registration is the default landing page. */}
+      <Route path="/" element={<Join />} />
+      <Route path="/join" element={<Navigate to="/" replace />} />
       <Route path="/lab" element={<Lab />} />
 
       {/* Instructor portal */}

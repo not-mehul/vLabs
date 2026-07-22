@@ -63,6 +63,7 @@ export default function Templates() {
             <thead>
               <tr>
                 <th>Title</th>
+                <th>Sections</th>
                 <th>Steps</th>
                 <th>Version</th>
                 <th>Updated</th>
@@ -76,6 +77,7 @@ export default function Templates() {
                     <div className="table__primary">{t.title}</div>
                     {t.description && <div className="muted small">{t.description}</div>}
                   </td>
+                  <td>{t.section_count}</td>
                   <td>{t.step_count}</td>
                   <td>v{t.version}</td>
                   <td className="muted">{new Date(t.updated_at + 'Z').toLocaleString()}</td>

@@ -51,10 +51,10 @@ export default function Join() {
     <div className="auth-screen">
       <ThemeToggle className="theme-toggle--corner" />
       <div className="auth-card">
-        <Link to="/" className="brand brand--sm">
+        <div className="brand brand--sm">
           <span className="brand__mark" aria-hidden="true" />
           <span className="brand__name">vLabs</span>
-        </Link>
+        </div>
 
         {stored && (
           <button
@@ -122,6 +122,12 @@ export default function Join() {
             {busy ? 'Registering…' : 'Register & enter lab'}
           </button>
         </form>
+
+        <div className="auth-card__alt">
+          <Link to="/instructor/login" className="auth-card__alt-link">
+            Instructor sign in →
+          </Link>
+        </div>
       </div>
     </div>
   );

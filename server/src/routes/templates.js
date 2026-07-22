@@ -3,7 +3,7 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
-import { renderManual } from '../lib/templating.js';
+import { renderManual, countSteps } from '../lib/templating.js';
 import { nowIso } from '../lib/time.js';
 
 const router = Router();
@@ -33,14 +33,18 @@ router.get('/', (req, res) => {
     )
     .all();
   res.json(
-    rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      version: r.version,
-      step_count: JSON.parse(r.content).length,
-      updated_at: r.updated_at,
-    })),
+    rows.map((r) => {
+      const content = JSON.parse(r.content);
+      return {
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        version: r.version,
+        section_count: content.length,
+        step_count: countSteps(content),
+        updated_at: r.updated_at,
+      };
+    }),
   );
 });
 
@@ -146,8 +150,8 @@ router.post(
       variables = JSON.parse(row.variables);
     }
 
-    const { context, steps } = renderManual(content, variables, seatId);
-    res.json({ seat_id: seatId, context, steps });
+    const { context, sections } = renderManual(content, variables, seatId);
+    res.json({ seat_id: seatId, context, sections });
   }),
 );
 

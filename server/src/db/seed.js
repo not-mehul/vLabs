@@ -19,83 +19,98 @@ const SAMPLE_VARIABLES = [
 
 const SAMPLE_CONTENT = [
   {
-    type: 'desk',
-    title: 'Prepare Your Bench',
-    body:
-      'Welcome, **Seat {{ SEAT_ID }}**.\n\n' +
-      '1. Confirm your workstation is powered on.\n' +
-      '2. Locate the patch panel above your desk.\n' +
-      '3. You have been assigned **switch port {{ PORT_NUM }}**.\n\n' +
-      '> Keep this manual open on your assigned iPad — it updates live for your seat.',
-    hints: [
+    title: 'Section 1 · Bench Preparation',
+    steps: [
       {
-        label: "Can't find the patch panel?",
-        text: 'It is the horizontal grey unit at eye level, labelled with port numbers 1–24.',
+        type: 'desk',
+        title: 'Prepare Your Bench',
+        body:
+          'Welcome, participant **#{{ SEAT_ID }}**.\n\n' +
+          '1. Confirm your workstation is powered on.\n' +
+          '2. Locate the patch panel above your desk.\n' +
+          '3. You have been assigned **switch port {{ PORT_NUM }}**.\n\n' +
+          '> Keep this manual open on your assigned iPad — it updates live for your seat.',
+        hints: [
+          {
+            label: "Can't find the patch panel?",
+            text: 'It is the horizontal grey unit at eye level, labelled with port numbers 1–24.',
+          },
+        ],
+      },
+      {
+        type: 'desk',
+        title: 'Physical Cabling',
+        body:
+          'Connect your physical patch cable to **Port {{ PORT_NUM }}** on the patch panel.\n\n' +
+          'Route the cable neatly to your workstation NIC. Ensure the clip *clicks* into place.',
+        hints: [
+          {
+            label: 'Which cable is mine?',
+            text: 'Use the cable tagged with your seat number ({{ SEAT_ID }}).',
+          },
+        ],
       },
     ],
   },
   {
-    type: 'desk',
-    title: 'Network Configuration (Physical)',
-    body:
-      'Connect your physical patch cable to **Port {{ PORT_NUM }}** on the patch panel.\n\n' +
-      'Route the cable neatly to your workstation NIC. Ensure the clip *clicks* into place.',
-    hints: [
+    title: 'Section 2 · Network Configuration',
+    steps: [
       {
-        label: 'Which cable is mine?',
-        text: 'Use the cable tagged with your seat number ({{ SEAT_ID }}).',
+        type: 'computer',
+        title: 'Assign a Static IP',
+        body:
+          'On your workstation, open the network settings and apply this configuration:\n\n' +
+          '| Setting | Value |\n' +
+          '| --- | --- |\n' +
+          '| IP Address | `{{ HOST_IP }}` |\n' +
+          '| Subnet Mask | `{{ SUBNET }}` |\n' +
+          '| Default Gateway | `{{ GATEWAY_IP }}` |\n' +
+          '| VLAN | `{{ VLAN }}` |\n\n' +
+          'Apply the settings and wait for the link light to turn solid green.',
+        hints: [
+          {
+            label: 'Command-line alternative',
+            text: 'Linux: `sudo ip addr add {{ HOST_IP }}/24 dev eth0 && sudo ip route add default via {{ GATEWAY_IP }}`',
+          },
+        ],
+      },
+      {
+        type: 'computer',
+        title: 'Verify Connectivity',
+        body:
+          'Ping the gateway to confirm your link is live:\n\n' +
+          '```\nping {{ GATEWAY_IP }}\n```\n\n' +
+          'You should see replies with a TTL of 64. Record your assigned Host IP ' +
+          'below to complete this section.',
+        hints: [
+          {
+            label: 'How do I read my IP?',
+            text: 'Run `ip addr show eth0` (Linux) or `ipconfig` (Windows) and copy the IPv4 address.',
+          },
+        ],
+        checkpoint: {
+          prompt: 'Enter your assigned Host IP address to complete this section',
+          placeholder: 'e.g. 10.0.0.1XX',
+          // Answer is computed per seat and never sent to the browser.
+          answer: '{{ HOST_IP }}',
+        },
       },
     ],
   },
   {
-    type: 'computer',
-    title: 'Assign a Static IP',
-    body:
-      'On your workstation, open the network settings and apply this configuration:\n\n' +
-      '| Setting | Value |\n' +
-      '| --- | --- |\n' +
-      '| IP Address | `{{ HOST_IP }}` |\n' +
-      '| Subnet Mask | `{{ SUBNET }}` |\n' +
-      '| Default Gateway | `{{ GATEWAY_IP }}` |\n' +
-      '| VLAN | `{{ VLAN }}` |\n\n' +
-      'Apply the settings and wait for the link light to turn solid green.',
-    hints: [
+    title: 'Section 3 · Wrap Up',
+    steps: [
       {
-        label: 'Command-line alternative',
-        text: 'Linux: `sudo ip addr add {{ HOST_IP }}/24 dev eth0 && sudo ip route add default via {{ GATEWAY_IP }}`',
+        type: 'desk',
+        title: 'Wrap Up',
+        body:
+          'Excellent work, participant #{{ SEAT_ID }}.\n\n' +
+          '- Label your cable and leave it connected to **Port {{ PORT_NUM }}**.\n' +
+          '- Raise your hand for the instructor to validate your bench.\n\n' +
+          'Your gateway was **{{ GATEWAY_IP }}** and your host was **{{ HOST_IP }}**.',
+        hints: [],
       },
     ],
-  },
-  {
-    type: 'computer',
-    title: 'Verify Connectivity',
-    body:
-      'Ping the gateway to confirm your link is live:\n\n' +
-      '```\nping {{ GATEWAY_IP }}\n```\n\n' +
-      'You should see replies with a TTL of 64. Then read the MAC address the ' +
-      'gateway reports for your host and record it below to continue.',
-    hints: [
-      {
-        label: 'How do I read the MAC?',
-        text: 'Run `ip link show eth0` (Linux) or `ipconfig /all` (Windows) and copy the physical/hardware address.',
-      },
-    ],
-    checkpoint: {
-      prompt: 'Enter the last octet of your assigned Host IP to unlock the final step',
-      placeholder: 'e.g. 1XX',
-      // Answer is computed per seat and never sent to the browser.
-      answer: '{{ HOST_IP }}',
-    },
-  },
-  {
-    type: 'desk',
-    title: 'Wrap Up',
-    body:
-      'Excellent work, Seat {{ SEAT_ID }}. \n\n' +
-      '- Label your cable and leave it connected to **Port {{ PORT_NUM }}**.\n' +
-      '- Raise your hand for the instructor to validate your bench.\n\n' +
-      'Your gateway was **{{ GATEWAY_IP }}** and your host was **{{ HOST_IP }}**.',
-    hints: [],
   },
 ];
 
@@ -131,7 +146,7 @@ export function ensureSeed() {
        VALUES (?, ?, ?, ?, 1, ?)`,
     ).run(
       'Network Bench Setup (Sample)',
-      'A five-step introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a checkpoint.',
+      'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
       JSON.stringify(SAMPLE_CONTENT),
       JSON.stringify(SAMPLE_VARIABLES),
       instructorId,
