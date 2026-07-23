@@ -16,7 +16,7 @@ import {
   SAMPLE_MARKDOWN,
 } from '../lib/templateFormat.js';
 
-const BLANK_STEP = () => ({ type: 'desk', title: '', body: '', hints: [], checkpoint: null });
+const BLANK_STEP = () => ({ type: 'desk', title: '', body: '', hints: [], solution: '', checkpoint: null });
 const BLANK_SECTION = (n = 1) => ({ title: `Section ${n}`, steps: [BLANK_STEP()] });
 
 const NEW_TEMPLATE = () => ({
@@ -179,13 +179,26 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
 
       <HintEditor hints={step.hints} onChange={(hints) => set({ hints })} />
 
+      <label className="field solution-editor">
+        <span className="field__label">
+          <Icon name="key" size={14} /> Solution (Markdown — optional)
+        </span>
+        <textarea
+          className="field__input step-editor__body"
+          rows={4}
+          placeholder="Optional walkthrough. Markdown supported — bullet points, links, etc. Revealed to a participant once they open every hint on this step."
+          value={step.solution || ''}
+          onChange={(e) => set({ solution: e.target.value })}
+        />
+      </label>
+
       <div className="checkpoint-editor">
         <label className="switch">
           <input
             type="checkbox"
             checked={hasCheckpoint}
             onChange={(e) =>
-              set({ checkpoint: e.target.checked ? { prompt: '', placeholder: '', answer: '', solution: '' } : null })
+              set({ checkpoint: e.target.checked ? { prompt: '', placeholder: '', answer: '' } : null })
             }
           />
           <span>Add a checkpoint (gates the next section once cleared)</span>
@@ -206,17 +219,7 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
                 <input className="field__input mono" placeholder="may use {{ VARIABLES }}" value={step.checkpoint.answer} onChange={(e) => set({ checkpoint: { ...step.checkpoint, answer: e.target.value } })} />
               </label>
             </div>
-            <label className="field">
-              <span className="field__label">Solution (Markdown — revealed after all hints are opened)</span>
-              <textarea
-                className="field__input step-editor__body"
-                rows={5}
-                placeholder="Explain the answer. Markdown supported — bullet points, links, etc."
-                value={step.checkpoint.solution || ''}
-                onChange={(e) => set({ checkpoint: { ...step.checkpoint, solution: e.target.value } })}
-              />
-            </label>
-            <p className="muted small">The answer is validated server-side; the solution is only sent after every hint is opened.</p>
+            <p className="muted small">The answer is validated server-side and never sent to the browser.</p>
           </div>
         )}
       </div>
@@ -630,7 +633,7 @@ function coerce(t) {
     variables: t.variables || [],
     content: (t.content || []).map((s) => ({
       title: s.title || '',
-      steps: (s.steps || []).map((st) => ({ hints: [], checkpoint: null, ...st })),
+      steps: (s.steps || []).map((st) => ({ hints: [], solution: '', checkpoint: null, ...st })),
     })),
   };
 }

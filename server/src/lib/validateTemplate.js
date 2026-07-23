@@ -76,6 +76,9 @@ function validateStep(s, sectionIndex, stepIndex, errors) {
     title: String(s?.title || '').trim().slice(0, 200),
     body: String(s?.body || ''),
     hints: [],
+    // Optional step-level markdown solution, revealed once every hint on the
+    // step has been opened (independent of whether the step has a checkpoint).
+    solution: String(s?.solution || '').slice(0, 4000),
   };
   if (!step.body.trim()) {
     errors.push(`Section ${sectionIndex + 1} · step ${stepIndex + 1} has an empty body`);
@@ -96,8 +99,6 @@ function validateStep(s, sectionIndex, stepIndex, errors) {
         .slice(0, 300),
       placeholder: String(s.checkpoint.placeholder || '').trim().slice(0, 120),
       answer: String(s.checkpoint.answer).trim(),
-      // Optional markdown explanation revealed once every hint is opened.
-      solution: String(s.checkpoint.solution || '').slice(0, 4000),
     };
   }
   return step;

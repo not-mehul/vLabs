@@ -16,7 +16,6 @@ import {
   checkpointKey,
   countSteps,
   injectVariables,
-  stepHasCheckpoint,
 } from '../lib/templating.js';
 
 const router = Router();
@@ -177,27 +176,22 @@ router.get(
       const section = renderSection(sections[s], context, s, completed, stepLimit);
       section.cleared = cleared;
 
-      // Augment each step with hint-taken state and, for checkpoint steps whose
-      // every hint has been taken, the solution (revealed on request only).
+      // Augment each step with hint-taken state and step-level solution
+      // metadata. A solution (if authored) can be revealed once every hint on
+      // the step has been opened — vacuously true when the step has no hints —
+      // and only ships to the browser once the participant reveals it.
       section.steps.forEach((step) => {
         const raw = sections[s].steps[step.index];
-        const hintCount = (raw.hints || []).length;
         step.hints = (step.hints || []).map((h, hi) => ({
           ...h,
           taken: hintsTaken.has(`${s}.${step.index}.${hi}`),
         }));
-        if (step.checkpoint && !step.checkpoint.completed) {
-          const hasSolution = Boolean(raw.checkpoint && raw.checkpoint.solution);
-          const allHintsTaken = hintCount > 0 && step.hints.every((h) => h.taken);
-          // A solution can be revealed only if the author wrote one AND every
-          // hint on the step has been opened.
-          step.checkpoint.has_solution = hasSolution;
-          step.checkpoint.solution_available = hasSolution && allHintsTaken;
-          if (hasSolution && revealed.has(`${s}.${step.index}`)) {
-            step.checkpoint.solution = injectVariables(
-              String(raw.checkpoint.solution),
-              context,
-            );
+        if (raw.solution) {
+          const allHintsTaken = step.hints.every((h) => h.taken);
+          step.has_solution = true;
+          step.solution_available = allHintsTaken;
+          if (revealed.has(`${s}.${step.index}`)) {
+            step.solution = injectVariables(String(raw.solution), context);
           }
         }
       });
@@ -364,8 +358,9 @@ router.post(
 /**
  * POST /api/participant/solution
  * Body: { section_index, step_index }
- * Reveals a checkpoint's authored markdown solution — but ONLY once every hint
- * on that step has been taken. Until then the solution never leaves the server.
+ * Reveals a step's authored markdown solution — but ONLY once every hint on
+ * that step has been opened (vacuously satisfied when the step has no hints).
+ * Until then the solution never leaves the server.
  */
 router.post(
   '/solution',
@@ -376,13 +371,18 @@ router.post(
     const sti = parseInt(req.body?.step_index, 10);
     const { sections, variables } = loadManual(req.session);
     const step = sections[si]?.steps?.[sti];
-    if (!step || !stepHasCheckpoint(step)) throw httpError(400, 'No checkpoint here');
-    if (!step.checkpoint.solution) throw httpError(404, 'No solution authored for this step');
+    if (!step) throw httpError(400, 'Invalid step');
+    if (!step.solution) throw httpError(404, 'No solution authored for this step');
 
-    const hintCount = (step.hints || []).length;
-    if (hintCount === 0) throw httpError(403, 'No hints to exhaust on this step');
+    // The step must be reachable before its solution can be revealed.
+    const completed = new Set(JSON.parse(p.completed_checkpoints));
+    const unlockedSection = computeUnlockedSection(sections, completed);
+    if (si > unlockedSection) throw httpError(403, 'Section is locked');
+    const visibleThrough = computeSectionVisibleThrough(sections[si], si, completed);
+    if (sti > visibleThrough) throw httpError(403, 'Step is locked');
+
     const taken = new Set(JSON.parse(p.hints_taken || '[]'));
-    const allTaken = step.hints.every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
+    const allTaken = (step.hints || []).every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
     if (!allTaken) throw httpError(403, 'Open all hints before revealing the solution');
 
     const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
@@ -392,7 +392,7 @@ router.post(
     ).run(JSON.stringify([...revealed]), nowIso(), p.id);
 
     const context = resolveVariables(variables, p.seat_number);
-    const solution = injectVariables(String(step.checkpoint.solution), context);
+    const solution = injectVariables(String(step.solution), context);
     noStore(res);
     res.json({ solution });
   }),

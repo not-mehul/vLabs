@@ -24,6 +24,10 @@
  *
  *   > hint: Label shown on the toggle :: Hidden hint text
  *
+ *   > solution:
+ *   > A multi-line markdown walkthrough, revealed once every hint is opened.
+ *   > - Supports bullet points and links.
+ *
  *   ## [computer] Assign an IP
  *   Body…
  *
@@ -31,7 +35,8 @@
  *
  *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]
  *   prefix sets the type, default desk). `> hint:` and `> checkpoint:` lines use
- *   `::` to separate the two parts.
+ *   `::` to separate the two parts. `> solution:` starts a block whose following
+ *   quoted (`> `) lines are the step's markdown solution.
  */
 
 /* ------------------------------- Export --------------------------------- */
@@ -76,6 +81,15 @@ export function templateToMarkdown(tpl) {
         lines.push('');
         lines.push(`> hint: ${h.label || 'Hint'} :: ${(h.text || '').replace(/\n/g, ' ')}`);
       }
+      if (step.solution && step.solution.trim()) {
+        lines.push('');
+        lines.push('> solution:');
+        // Multi-line markdown solution: each line is quoted so its structure
+        // (bullets, blank lines) survives the round-trip.
+        for (const l of step.solution.replace(/\s+$/, '').split('\n')) {
+          lines.push(`> ${l}`.replace(/\s+$/, ''));
+        }
+      }
       if (step.checkpoint && step.checkpoint.answer) {
         lines.push('');
         lines.push(`> checkpoint: ${step.checkpoint.prompt || ''} :: ${step.checkpoint.answer}`);
@@ -111,20 +125,41 @@ export function parseMarkdownTemplate(text) {
   let section = null;
   let step = null;
   let bodyLines = [];
+  let solLines = null; // non-null while collecting a `> solution:` block
 
   const flushBody = () => {
     if (step) step.body = bodyLines.join('\n').trim();
     bodyLines = [];
   };
+  const flushSolution = () => {
+    if (step && solLines) step.solution = solLines.join('\n').trim();
+    solLines = null;
+  };
 
   for (const raw of lines) {
     const line = raw;
+    // While collecting a solution, keep consuming quoted lines; the first line
+    // that is not a blockquote (or is another directive) ends the block.
+    if (solLines !== null) {
+      if (/^>\s*(hint|checkpoint|solution):/i.test(line)) {
+        flushSolution();
+        // fall through to directive handling below
+      } else if (/^>/.test(line)) {
+        solLines.push(line.replace(/^>\s?/, ''));
+        continue;
+      } else {
+        flushSolution();
+        // fall through to normal handling below
+      }
+    }
     if (/^#\s+/.test(line) && !/^##\s+/.test(line)) {
+      flushSolution();
       flushBody();
       step = null;
       section = { title: line.replace(/^#\s+/, '').trim(), steps: [] };
       tpl.content.push(section);
     } else if (/^##\s+/.test(line)) {
+      flushSolution();
       flushBody();
       if (!section) {
         section = { title: 'Section 1', steps: [] };
@@ -137,12 +172,16 @@ export function parseMarkdownTemplate(text) {
         type = m[1].toLowerCase();
         heading = heading.slice(m[0].length);
       }
-      step = { type, title: heading.trim(), body: '', hints: [], checkpoint: null };
+      step = { type, title: heading.trim(), body: '', hints: [], solution: '', checkpoint: null };
       section.steps.push(step);
     } else if (/^>\s*hint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*hint:/i, '').trim();
       const [label, textPart] = splitOnce(rest, '::');
       step.hints.push({ label: (label || 'Hint').trim(), text: (textPart || '').trim() });
+    } else if (/^>\s*solution:/i.test(line) && step) {
+      // Begin a solution block; any text after "solution:" seeds the first line.
+      const inline = line.replace(/^>\s*solution:/i, '').trim();
+      solLines = inline ? [inline] : [];
     } else if (/^>\s*checkpoint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*checkpoint:/i, '').trim();
       const [prompt, answer] = splitOnce(rest, '::');
@@ -155,6 +194,7 @@ export function parseMarkdownTemplate(text) {
       bodyLines.push(line);
     }
   }
+  flushSolution();
   flushBody();
 
   if (!tpl.content.length) throw new Error('No sections found (use "# Section title").');
@@ -207,6 +247,7 @@ function normaliseTemplate(obj) {
           label: String(h.label || 'Hint'),
           text: String(h.text || ''),
         })),
+        solution: String(st.solution || ''),
         checkpoint:
           st.checkpoint && st.checkpoint.answer
             ? {
@@ -272,6 +313,13 @@ Set your IP address to \`{{ HOST_IP }}\` and gateway to \`{{ GATEWAY_IP }}\`.
 
 ## [computer] Confirm
 Record your assigned Host IP below to complete the lab.
+
+> hint: How do I read my IP? :: Run \`ip addr show eth0\` and copy the IPv4 address.
+
+> solution:
+> Your Host IP is built from your seat number:
+> - Base network: \`10.0.0.\`
+> - Host octet: \`100 + seat\` → **{{ HOST_IP }}**
 
 > checkpoint: Enter your Host IP address :: {{ HOST_IP }}
 `;

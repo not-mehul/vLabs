@@ -62,7 +62,7 @@ Participant registration (the default landing page) is in
 | **Resume + logout** — close the browser and return to the same seat/section; explicit Exit | persisted token (`participantSession`) + idempotent name rejoin |
 | **Dynamic templating** — inject seat/IP/port variables at render time | `server/src/lib/templating.js` |
 | **Structured cards** — Hands-On vs Workstation activities (subtle icon-tile indicator) | `client/src/components/StepCard.jsx` |
-| **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side; exhaust the hints to reveal the solution | `HintBox.jsx`, `Checkpoint.jsx` |
+| **Collapsible hints** (`<HintBox>`), **step-level solutions** (`<SolutionBox>`, revealed once every hint is opened) and **state checkpoints** — all validated / gated server-side | `HintBox.jsx`, `SolutionBox.jsx`, `Checkpoint.jsx` |
 | **Completion flow** — finish screen + graceful logout; participant shown as *finished* to the instructor | `Lab.jsx`; `finished_at` |
 | **Instructor analytics & lifecycle** — time remaining, copy code, section distribution, hints taken, total time, plus **delete** and **export** (JSON/CSV) of completed sessions | `SessionMonitor.jsx`, `Dashboard.jsx` |
 | **Template authoring** — Content/Settings-tabbed editor with a live per-seat preview; Settings holds Variables, JSON/Markdown import & export, and an **immutable change-history audit log** (append-only via DB triggers) that shows *what changed* per version and supports **revert** | `TemplateEditor.jsx`, `templateFormat.js`; `template_audit` table with `snapshot` |
@@ -243,12 +243,14 @@ done / current / locked sections.
   checkpoints cleared before the participant can advance to the next one. The
   server only ever delivers sections the participant has legitimately reached,
   and checkpoint answers are never sent to the browser.
-- **Hints & solutions.** Hints render Markdown (bullets, links that open in a
-  new tab) and each open is recorded server-side ("hints taken"). A checkpoint
-  can also carry a separate, distinctly-styled **solution** (Markdown) — shown in
-  its own amber "Solution" panel, visually distinct from the blue hints. The
-  reveal control only appears once *every* hint on the step has been opened, and
-  the solution text is fetched from the server only then.
+- **Hints & solutions.** Both are **step-level** and behave consistently across
+  every step — with or without a checkpoint. Hints render Markdown (bullets,
+  links that open in a new tab) and each open is recorded server-side ("hints
+  taken"). Any step may also carry a distinctly-styled **solution** (Markdown) —
+  shown in its own amber "Solution" panel, visually distinct from the blue hints.
+  The reveal control only appears once *every* hint on the step has been opened
+  (immediately available when a step has no hints), and the solution text is
+  fetched from the server only then — never shipped before it is revealed.
 - **Completion.** When all sections are complete the participant gets a **Finish
   lab** button leading to a completion screen; finishing marks them **finished**
   (shown on the instructor monitor) and gracefully logs them out. An **Exit**
@@ -287,8 +289,8 @@ imported from a file:
   sample** grabs a ready-to-edit example.
 - The Markdown convention (documented in `client/src/lib/templateFormat.js`)
   uses YAML-ish frontmatter for `title`/`description`/`variables`, `#` for
-  sections, `## [desk|computer]` for steps, and `> hint:` / `> checkpoint:`
-  lines. Round-trips are lossless.
+  sections, `## [desk|computer]` for steps, and `> hint:` / `> solution:` /
+  `> checkpoint:` blocks. Round-trips are lossless.
 
 ### Theming
 
@@ -372,7 +374,7 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | `POST` | `/api/participant/checkpoint` | Submit unlock string for `section_index`/`step_index` (validated server-side) |
 | `POST` | `/api/participant/progress` | Report active `section_index` (analytics + progress) |
 | `POST` | `/api/participant/hint` | Record a hint as taken (`section_index`/`step_index`/`hint_index`) |
-| `POST` | `/api/participant/solution` | Reveal a checkpoint's answer — only after every hint on that step is taken |
+| `POST` | `/api/participant/solution` | Reveal a step's authored Markdown solution — only after every hint on that step is opened |
 | `POST` | `/api/participant/finish` | Mark the participant finished (only once every section is complete) |
 | `POST` | `/api/participant/heartbeat` | Presence keep-alive |
 
@@ -445,7 +447,7 @@ vLabs/
     └── src/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin
-        ├── components/        # StepCard, HintBox, Checkpoint, Markdown,
+        ├── components/        # StepCard, HintBox, SolutionBox, Checkpoint, Markdown,
         │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
         ├── hooks/             # content protection, instructor API
         ├── context/           # AuthContext, ThemeContext (light/dark)

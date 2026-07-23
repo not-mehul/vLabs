@@ -3,7 +3,7 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
-import { renderManual, countSteps } from '../lib/templating.js';
+import { renderManual, countSteps, injectVariables } from '../lib/templating.js';
 import { nowIso } from '../lib/time.js';
 
 const router = Router();
@@ -223,6 +223,18 @@ router.post(
     }
 
     const { context, sections } = renderManual(content, variables, seatId);
+    // Instructor preview shows authored solutions inline (unlocked) so the
+    // author can see the rendered walkthrough — this path is instructor-only,
+    // so it never leaks to a participant.
+    sections.forEach((section) => {
+      section.steps.forEach((step) => {
+        const raw = content[section.index]?.steps?.[step.index];
+        if (raw?.solution) {
+          step.has_solution = true;
+          step.solution = injectVariables(String(raw.solution), context);
+        }
+      });
+    });
     res.json({ seat_id: seatId, context, sections });
   }),
 );

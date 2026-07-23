@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Markdown from './Markdown.jsx';
 import HintBox from './HintBox.jsx';
+import SolutionBox from './SolutionBox.jsx';
 import Checkpoint from './Checkpoint.jsx';
 import Icon from './Icon.jsx';
 
@@ -13,8 +14,8 @@ const TYPE_META = {
 /**
  * Structured content card. The activity type (Hands-On vs Workstation) is shown
  * subtly via a small tinted icon tile + label. Renders collapsible hints (whose
- * opens are recorded) and an optional checkpoint that can reveal its solution
- * once every hint on the step has been taken.
+ * opens are recorded), an optional step-level solution that unlocks once every
+ * hint is opened, and an optional checkpoint that gates progress.
  */
 export default function StepCard({ step, total, sectionIndex, onCheckpoint, onHintOpen, onRevealSolution }) {
   const meta = TYPE_META[step.type] || TYPE_META.desk;
@@ -22,9 +23,10 @@ export default function StepCard({ step, total, sectionIndex, onCheckpoint, onHi
 
   // Track hints opened locally, unioned with the server's "taken" flags, so the
   // reveal-solution affordance appears the instant the last hint is opened.
+  // With no hints the solution is available immediately (vacuously "all taken").
   const [openedLocal, setOpenedLocal] = useState(() => new Set());
   const takenCount = hints.filter((h, i) => h.taken || openedLocal.has(i)).length;
-  const allHintsTaken = hints.length > 0 && takenCount === hints.length;
+  const allHintsTaken = takenCount === hints.length;
 
   return (
     <article className={`card card--${step.type}`} id={`step-${step.index}`}>
@@ -62,16 +64,19 @@ export default function StepCard({ step, total, sectionIndex, onCheckpoint, onHi
         </div>
       )}
 
+      {step.has_solution && (
+        <SolutionBox
+          solution={step.solution}
+          available={allHintsTaken}
+          onReveal={() => onRevealSolution(sectionIndex, step.index)}
+        />
+      )}
+
       {step.checkpoint && (
         <Checkpoint
           prompt={step.checkpoint.prompt}
           placeholder={step.checkpoint.placeholder}
           completed={step.checkpoint.completed}
-          solution={step.checkpoint.solution}
-          solutionAvailable={
-            allHintsTaken && step.checkpoint.has_solution && !step.checkpoint.completed
-          }
-          onReveal={() => onRevealSolution(sectionIndex, step.index)}
           onSubmit={(answer) => onCheckpoint(sectionIndex, step.index, answer)}
         />
       )}

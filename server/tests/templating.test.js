@@ -13,6 +13,7 @@ import {
   checkpointKey,
   countSteps,
 } from '../src/lib/templating.js';
+import { validateTemplatePayload } from '../src/lib/validateTemplate.js';
 
 test('evaluateExpression handles arithmetic precedence', () => {
   assert.equal(evaluateExpression('100 + 2 * 3', {}), 106);
@@ -90,6 +91,53 @@ test('renderStep strips checkpoint answers but keeps the prompt', () => {
   assert.equal(rendered.checkpoint.prompt, 'Enter the MAC');
   assert.equal(rendered.checkpoint.answer, undefined); // never leaked
   assert.equal(checkpointAnswer(step, ctx), 'de:ad:be:ef:00:3');
+});
+
+test('renderStep never leaks a step-level solution', () => {
+  const ctx = resolveVariables([], 1);
+  const step = {
+    type: 'desk',
+    title: 'Solve it',
+    body: 'Do the thing',
+    solution: 'The answer is 42',
+  };
+  const rendered = renderStep(step, ctx, 0);
+  assert.equal(rendered.solution, undefined); // gated behind reveal, never shipped
+});
+
+test('validateTemplatePayload keeps solution at step level, not on the checkpoint', () => {
+  const clean = validateTemplatePayload({
+    title: 'Lab',
+    content: [
+      {
+        title: 'Section 1',
+        steps: [
+          {
+            type: 'computer',
+            title: 'Step with both',
+            body: 'body text',
+            solution: '- bullet one\n- bullet two',
+            checkpoint: { prompt: 'Enter it', answer: '{{ SEAT_ID }}' },
+          },
+          {
+            type: 'desk',
+            title: 'Step, solution only, no hints',
+            body: 'body',
+            solution: 'Just the answer',
+          },
+        ],
+      },
+    ],
+  });
+  const [s0, s1] = clean.content[0].steps;
+  // Solution lives on the step, and the checkpoint carries only the gate fields.
+  assert.equal(s0.solution, '- bullet one\n- bullet two');
+  assert.ok(s0.checkpoint);
+  assert.equal(s0.checkpoint.solution, undefined);
+  assert.equal(s0.checkpoint.answer, '{{ SEAT_ID }}');
+  // A step may carry a solution with no checkpoint at all.
+  assert.equal(s1.solution, 'Just the answer');
+  assert.equal(s1.checkpoint, undefined);
 });
 
 test('renderManual renders sections and steps with resolved context', () => {

@@ -88,17 +88,17 @@ const SAMPLE_CONTENT = [
             text: 'Run `ip addr show eth0` (Linux) or `ipconfig` (Windows) and copy the IPv4 address.',
           },
         ],
+        // Step-level markdown solution, revealed only after every hint is opened.
+        solution:
+          'Your Host IP is built from your seat number:\n\n' +
+          '- Base network: `10.0.0.`\n' +
+          '- Host octet: `100 + seat` → **{{ HOST_IP }}**\n\n' +
+          'Read it live with `ip addr show eth0`.',
         checkpoint: {
           prompt: 'Enter your assigned Host IP address to complete this section',
           placeholder: 'e.g. 10.0.0.1XX',
           // Answer is computed per seat and never sent to the browser.
           answer: '{{ HOST_IP }}',
-          // Markdown solution, revealed only after every hint is opened.
-          solution:
-            'Your Host IP is built from your seat number:\n\n' +
-            '- Base network: `10.0.0.`\n' +
-            '- Host octet: `100 + seat` → **{{ HOST_IP }}**\n\n' +
-            'Read it live with `ip addr show eth0`.',
         },
       },
     ],

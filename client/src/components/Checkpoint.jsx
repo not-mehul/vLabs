@@ -1,30 +1,19 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Icon from './Icon.jsx';
-import Markdown from './Markdown.jsx';
 
 /**
- * State checkpoint. The participant must enter a validation string to unlock the
- * next section. Validation happens server-side — the expected answer is never in
- * the client bundle or network payload.
+ * State checkpoint. The participant enters a validation string to clear the
+ * checkpoint and unlock the next section. Validation happens server-side — the
+ * expected answer is never in the client bundle or network payload.
  *
- * Once every hint on the step has been taken, `solutionAvailable` turns on and a
- * "Reveal solution" control lets the participant fetch the answer (server-gated
- * on all hints being taken). The revealed answer pre-fills the input.
+ * Hints and the (optional) solution are rendered by StepCard above the
+ * checkpoint, so the checkpoint itself is purely the answer gate.
  */
-export default function Checkpoint({
-  prompt,
-  placeholder,
-  completed,
-  solution: initialSolution,
-  solutionAvailable,
-  onReveal,
-  onSubmit,
-}) {
+export default function Checkpoint({ prompt, placeholder, completed, onSubmit }) {
+  const inputId = useId();
   const [value, setValue] = useState('');
   const [status, setStatus] = useState('idle'); // idle | checking | wrong
   const [error, setError] = useState('');
-  const [solution, setSolution] = useState(initialSolution || '');
-  const [revealing, setRevealing] = useState(false);
 
   if (completed) {
     return (
@@ -53,29 +42,16 @@ export default function Checkpoint({
     }
   }
 
-  async function handleReveal() {
-    if (revealing) return;
-    setRevealing(true);
-    try {
-      const sol = await onReveal();
-      if (sol) setSolution(sol);
-    } catch (err) {
-      setError(err.message || 'Could not reveal the solution.');
-    } finally {
-      setRevealing(false);
-    }
-  }
-
   return (
     <form className="checkpoint" onSubmit={handleSubmit}>
       <div className="checkpoint__lock"><Icon name="lock" size={18} /></div>
       <div className="checkpoint__main">
-        <label className="checkpoint__prompt" htmlFor="checkpoint-input">
+        <label className="checkpoint__prompt" htmlFor={inputId}>
           {prompt}
         </label>
         <div className="checkpoint__row">
           <input
-            id="checkpoint-input"
+            id={inputId}
             className={`checkpoint__input ${status === 'wrong' ? 'is-error' : ''}`}
             type="text"
             autoComplete="off"
@@ -93,23 +69,6 @@ export default function Checkpoint({
           </button>
         </div>
         {error && <p className="checkpoint__error">{error}</p>}
-
-        {solution ? (
-          <div className="solution">
-            <div className="solution__head">
-              <Icon name="key" size={15} /> Solution
-            </div>
-            <div className="solution__body">
-              <Markdown>{solution}</Markdown>
-            </div>
-          </div>
-        ) : (
-          solutionAvailable && (
-            <button type="button" className="checkpoint__reveal" onClick={handleReveal} disabled={revealing}>
-              <Icon name="key" size={14} /> {revealing ? 'Revealing…' : 'Stuck? Reveal the solution'}
-            </button>
-          )
-        )}
       </div>
     </form>
   );

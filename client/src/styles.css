@@ -379,9 +379,10 @@ select.field__input { appearance: none; cursor: pointer; }
 .checkpoint--done { align-items: center; background: var(--success-soft); border-color: var(--success); color: var(--text-2); }
 .checkpoint__badge { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
 .checkpoint--done { padding: 0.85rem 1.1rem; }
-.checkpoint__reveal { display: inline-flex; align-items: center; gap: 0.35rem; align-self: flex-start; margin-top: 0.7rem; background: none; border: none; padding: 0; color: var(--warn); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-.checkpoint__reveal:hover { text-decoration: underline; }
-/* Solution: visually distinct from hints (amber "answer" treatment). */
+/* Step-level solution: sits below the hints, visually distinct (amber
+   "answer" treatment) and unlocked only once every hint is opened. */
+.solution-lock { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.85rem; color: var(--text-3); font-size: 0.85rem; }
+.solution-reveal { margin-top: 0.85rem; }
 .solution { margin-top: 0.85rem; border: 1px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); overflow: hidden; }
 .solution__head { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.8rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--warn); border-bottom: 1px solid var(--warn); }
 .solution__body { padding: 0.6rem 0.8rem; color: var(--text); }
@@ -479,6 +480,8 @@ select.field__input { appearance: none; cursor: pointer; }
 .hint-editor { margin: 0.5rem 0; padding: 0.6rem; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
 .hint-editor__row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.4rem; }
 .hint-editor__row .field__input:first-child { max-width: 240px; }
+.solution-editor { margin: 0.5rem 0; }
+.solution-editor .field__label { display: inline-flex; align-items: center; gap: 0.35rem; }
 
 .checkpoint-editor { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
 .checkpoint-editor__fields { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
