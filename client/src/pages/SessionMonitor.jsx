@@ -73,7 +73,7 @@ function CopyCode({ code }) {
     <button className="roomcode roomcode--xl roomcode--copy" onClick={copy} title="Copy room code">
       <span>{code}</span>
       <span className="roomcode__copy">
-        <Icon name={copied ? 'check' : 'copy'} size={15} /> {copied ? 'Copied' : 'Copy'}
+        <Icon name={copied ? 'check' : 'copy'} size={14} /> {copied ? 'Copied' : 'Copy'}
       </span>
     </button>
   );
@@ -164,7 +164,7 @@ export default function SessionMonitor() {
   return (
     <PortalShell>
       <button className="linkback" onClick={() => navigate('/instructor')}>
-        ← Sessions
+        <Icon name="chevronLeft" size={15} /> Sessions
       </button>
 
       <div className="monitor-head">
@@ -212,14 +212,14 @@ export default function SessionMonitor() {
             </>
           )}
           <button className="btn btn--ghost btn--sm" onClick={() => exportData('csv')} disabled={busy}>
-            <Icon name="download" size={15} /> CSV
+            <Icon name="download" size={16} /> CSV
           </button>
           <button className="btn btn--ghost btn--sm" onClick={() => exportData('json')} disabled={busy}>
-            <Icon name="download" size={15} /> JSON
+            <Icon name="download" size={16} /> JSON
           </button>
           {!active && (
             <button className="btn btn--danger-ghost btn--sm" onClick={remove} disabled={busy}>
-              <Icon name="trash" size={15} /> Delete
+              <Icon name="trash" size={16} /> Delete
             </button>
           )}
         </div>
@@ -241,7 +241,7 @@ export default function SessionMonitor() {
                   {s.title}
                   <span className="dist__meta">{s.step_count} steps</span>
                   {s.has_checkpoint && (
-                    <span className="dist__lock" title="Has a checkpoint"><Icon name="lock" size={13} /></span>
+                    <span className="dist__lock" title="Has a checkpoint"><Icon name="lock" size={14} /></span>
                   )}
                 </span>
                 <div className="dist__bar">
@@ -296,9 +296,9 @@ export default function SessionMonitor() {
                   <td className="muted">{fmtDuration(p.total_seconds)}</td>
                   <td>
                     {p.finished ? (
-                      <span className="pill pill--active"><Icon name="check" size={12} /> Finished</span>
+                      <span className="pill pill--active"><Icon name="check" size={14} /> Finished</span>
                     ) : p.seconds_since_seen < 90 ? (
-                      <span className="status-live">● active</span>
+                      <span className="status-live"><span className="dot dot--live" /> active</span>
                     ) : (
                       <span className="muted">{fmtDuration(p.seconds_since_seen)} ago</span>
                     )}

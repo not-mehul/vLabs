@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 
@@ -67,6 +68,7 @@ export default function Templates() {
                 <th>Steps</th>
                 <th>Version</th>
                 <th>Updated</th>
+                <th>Last edited by</th>
                 <th></th>
               </tr>
             </thead>
@@ -80,7 +82,8 @@ export default function Templates() {
                   <td>{t.section_count}</td>
                   <td>{t.step_count}</td>
                   <td>v{t.version}</td>
-                  <td className="muted">{new Date(t.updated_at + 'Z').toLocaleString()}</td>
+                  <td className="muted">{formatDateTime(t.updated_at)}</td>
+                  <td className="muted">{t.updated_by || '—'}</td>
                   <td className="table__actions">
                     <button
                       className="btn btn--sm btn--ghost"

@@ -93,6 +93,7 @@ export const api = {
 
   listTemplates: (token) => request('/templates', { token }),
   getTemplate: (token, id) => request(`/templates/${id}`, { token }),
+  getTemplateAudit: (token, id) => request(`/templates/${id}/audit`, { token }),
   createTemplate: (token, payload) =>
     request('/templates', { method: 'POST', body: payload, token }),
   updateTemplate: (token, id, payload) =>

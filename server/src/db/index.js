@@ -40,6 +40,30 @@ CREATE TABLE IF NOT EXISTS templates (
   updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Append-only audit trail of template changes. Snapshots the template title,
+-- the acting instructor and the action so history survives even if the template
+-- or instructor is later deleted (hence no cascading FKs). Immutability is
+-- enforced by triggers below — the log can only be INSERTed into.
+CREATE TABLE IF NOT EXISTS template_audit (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id         INTEGER,
+  template_title      TEXT NOT NULL,
+  action              TEXT NOT NULL,           -- created | updated | deleted
+  version             INTEGER,
+  instructor_id       INTEGER,
+  instructor_username TEXT NOT NULL,
+  at                  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_template_audit_template ON template_audit(template_id);
+
+-- Enforce append-only: any UPDATE or DELETE on the audit log is rejected.
+CREATE TRIGGER IF NOT EXISTS template_audit_no_update
+  BEFORE UPDATE ON template_audit
+  BEGIN SELECT RAISE(ABORT, 'template_audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS template_audit_no_delete
+  BEFORE DELETE ON template_audit
+  BEGIN SELECT RAISE(ABORT, 'template_audit is append-only'); END;
+
 -- Live classes. Access is gated by a short-lived 6-digit room_code and an
 -- expiry timestamp. Terminating a session flips is_active to 0, which the auth
 -- layer treats as immediate invalidation of every participant token.

@@ -164,6 +164,17 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .btn--block { width: 100%; }
 .btn--sm { padding: 0.42rem 0.75rem; font-size: 0.85rem; }
 .btn--xs { padding: 0.25rem 0.55rem; font-size: 0.75rem; }
+/* Square icon-only buttons keep a consistent footprint across the app. */
+.btn--icon { padding: 0.5rem; line-height: 0; }
+.btn--icon.btn--sm { padding: 0.4rem; }
+.btn--icon.btn--xs { padding: 0.3rem; }
+
+/* Inline text links that carry a trailing/leading chevron. */
+.inline-link { display: inline-flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
+
+/* Consistent keyboard focus ring across all interactive elements. */
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+.btn:focus-visible, .field__input:focus-visible, .theme-toggle:focus-visible { outline-offset: 2px; }
 
 /* ---------------------------- Theme toggle ------------------------------ */
 .theme-toggle {
@@ -250,7 +261,7 @@ select.field__input { appearance: none; cursor: pointer; }
 .page-head h1 { font-size: 1.7rem; }
 .page-head--row { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
 .page-head__actions { display: flex; gap: 0.6rem; }
-.linkback { background: none; border: none; color: var(--text-2); cursor: pointer; font: inherit; padding: 0 0 0.5rem; }
+.linkback { display: inline-flex; align-items: center; gap: 0.25rem; background: none; border: none; color: var(--text-2); cursor: pointer; font: inherit; padding: 0 0 0.5rem; }
 .linkback:hover { color: var(--brand); }
 
 /* -------------------------------- Panels -------------------------------- */
@@ -268,7 +279,19 @@ select.field__input { appearance: none; cursor: pointer; }
 .row--slow { background: var(--warn-soft); }
 .row--stuck { background: var(--danger-soft); }
 .row--done { background: var(--success-soft); }
-.status-live { color: var(--success); font-weight: 600; font-size: 0.85rem; }
+.status-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--success); font-weight: 600; font-size: 0.85rem; }
+.dot--live { background: var(--success); }
+
+/* Template change-history (audit) */
+.audit__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.audit__item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.audit__item:last-child { border-bottom: none; }
+.audit__action { text-transform: capitalize; font-weight: 600; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
+.audit__action--created { background: var(--success-soft); color: var(--success); }
+.audit__action--updated { background: var(--brand-soft); color: var(--brand); }
+.audit__action--deleted { background: var(--danger-soft); color: var(--danger); }
+.audit__who { font-weight: 600; }
+.audit__when { margin-left: auto; font-size: 0.82rem; }
 
 /* -------------------------------- Pills --------------------------------- */
 .pill { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: capitalize; }

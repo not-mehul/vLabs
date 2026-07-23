@@ -285,22 +285,22 @@ export default function Lab() {
 
             <div className="section-nav">
               <button className="btn btn--ghost" disabled={!canPrev} onClick={() => goTo(view - 1)}>
-                <Icon name="chevronLeft" size={17} /> Previous
+                <Icon name="chevronLeft" size={16} /> Previous
               </button>
 
               {blockedByCheckpoint && (
                 <span className="section-nav__hint">
-                  <Icon name="lock" size={15} /> Complete the checkpoint to continue
+                  <Icon name="lock" size={14} /> Complete the checkpoint to continue
                 </span>
               )}
 
               {isLast && allDone ? (
                 <button className="btn btn--primary" onClick={handleFinish}>
-                  <Icon name="check-circle" size={17} /> Finish lab
+                  <Icon name="check-circle" size={16} /> Finish lab
                 </button>
               ) : (
                 <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
-                  Next <Icon name="chevronRight" size={17} />
+                  Next <Icon name="chevronRight" size={16} />
                 </button>
               )}
             </div>

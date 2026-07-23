@@ -53,7 +53,9 @@ function CreateSession({ templates, onCreated }) {
       {templates.length === 0 ? (
         <p className="muted">
           Create a template first, then launch a session from it.{' '}
-          <Link to="/instructor/templates">Go to templates →</Link>
+          <Link to="/instructor/templates" className="inline-link">
+            Go to templates <Icon name="chevronRight" size={13} />
+          </Link>
         </p>
       ) : (
         <div className="create-session__row">
@@ -172,8 +174,8 @@ export default function Dashboard() {
             <strong>Session live.</strong> Share this room code with participants:
           </div>
           <span className="roomcode">{justCreated.room_code}</span>
-          <Link className="btn btn--sm" to={`/instructor/sessions/${justCreated.id}`}>
-            Open monitor →
+          <Link className="btn btn--sm btn--primary" to={`/instructor/sessions/${justCreated.id}`}>
+            Open monitor <Icon name="chevronRight" size={15} />
           </Link>
         </div>
       )}

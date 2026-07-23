@@ -141,16 +141,25 @@ export function ensureSeed() {
     .prepare('SELECT COUNT(*) AS n FROM templates')
     .get().n;
   if (templateCount === 0) {
+    const info = db
+      .prepare(
+        `INSERT INTO templates (title, description, content, variables, version, created_by)
+         VALUES (?, ?, ?, ?, 1, ?)`,
+      )
+      .run(
+        'Network Bench Setup (Sample)',
+        'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
+        JSON.stringify(SAMPLE_CONTENT),
+        JSON.stringify(SAMPLE_VARIABLES),
+        instructorId,
+      );
+    const username = db
+      .prepare('SELECT username FROM instructors WHERE id = ?')
+      .get(instructorId).username;
     db.prepare(
-      `INSERT INTO templates (title, description, content, variables, version, created_by)
-       VALUES (?, ?, ?, ?, 1, ?)`,
-    ).run(
-      'Network Bench Setup (Sample)',
-      'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
-      JSON.stringify(SAMPLE_CONTENT),
-      JSON.stringify(SAMPLE_VARIABLES),
-      instructorId,
-    );
+      `INSERT INTO template_audit (template_id, template_title, action, version, instructor_id, instructor_username)
+       VALUES (?, ?, 'created', 1, ?, ?)`,
+    ).run(info.lastInsertRowid, 'Network Bench Setup (Sample)', instructorId, username);
     console.log('  Seeded sample template "Network Bench Setup".');
   }
 }

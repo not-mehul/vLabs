@@ -24,12 +24,22 @@ function rowToTemplate(row) {
   };
 }
 
-/** GET /api/templates — list (summaries). */
+/** Record an immutable audit entry for a template change. */
+function recordAudit(instructor, { templateId, title, action, version }) {
+  db.prepare(
+    `INSERT INTO template_audit (template_id, template_title, action, version, instructor_id, instructor_username)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(templateId ?? null, title, action, version ?? null, instructor.id, instructor.username);
+}
+
+/** GET /api/templates — list (summaries) with the most recent editor. */
 router.get('/', (req, res) => {
   const rows = db
     .prepare(
-      `SELECT id, title, description, version, content, updated_at
-         FROM templates ORDER BY updated_at DESC`,
+      `SELECT t.id, t.title, t.description, t.version, t.content, t.updated_at,
+              (SELECT instructor_username FROM template_audit a
+                WHERE a.template_id = t.id ORDER BY a.id DESC LIMIT 1) AS updated_by
+         FROM templates t ORDER BY t.updated_at DESC`,
     )
     .all();
   res.json(
@@ -43,9 +53,21 @@ router.get('/', (req, res) => {
         section_count: content.length,
         step_count: countSteps(content),
         updated_at: r.updated_at,
+        updated_by: r.updated_by,
       };
     }),
   );
+});
+
+/** GET /api/templates/:id/audit — read-only change history. */
+router.get('/:id/audit', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT id, action, version, instructor_username, at
+         FROM template_audit WHERE template_id = ? ORDER BY id DESC`,
+    )
+    .all(req.params.id);
+  res.json(rows);
 });
 
 /** GET /api/templates/:id — full template. */
@@ -75,6 +97,12 @@ router.post(
     const row = db
       .prepare('SELECT * FROM templates WHERE id = ?')
       .get(info.lastInsertRowid);
+    recordAudit(req.instructor, {
+      templateId: row.id,
+      title: row.title,
+      action: 'created',
+      version: row.version,
+    });
     res.status(201).json(rowToTemplate(row));
   }),
 );
@@ -105,12 +133,20 @@ router.put(
     const row = db
       .prepare('SELECT * FROM templates WHERE id = ?')
       .get(req.params.id);
+    recordAudit(req.instructor, {
+      templateId: row.id,
+      title: row.title,
+      action: 'updated',
+      version: row.version,
+    });
     res.json(rowToTemplate(row));
   }),
 );
 
 /** DELETE /api/templates/:id. */
 router.delete('/:id', (req, res) => {
+  const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(req.params.id);
+  if (!existing) throw httpError(404, 'Template not found');
   const active = db
     .prepare(
       'SELECT COUNT(*) AS n FROM sessions WHERE template_id = ? AND is_active = 1',
@@ -119,8 +155,14 @@ router.delete('/:id', (req, res) => {
   if (active.n > 0) {
     throw httpError(409, 'Cannot delete a template with active sessions');
   }
-  const info = db.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id);
-  if (info.changes === 0) throw httpError(404, 'Template not found');
+  db.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id);
+  // Audit survives the deletion (no cascading FK on the audit table).
+  recordAudit(req.instructor, {
+    templateId: existing.id,
+    title: existing.title,
+    action: 'deleted',
+    version: existing.version,
+  });
   res.status(204).end();
 });
 

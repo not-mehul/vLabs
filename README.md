@@ -65,7 +65,7 @@ Participant registration (the default landing page) is in
 | **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side; exhaust the hints to reveal the solution | `HintBox.jsx`, `Checkpoint.jsx` |
 | **Completion flow** — finish screen + graceful logout; participant shown as *finished* to the instructor | `Lab.jsx`; `finished_at` |
 | **Instructor analytics & lifecycle** — time remaining, copy code, section distribution, hints taken, total time, plus **delete** and **export** (JSON/CSV) of completed sessions | `SessionMonitor.jsx`, `Dashboard.jsx` |
-| **Template authoring** — in-page section editor, live per-seat preview, and JSON/Markdown import & export | `TemplateEditor.jsx`, `lib/templateFormat.js` |
+| **Template authoring** — in-page section editor, live per-seat preview, JSON/Markdown import & export, and an **immutable change-history audit log** (who changed what, enforced append-only by DB triggers) | `TemplateEditor.jsx`, `templateFormat.js`; `template_audit` table |
 | **Light & dark themes** — professional slate + indigo design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
 | **IP protection** — no file downloads, in-memory content, progressive per-section delivery | no download endpoints; `no-store` headers |
 | **Session gating** — time-limited PIN, instant revocation | `server/src/middleware/auth.js` |
@@ -345,6 +345,7 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | --- | --- | --- |
 | `GET` | `/api/templates` | List templates |
 | `GET` | `/api/templates/:id` | Get one |
+| `GET` | `/api/templates/:id/audit` | Read-only change history (who/what/when) |
 | `POST` | `/api/templates` | Create |
 | `PUT` | `/api/templates/:id` | Update (bumps version) |
 | `DELETE` | `/api/templates/:id` | Delete (blocked if active sessions) |

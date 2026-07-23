@@ -70,7 +70,7 @@ export default function Checkpoint({
 
   return (
     <form className="checkpoint" onSubmit={handleSubmit}>
-      <div className="checkpoint__lock"><Icon name="lock" size={20} /></div>
+      <div className="checkpoint__lock"><Icon name="lock" size={18} /></div>
       <div className="checkpoint__main">
         <label className="checkpoint__prompt" htmlFor="checkpoint-input">
           {prompt}

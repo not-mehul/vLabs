@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import StepCard from '../components/StepCard.jsx';
@@ -72,11 +73,11 @@ function VariableEditor({ variables, onChange }) {
           />
           <button
             type="button"
-            className="btn btn--sm btn--danger-ghost"
+            className="btn btn--sm btn--icon btn--danger-ghost"
             onClick={() => onChange(variables.filter((_, idx) => idx !== i))}
             aria-label="Remove variable"
           >
-            ✕
+            <Icon name="close" size={15} />
           </button>
         </div>
       ))}
@@ -117,10 +118,11 @@ function HintEditor({ hints, onChange }) {
           />
           <button
             type="button"
-            className="btn btn--xs btn--danger-ghost"
+            className="btn btn--xs btn--icon btn--danger-ghost"
             onClick={() => onChange(hints.filter((_, idx) => idx !== i))}
+            aria-label="Remove hint"
           >
-            ✕
+            <Icon name="close" size={14} />
           </button>
         </div>
       ))}
@@ -154,9 +156,9 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
           </button>
         </div>
         <div className="step-editor__move">
-          <button type="button" className="btn btn--xs btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move up">↑</button>
-          <button type="button" className="btn btn--xs btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move down">↓</button>
-          <button type="button" className="btn btn--xs btn--danger-ghost" onClick={() => onRemove(index)}>Delete</button>
+          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move step up"><Icon name="arrowUp" size={14} /></button>
+          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move step down"><Icon name="arrowDown" size={14} /></button>
+          <button type="button" className="btn btn--xs btn--danger-ghost" onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete</button>
         </div>
       </div>
 
@@ -226,9 +228,9 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
           onChange={(e) => onChange({ ...section, title: e.target.value })}
         />
         <div className="step-editor__move">
-          <button type="button" className="btn btn--xs btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move section up">↑</button>
-          <button type="button" className="btn btn--xs btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move section down">↓</button>
-          <button type="button" className="btn btn--xs btn--danger-ghost" disabled={total === 1} onClick={() => onRemove(index)}>Delete section</button>
+          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move section up"><Icon name="arrowUp" size={14} /></button>
+          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move section down"><Icon name="arrowDown" size={14} /></button>
+          <button type="button" className="btn btn--xs btn--danger-ghost" disabled={total === 1} onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete section</button>
         </div>
       </div>
 
@@ -346,9 +348,9 @@ function ImportExport({ tpl, onImport }) {
   return (
     <div className="io-bar">
       <input ref={fileRef} type="file" accept=".md,.markdown,.json,text/markdown,application/json" hidden onChange={handleFile} />
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}><Icon name="upload" size={15} /> Import file</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={15} /> Export .md</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={15} /> Export .json</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}><Icon name="upload" size={16} /> Import file</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={16} /> Export .md</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={16} /> Export .json</button>
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile('sample-lab.md', SAMPLE_MARKDOWN, 'text/markdown')}>Download sample</button>
       {msg && <span className="io-bar__msg">{msg}</span>}
     </div>
@@ -368,6 +370,14 @@ export default function TemplateEditor() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [audit, setAudit] = useState([]);
+
+  const loadAudit = useCallback(() => {
+    if (isNew) return;
+    call((tok) => api.getTemplateAudit(tok, id))
+      .then(setAudit)
+      .catch(() => {});
+  }, [call, id, isNew]);
 
   useEffect(() => {
     if (isNew) return;
@@ -381,7 +391,8 @@ export default function TemplateEditor() {
         setLoading(false);
       }
     })();
-  }, [id, isNew, call]);
+    loadAudit();
+  }, [id, isNew, call, loadAudit]);
 
   const patch = (p) => setTpl((prev) => ({ ...prev, ...p }));
 
@@ -412,6 +423,7 @@ export default function TemplateEditor() {
         : await call((t) => api.updateTemplate(t, id, payload));
       navigate(`/instructor/templates/${saved.id}`, { replace: true });
       setTpl(coerce(saved));
+      call((t) => api.getTemplateAudit(t, saved.id)).then(setAudit).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -426,7 +438,7 @@ export default function TemplateEditor() {
     <PortalShell>
       <div className="page-head page-head--row">
         <div>
-          <button className="linkback" onClick={() => navigate('/instructor/templates')}>← Templates</button>
+          <button className="linkback" onClick={() => navigate('/instructor/templates')}><Icon name="chevronLeft" size={15} /> Templates</button>
           <h1>{isNew ? 'New template' : 'Edit template'}</h1>
         </div>
         <div className="page-head__actions">
@@ -480,6 +492,25 @@ export default function TemplateEditor() {
           </div>
         )}
       </div>
+
+      {!isNew && audit.length > 0 && (
+        <section className="editor-section audit">
+          <div className="editor-section__head">
+            <h3>Change history</h3>
+            <span className="muted small">Read-only audit log</span>
+          </div>
+          <ul className="audit__list">
+            {audit.map((a) => (
+              <li className="audit__item" key={a.id}>
+                <span className={`audit__action audit__action--${a.action}`}>{a.action}</span>
+                <span className="audit__who">{a.instructor_username}</span>
+                {a.version != null && <span className="audit__ver muted">v{a.version}</span>}
+                <span className="audit__when muted">{formatDateTime(a.at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </PortalShell>
   );
 }

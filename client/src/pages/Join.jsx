@@ -138,8 +138,8 @@ export default function Join() {
         </form>
 
         <div className="auth-card__alt">
-          <Link to="/instructor/login" className="auth-card__alt-link">
-            Instructor sign in →
+          <Link to="/instructor/login" className="auth-card__alt-link inline-link">
+            Instructor sign in <Icon name="chevronRight" size={14} />
           </Link>
         </div>
       </div>
