@@ -40,10 +40,13 @@ export default function Lab() {
   const [dir, setDir] = useState('next'); // animation direction
   const [finishedLocal, setFinishedLocal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  // Live expiry / finished flag refreshed by the lightweight status poll, so
+  // the countdown reflects an instructor "+30" without re-pulling the manual.
+  const [liveExpiry, setLiveExpiry] = useState(null);
+  const [remoteFinished, setRemoteFinished] = useState(false);
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
-  // Countdown uses the live expiry from /content (reflects instructor "+30").
-  const remaining = useCountdown(data?.expires_at || session?.expires_at);
+  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at);
 
   useEffect(() => {
     if (!token) navigate('/', { replace: true });
@@ -54,6 +57,7 @@ export default function Lab() {
     try {
       const res = await api.content(token);
       setData(res);
+      setLiveExpiry(res.expires_at);
       setError('');
       // Keep the persisted session's expiry fresh so resume shows the right time.
       participantSession.set({
@@ -77,12 +81,29 @@ export default function Lab() {
     }
   }, [token, seatNumber, name, session]);
 
+  // Lightweight liveness poll: refreshes the countdown + finished flag and
+  // detects session-end without re-fetching the whole manual every tick.
+  const pollStatus = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await api.status(token);
+      setLiveExpiry(res.expires_at);
+      if (res.finished) setRemoteFinished(true);
+      setError('');
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+        participantSession.clear();
+        setEnded({ reason: err.message });
+      }
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) return undefined;
-    load();
-    const id = setInterval(load, 15000);
+    load(); // full manual once on mount…
+    const id = setInterval(pollStatus, 15000); // …then just poll liveness
     return () => clearInterval(id);
-  }, [token, load]);
+  }, [token, load, pollStatus]);
 
   // Report the section being viewed (drives analytics + progress high-water
   // mark), then refresh so the progress bar / Finish button update promptly.
@@ -172,7 +193,7 @@ export default function Lab() {
   const blockedByCheckpoint = section && !section.cleared && view >= unlocked;
   const isLast = view === total - 1;
   const allDone = completed >= total && total > 0;
-  const finished = finishedLocal || data?.finished;
+  const finished = finishedLocal || data?.finished || remoteFinished;
 
   // Completion screen: shown once the lab is finished (unless reviewing).
   if (finished && !reviewing) {

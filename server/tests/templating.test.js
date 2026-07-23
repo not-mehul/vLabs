@@ -140,6 +140,31 @@ test('validateTemplatePayload keeps solution at step level, not on the checkpoin
   assert.equal(s1.checkpoint, undefined);
 });
 
+test('validateTemplatePayload rejects structures over the safety caps', () => {
+  const steps = Array.from({ length: 101 }, (_, i) => ({
+    type: 'desk',
+    title: `s${i}`,
+    body: 'x',
+  }));
+  assert.throws(
+    () =>
+      validateTemplatePayload({
+        title: 'Huge',
+        content: [{ title: 'Section 1', steps }],
+      }),
+    /too many steps/i,
+  );
+
+  const sections = Array.from({ length: 101 }, (_, i) => ({
+    title: `Section ${i}`,
+    steps: [{ type: 'desk', title: 's', body: 'x' }],
+  }));
+  assert.throws(
+    () => validateTemplatePayload({ title: 'Huge', content: sections }),
+    /too many sections/i,
+  );
+});
+
 test('renderManual renders sections and steps with resolved context', () => {
   const content = [
     {

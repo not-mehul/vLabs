@@ -152,7 +152,7 @@ export const api = {
       token,
     }),
   finish: (token) => request('/participant/finish', { method: 'POST', token }),
-  heartbeat: (token) => request('/participant/heartbeat', { method: 'POST', token }),
+  status: (token) => request('/participant/status', { token }),
 };
 
 /**

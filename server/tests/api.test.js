@@ -193,6 +193,17 @@ test('checkpoint validates server-side and unlocks the next section', async () =
   assert.equal(after.data.sections.length, 3);
 });
 
+test('status poll reports liveness without shipping the manual', async () => {
+  const { status, data } = await call('/api/participant/status', {
+    token: participantToken,
+  });
+  assert.equal(status, 200);
+  assert.equal(data.session_active, true);
+  assert.ok(data.expires_at, 'exposes expiry for the countdown');
+  assert.equal(data.finished, false);
+  assert.equal(data.sections, undefined, 'never includes rendered content');
+});
+
 test('terminating a session immediately revokes participant access', async () => {
   const sessions = await call('/api/sessions', { token: instructorToken });
   const sessionId = sessions.data[0].id;

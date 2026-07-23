@@ -1,5 +1,15 @@
 import { resolveVariables } from './templating.js';
 
+// Upper bounds on authored structure. Instructors are trusted, but caps keep a
+// single template from becoming a denial-of-service on the per-request render
+// path (the manual is parsed and re-rendered on every content poll).
+const LIMITS = {
+  variables: 100,
+  sections: 100,
+  stepsPerSection: 100,
+  hintsPerStep: 20,
+};
+
 /**
  * Validate & normalise instructor-authored template payloads before they hit
  * the database. Returns a clean { title, description, content, variables }
@@ -16,6 +26,9 @@ export function validateTemplatePayload(payload) {
   // ---- Variables ---------------------------------------------------------
   const variables = [];
   const rawVars = Array.isArray(payload?.variables) ? payload.variables : [];
+  if (rawVars.length > LIMITS.variables) {
+    errors.push(`Too many variables (max ${LIMITS.variables})`);
+  }
   for (const [i, v] of rawVars.entries()) {
     const name = String(v?.name || '').trim();
     if (!name) {
@@ -42,6 +55,9 @@ export function validateTemplatePayload(payload) {
   const content = [];
   const rawSections = Array.isArray(payload?.content) ? payload.content : [];
   if (rawSections.length === 0) errors.push('At least one section is required');
+  if (rawSections.length > LIMITS.sections) {
+    errors.push(`Too many sections (max ${LIMITS.sections})`);
+  }
 
   for (const [si, rawSection] of rawSections.entries()) {
     const section = {
@@ -53,6 +69,9 @@ export function validateTemplatePayload(payload) {
     const rawSteps = Array.isArray(rawSection?.steps) ? rawSection.steps : [];
     if (rawSteps.length === 0) {
       errors.push(`Section ${si + 1} ("${section.title}") has no steps`);
+    }
+    if (rawSteps.length > LIMITS.stepsPerSection) {
+      errors.push(`Section ${si + 1} has too many steps (max ${LIMITS.stepsPerSection})`);
     }
     for (const [i, s] of rawSteps.entries()) {
       const step = validateStep(s, si, i, errors);
@@ -85,6 +104,11 @@ function validateStep(s, sectionIndex, stepIndex, errors) {
   }
 
   const rawHints = Array.isArray(s?.hints) ? s.hints : [];
+  if (rawHints.length > LIMITS.hintsPerStep) {
+    errors.push(
+      `Section ${sectionIndex + 1} · step ${stepIndex + 1} has too many hints (max ${LIMITS.hintsPerStep})`,
+    );
+  }
   for (const h of rawHints) {
     step.hints.push({
       label: String(h?.label || 'Hint').trim().slice(0, 120),

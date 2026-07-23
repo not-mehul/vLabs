@@ -23,6 +23,5 @@ export default function Markdown({ children }) {
     return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
   }, [children]);
 
-  // eslint-disable-next-line react/no-danger
   return <div className="md" dangerouslySetInnerHTML={{ __html: html }} />;
 }

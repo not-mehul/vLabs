@@ -375,7 +375,7 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 | `POST` | `/api/participant/hint` | Record a hint as taken (`section_index`/`step_index`/`hint_index`) |
 | `POST` | `/api/participant/solution` | Reveal a step's authored Markdown solution — only after every hint on that step is opened |
 | `POST` | `/api/participant/finish` | Mark the participant finished (only once every section is complete) |
-| `POST` | `/api/participant/heartbeat` | Presence keep-alive |
+| `GET` | `/api/participant/status` | Lightweight liveness poll (presence keep-alive + live `expires_at`/`finished`) — the client polls this instead of re-pulling the whole manual |
 
 ### Health
 `GET /api/health` — unauthenticated liveness probe.
@@ -384,7 +384,9 @@ All responses are JSON. Instructor routes require `Authorization: Bearer
 
 Copy `.env.example` → `.env` (server reads it via `dotenv`). Everything has a
 safe dev default, so the app boots with no config; **set the secrets before any
-real deployment**.
+real deployment**. As a guard rail, the server **refuses to start** (`exit 1`)
+when `NODE_ENV=production` and the default JWT secrets are still in use, so a
+misconfigured deploy fails fast instead of running with forgeable tokens.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -399,24 +401,30 @@ real deployment**.
 ## Testing & CI
 
 ```bash
-cd server
-npm test          # unit + HTTP integration tests (node:test, no extra deps)
+cd server && npm test   # unit + HTTP integration tests (node:test, no extra deps)
+npm run lint            # ESLint (from the repo root) across server + client
+npm run format          # Prettier write (repo root)
 ```
 
-Two suites run under Node's built-in test runner:
+Three suites run under Node's built-in test runner:
 
 - **`templating.test.js`** — the security-critical templating core: arithmetic
   precedence, string concatenation, the spec's Seat 7 → `.107` example, formula
   composition, placeholder injection, checkpoint-answer + step-solution
-  stripping, and sandbox rejection of unknown/prototype identifiers.
+  stripping, sandbox rejection of unknown/prototype identifiers, and the
+  authored-structure safety caps.
 - **`api.test.js`** — boots the real Express app on an ephemeral port against an
   isolated temp DB and drives it with `fetch`: auth gating, progressive content
   delivery (locked sections/answers never shipped), server-side checkpoint
-  validation, step-solution hint-gating, the live-session kill-switch, and
-  audit-log immutability.
+  validation, step-solution hint-gating, the lightweight status poll, the
+  live-session kill-switch, and audit-log immutability.
+- **`time.test.js`** — UTC parsing of both SQLite and (zone-less) ISO
+  timestamps.
 
-`.github/workflows/ci.yml` runs the server tests and a client production build
-on every push and pull request.
+Linting is a flat-config ESLint (`eslint.config.js`) with Prettier for
+formatting, both driven from the repo-root `package.json`.
+`.github/workflows/ci.yml` runs lint, the server tests, and a client production
+build on every push and pull request.
 
 ## Deployment notes
 

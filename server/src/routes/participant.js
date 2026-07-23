@@ -430,13 +430,23 @@ router.post(
   }),
 );
 
-/** POST /api/participant/heartbeat — keep-alive for presence analytics. */
-router.post('/heartbeat', requireParticipant, (req, res) => {
-  db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
-    nowIso(),
-    req.participant.id,
-  );
-  res.json({ ok: true, session_active: true });
+/**
+ * GET /api/participant/status
+ * Lightweight liveness poll. Doubles as the presence heartbeat (updates
+ * last_seen_at) and lets the client keep the countdown fresh (instructor "+30")
+ * and detect session-end WITHOUT re-pulling the whole rendered manual on every
+ * tick. requireParticipant already 403s a terminated/expired session, so a 200
+ * here means "still live".
+ */
+router.get('/status', contentLimiter, requireParticipant, (req, res) => {
+  const p = req.participant;
+  db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(nowIso(), p.id);
+  noStore(res);
+  res.json({
+    session_active: true,
+    expires_at: req.session.expires_at,
+    finished: Boolean(p.finished_at),
+  });
 });
 
 export default router;
