@@ -96,6 +96,8 @@ function validateStep(s, sectionIndex, stepIndex, errors) {
         .slice(0, 300),
       placeholder: String(s.checkpoint.placeholder || '').trim().slice(0, 120),
       answer: String(s.checkpoint.answer).trim(),
+      // Optional markdown explanation revealed once every hint is opened.
+      solution: String(s.checkpoint.solution || '').slice(0, 4000),
     };
   }
   return step;

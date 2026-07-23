@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS template_audit (
   template_title      TEXT NOT NULL,
   action              TEXT NOT NULL,           -- created | updated | deleted
   version             INTEGER,
+  -- Full JSON snapshot { title, description, content, variables } at this
+  -- version, enabling change summaries and revert.
+  snapshot            TEXT,
   instructor_id       INTEGER,
   instructor_username TEXT NOT NULL,
   at                  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -152,5 +155,6 @@ function addColumnIfMissing(table, column, definition) {
 addColumnIfMissing('participants', 'hints_taken', "TEXT NOT NULL DEFAULT '[]'");
 addColumnIfMissing('participants', 'revealed_solutions', "TEXT NOT NULL DEFAULT '[]'");
 addColumnIfMissing('participants', 'finished_at', 'TEXT');
+addColumnIfMissing('template_audit', 'snapshot', 'TEXT');
 
 export default db;

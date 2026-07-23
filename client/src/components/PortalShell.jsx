@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import Icon from './Icon.jsx';
 
 /** Chrome for the instructor portal: top nav + logout. */
 export default function PortalShell({ children }) {
@@ -31,7 +32,7 @@ export default function PortalShell({ children }) {
         <div className="portal__actions">
           <ThemeToggle />
           <button className="btn btn--ghost btn--sm" onClick={handleLogout}>
-            Sign out
+            <Icon name="logout" size={15} /> Sign out
           </button>
         </div>
       </header>

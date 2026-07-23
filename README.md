@@ -65,7 +65,7 @@ Participant registration (the default landing page) is in
 | **Collapsible hints** (`<HintBox>`) and **state checkpoints** — validated server-side; exhaust the hints to reveal the solution | `HintBox.jsx`, `Checkpoint.jsx` |
 | **Completion flow** — finish screen + graceful logout; participant shown as *finished* to the instructor | `Lab.jsx`; `finished_at` |
 | **Instructor analytics & lifecycle** — time remaining, copy code, section distribution, hints taken, total time, plus **delete** and **export** (JSON/CSV) of completed sessions | `SessionMonitor.jsx`, `Dashboard.jsx` |
-| **Template authoring** — in-page section editor, live per-seat preview, JSON/Markdown import & export, and an **immutable change-history audit log** (who changed what, enforced append-only by DB triggers) | `TemplateEditor.jsx`, `templateFormat.js`; `template_audit` table |
+| **Template authoring** — Content/Settings-tabbed editor with a live per-seat preview; Settings holds Variables, JSON/Markdown import & export, and an **immutable change-history audit log** (append-only via DB triggers) that shows *what changed* per version and supports **revert** | `TemplateEditor.jsx`, `templateFormat.js`; `template_audit` table with `snapshot` |
 | **Light & dark themes** — professional slate + indigo design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
 | **IP protection** — no file downloads, in-memory content, progressive per-section delivery | no download endpoints; `no-store` headers |
 | **Session gating** — time-limited PIN, instant revocation | `server/src/middleware/auth.js` |
@@ -243,10 +243,12 @@ done / current / locked sections.
   checkpoints cleared before the participant can advance to the next one. The
   server only ever delivers sections the participant has legitimately reached,
   and checkpoint answers are never sent to the browser.
-- **Hints & solutions.** Opening a hint is recorded server-side (surfaced to the
-  instructor as "hints taken"). Once *every* hint on a checkpoint step has been
-  taken, a "Reveal solution" control appears; the answer is fetched from the
-  server only then — it stays private until the hints are exhausted.
+- **Hints & solutions.** Hints render Markdown (bullets, links that open in a
+  new tab) and each open is recorded server-side ("hints taken"). A checkpoint
+  can also carry a separate, distinctly-styled **solution** (Markdown) — shown in
+  its own amber "Solution" panel, visually distinct from the blue hints. The
+  reveal control only appears once *every* hint on the step has been opened, and
+  the solution text is fetched from the server only then.
 - **Completion.** When all sections are complete the participant gets a **Finish
   lab** button leading to a completion screen; finishing marks them **finished**
   (shown on the instructor monitor) and gracefully logs them out. An **Exit**

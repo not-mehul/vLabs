@@ -132,6 +132,7 @@ export default function Lab() {
       /* still show completion locally */
     }
     setFinishedLocal(true);
+    setReviewing(false); // return to the completion screen
     window.scrollTo({ top: 0 });
   }, [token]);
 
@@ -213,6 +214,11 @@ export default function Lab() {
             <span className="lab__session">{session?.title}</span>
           </div>
           <div className="lab__bar-right">
+            {finished && (
+              <button className="btn btn--ghost btn--sm" onClick={() => setReviewing(false)}>
+                <Icon name="check-circle" size={15} /> Summary
+              </button>
+            )}
             <span className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}>
               <Icon name="clock" size={16} /> {remaining || '—'}
             </span>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Icon from './Icon.jsx';
+import Markdown from './Markdown.jsx';
 
 /**
  * State checkpoint. The participant must enter a validation string to unlock the
@@ -57,10 +58,7 @@ export default function Checkpoint({
     setRevealing(true);
     try {
       const sol = await onReveal();
-      if (sol) {
-        setSolution(sol);
-        setValue(sol);
-      }
+      if (sol) setSolution(sol);
     } catch (err) {
       setError(err.message || 'Could not reveal the solution.');
     } finally {
@@ -97,13 +95,18 @@ export default function Checkpoint({
         {error && <p className="checkpoint__error">{error}</p>}
 
         {solution ? (
-          <p className="checkpoint__solution">
-            <Icon name="hint" size={14} /> Solution: <code>{solution}</code>
-          </p>
+          <div className="solution">
+            <div className="solution__head">
+              <Icon name="key" size={15} /> Solution
+            </div>
+            <div className="solution__body">
+              <Markdown>{solution}</Markdown>
+            </div>
+          </div>
         ) : (
           solutionAvailable && (
             <button type="button" className="checkpoint__reveal" onClick={handleReveal} disabled={revealing}>
-              {revealing ? 'Revealing…' : 'Stuck? Reveal the solution'}
+              <Icon name="key" size={14} /> {revealing ? 'Revealing…' : 'Stuck? Reveal the solution'}
             </button>
           )
         )}

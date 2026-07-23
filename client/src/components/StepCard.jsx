@@ -68,7 +68,9 @@ export default function StepCard({ step, total, sectionIndex, onCheckpoint, onHi
           placeholder={step.checkpoint.placeholder}
           completed={step.checkpoint.completed}
           solution={step.checkpoint.solution}
-          solutionAvailable={allHintsTaken && !step.checkpoint.completed}
+          solutionAvailable={
+            allHintsTaken && step.checkpoint.has_solution && !step.checkpoint.completed
+          }
           onReveal={() => onRevealSolution(sectionIndex, step.index)}
           onSubmit={(answer) => onCheckpoint(sectionIndex, step.index, answer)}
         />

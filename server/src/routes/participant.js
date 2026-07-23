@@ -187,13 +187,15 @@ router.get(
           taken: hintsTaken.has(`${s}.${step.index}.${hi}`),
         }));
         if (step.checkpoint && !step.checkpoint.completed) {
-          const allHintsTaken =
-            hintCount > 0 &&
-            step.hints.every((h) => h.taken);
-          step.checkpoint.solution_available = allHintsTaken;
-          if (revealed.has(`${s}.${step.index}`)) {
+          const hasSolution = Boolean(raw.checkpoint && raw.checkpoint.solution);
+          const allHintsTaken = hintCount > 0 && step.hints.every((h) => h.taken);
+          // A solution can be revealed only if the author wrote one AND every
+          // hint on the step has been opened.
+          step.checkpoint.has_solution = hasSolution;
+          step.checkpoint.solution_available = hasSolution && allHintsTaken;
+          if (hasSolution && revealed.has(`${s}.${step.index}`)) {
             step.checkpoint.solution = injectVariables(
-              String(raw.checkpoint.answer),
+              String(raw.checkpoint.solution),
               context,
             );
           }
@@ -362,8 +364,8 @@ router.post(
 /**
  * POST /api/participant/solution
  * Body: { section_index, step_index }
- * Reveals a checkpoint's answer — but ONLY once every hint on that step has been
- * taken. Until then the answer never leaves the server.
+ * Reveals a checkpoint's authored markdown solution — but ONLY once every hint
+ * on that step has been taken. Until then the solution never leaves the server.
  */
 router.post(
   '/solution',
@@ -375,12 +377,13 @@ router.post(
     const { sections, variables } = loadManual(req.session);
     const step = sections[si]?.steps?.[sti];
     if (!step || !stepHasCheckpoint(step)) throw httpError(400, 'No checkpoint here');
+    if (!step.checkpoint.solution) throw httpError(404, 'No solution authored for this step');
 
     const hintCount = (step.hints || []).length;
     if (hintCount === 0) throw httpError(403, 'No hints to exhaust on this step');
     const taken = new Set(JSON.parse(p.hints_taken || '[]'));
     const allTaken = step.hints.every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
-    if (!allTaken) throw httpError(403, 'Take all hints before revealing the solution');
+    if (!allTaken) throw httpError(403, 'Open all hints before revealing the solution');
 
     const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
     revealed.add(`${si}.${sti}`);
@@ -389,7 +392,7 @@ router.post(
     ).run(JSON.stringify([...revealed]), nowIso(), p.id);
 
     const context = resolveVariables(variables, p.seat_number);
-    const solution = injectVariables(String(step.checkpoint.answer), context);
+    const solution = injectVariables(String(step.checkpoint.solution), context);
     noStore(res);
     res.json({ solution });
   }),

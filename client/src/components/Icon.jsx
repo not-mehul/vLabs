@@ -111,6 +111,52 @@ const P = {
       <path d="M3 13l9 5 9-5" />
     </>
   ),
+  key: (
+    <>
+      <circle cx="8" cy="8" r="4.2" />
+      <path d="M11 11l7 7m-3 0 2-2m-4-1 2-2" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M4 20h4L18.6 9.4a2 2 0 0 0-2.8-2.8L5.2 17.2 4 20Z" />
+      <path d="M14 8l2.8 2.8" />
+    </>
+  ),
+  settings: (
+    <>
+      <path d="M4 7h9M18 7h2M4 12h2M9 12h11M4 17h6M15 17h5" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="7" cy="12" r="2" />
+      <circle cx="13" cy="17" r="2" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3 5v4h4" />
+      <path d="M3.5 9a8.5 8.5 0 1 1-1 5" />
+      <path d="M12 8v4.5l3 1.8" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h11a5 5 0 0 1 0 10h-2" />
+    </>
+  ),
+  save: (
+    <>
+      <path d="M5 4h11l3 3v13H5z" />
+      <path d="M8 4v5h7M8 20v-6h8v6" />
+    </>
+  ),
+  play: <path d="M7 5.5 18.5 12 7 18.5z" />,
+  power: (
+    <>
+      <path d="M12 4v8" />
+      <path d="M7.6 7.2a7 7 0 1 0 8.8 0" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.75, className = '', title }) {

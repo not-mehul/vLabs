@@ -95,7 +95,7 @@ function CreateSession({ templates, onCreated }) {
             />
           </label>
           <button className="btn btn--primary" disabled={!canSubmit}>
-            {busy ? 'Launching…' : 'Launch'}
+            <Icon name="play" size={15} /> {busy ? 'Launching…' : 'Launch'}
           </button>
         </div>
       )}
@@ -209,23 +209,30 @@ export default function Dashboard() {
                     <StatusPill status={s.status} />
                   </td>
                   <td className="table__actions">
-                    <Link className="btn btn--sm btn--ghost" to={`/instructor/sessions/${s.id}`}>
-                      Monitor
+                    <Link
+                      className="btn btn--sm btn--icon btn--ghost"
+                      to={`/instructor/sessions/${s.id}`}
+                      title="Open monitor"
+                      aria-label="Open monitor"
+                    >
+                      <Icon name="eye" size={16} />
                     </Link>
                     <button
-                      className="btn btn--sm btn--ghost"
+                      className="btn btn--sm btn--icon btn--ghost"
                       onClick={() => handleExport(s)}
                       title="Export session data (JSON)"
+                      aria-label="Export session data"
                     >
-                      <Icon name="download" size={14} />
+                      <Icon name="download" size={16} />
                     </button>
                     {s.status !== 'active' && (
                       <button
-                        className="btn btn--sm btn--danger-ghost"
+                        className="btn btn--sm btn--icon btn--danger-ghost"
                         onClick={() => handleDelete(s)}
                         title="Delete session"
+                        aria-label="Delete session"
                       >
-                        <Icon name="trash" size={14} />
+                        <Icon name="trash" size={16} />
                       </button>
                     )}
                   </td>

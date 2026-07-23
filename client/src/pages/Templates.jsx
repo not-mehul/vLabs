@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
+import Icon from '../components/Icon.jsx';
 
 export default function Templates() {
   const { call } = useInstructorApi();
@@ -48,7 +49,7 @@ export default function Templates() {
           className="btn btn--primary"
           onClick={() => navigate('/instructor/templates/new')}
         >
-          + New template
+          <Icon name="plus" size={16} /> New template
         </button>
       </div>
 
@@ -86,16 +87,20 @@ export default function Templates() {
                   <td className="muted">{t.updated_by || '—'}</td>
                   <td className="table__actions">
                     <button
-                      className="btn btn--sm btn--ghost"
+                      className="btn btn--sm btn--icon btn--ghost"
                       onClick={() => navigate(`/instructor/templates/${t.id}`)}
+                      title="Edit template"
+                      aria-label="Edit template"
                     >
-                      Edit
+                      <Icon name="edit" size={16} />
                     </button>
                     <button
-                      className="btn btn--sm btn--danger-ghost"
+                      className="btn btn--sm btn--icon btn--danger-ghost"
                       onClick={() => handleDelete(t.id, t.title)}
+                      title="Delete template"
+                      aria-label="Delete template"
                     >
-                      Delete
+                      <Icon name="trash" size={16} />
                     </button>
                   </td>
                 </tr>

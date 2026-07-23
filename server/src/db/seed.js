@@ -93,6 +93,12 @@ const SAMPLE_CONTENT = [
           placeholder: 'e.g. 10.0.0.1XX',
           // Answer is computed per seat and never sent to the browser.
           answer: '{{ HOST_IP }}',
+          // Markdown solution, revealed only after every hint is opened.
+          solution:
+            'Your Host IP is built from your seat number:\n\n' +
+            '- Base network: `10.0.0.`\n' +
+            '- Host octet: `100 + seat` → **{{ HOST_IP }}**\n\n' +
+            'Read it live with `ip addr show eth0`.',
         },
       },
     ],
@@ -156,10 +162,17 @@ export function ensureSeed() {
     const username = db
       .prepare('SELECT username FROM instructors WHERE id = ?')
       .get(instructorId).username;
+    const snapshot = JSON.stringify({
+      title: 'Network Bench Setup (Sample)',
+      description:
+        'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
+      content: SAMPLE_CONTENT,
+      variables: SAMPLE_VARIABLES,
+    });
     db.prepare(
-      `INSERT INTO template_audit (template_id, template_title, action, version, instructor_id, instructor_username)
-       VALUES (?, ?, 'created', 1, ?, ?)`,
-    ).run(info.lastInsertRowid, 'Network Bench Setup (Sample)', instructorId, username);
+      `INSERT INTO template_audit (template_id, template_title, action, version, snapshot, instructor_id, instructor_username)
+       VALUES (?, ?, 'created', 1, ?, ?, ?)`,
+    ).run(info.lastInsertRowid, 'Network Bench Setup (Sample)', snapshot, instructorId, username);
     console.log('  Seeded sample template "Network Bench Setup".');
   }
 }

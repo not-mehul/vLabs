@@ -24,12 +24,31 @@ function rowToTemplate(row) {
   };
 }
 
-/** Record an immutable audit entry for a template change. */
-function recordAudit(instructor, { templateId, title, action, version }) {
+/** Record an immutable audit entry (with a full snapshot) for a template. */
+function recordAudit(instructor, { templateId, title, action, version, snapshot }) {
   db.prepare(
-    `INSERT INTO template_audit (template_id, template_title, action, version, instructor_id, instructor_username)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(templateId ?? null, title, action, version ?? null, instructor.id, instructor.username);
+    `INSERT INTO template_audit
+       (template_id, template_title, action, version, snapshot, instructor_id, instructor_username)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    templateId ?? null,
+    title,
+    action,
+    version ?? null,
+    snapshot ? JSON.stringify(snapshot) : null,
+    instructor.id,
+    instructor.username,
+  );
+}
+
+/** Build a snapshot object from a template row. */
+function snapshotOf(row) {
+  return {
+    title: row.title,
+    description: row.description,
+    content: JSON.parse(row.content),
+    variables: JSON.parse(row.variables),
+  };
 }
 
 /** GET /api/templates — list (summaries) with the most recent editor. */
@@ -59,15 +78,24 @@ router.get('/', (req, res) => {
   );
 });
 
-/** GET /api/templates/:id/audit — read-only change history. */
+/** GET /api/templates/:id/audit — read-only change history (with snapshots). */
 router.get('/:id/audit', (req, res) => {
   const rows = db
     .prepare(
-      `SELECT id, action, version, instructor_username, at
+      `SELECT id, action, version, snapshot, instructor_username, at
          FROM template_audit WHERE template_id = ? ORDER BY id DESC`,
     )
     .all(req.params.id);
-  res.json(rows);
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      version: r.version,
+      instructor_username: r.instructor_username,
+      at: r.at,
+      snapshot: r.snapshot ? JSON.parse(r.snapshot) : null,
+    })),
+  );
 });
 
 /** GET /api/templates/:id — full template. */
@@ -102,6 +130,7 @@ router.post(
       title: row.title,
       action: 'created',
       version: row.version,
+      snapshot: snapshotOf(row),
     });
     res.status(201).json(rowToTemplate(row));
   }),
@@ -138,6 +167,7 @@ router.put(
       title: row.title,
       action: 'updated',
       version: row.version,
+      snapshot: snapshotOf(row),
     });
     res.json(rowToTemplate(row));
   }),

@@ -282,16 +282,29 @@ select.field__input { appearance: none; cursor: pointer; }
 .status-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--success); font-weight: 600; font-size: 0.85rem; }
 .dot--live { background: var(--success); }
 
+/* Editor tabs */
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+.tab { display: inline-flex; align-items: center; gap: 0.4rem; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 0.6rem 0.9rem; font: inherit; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.tab:hover { color: var(--text); }
+.tab--active { color: var(--brand); border-bottom-color: var(--brand); }
+
 /* Template change-history (audit) */
 .audit__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.audit__item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.audit__item { padding: 0.7rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
 .audit__item:last-child { border-bottom: none; }
-.audit__action { text-transform: capitalize; font-weight: 600; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
+.audit__row { display: flex; align-items: center; gap: 0.75rem; }
+.audit__action { text-transform: capitalize; font-weight: 700; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
 .audit__action--created { background: var(--success-soft); color: var(--success); }
 .audit__action--updated { background: var(--brand-soft); color: var(--brand); }
 .audit__action--deleted { background: var(--danger-soft); color: var(--danger); }
+.audit__ver { font-family: var(--mono); font-size: 0.8rem; color: var(--text-2); }
 .audit__who { font-weight: 600; }
 .audit__when { margin-left: auto; font-size: 0.82rem; }
+.audit__revert { margin-left: 0.25rem; }
+.audit__changes { list-style: none; margin: 0.35rem 0 0; padding: 0 0 0 0.4rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.audit__changes li { position: relative; padding-left: 0.9rem; color: var(--text-2); font-size: 0.84rem; }
+.audit__changes li::before { content: ''; position: absolute; left: 0.1rem; top: 0.5em; width: 4px; height: 4px; border-radius: 50%; background: var(--text-3); }
+.hint-editor__text { resize: vertical; font-family: var(--mono); font-size: 0.85rem; }
 
 /* -------------------------------- Pills --------------------------------- */
 .pill { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: capitalize; }
@@ -366,10 +379,13 @@ select.field__input { appearance: none; cursor: pointer; }
 .checkpoint--done { align-items: center; background: var(--success-soft); border-color: var(--success); color: var(--text-2); }
 .checkpoint__badge { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--success); font-weight: 600; }
 .checkpoint--done { padding: 0.85rem 1.1rem; }
-.checkpoint__reveal { align-self: flex-start; margin-top: 0.6rem; background: none; border: none; padding: 0; color: var(--text-2); font: inherit; font-size: 0.85rem; text-decoration: underline; cursor: pointer; }
-.checkpoint__reveal:hover { color: var(--brand); }
-.checkpoint__solution { display: flex; align-items: center; gap: 0.4rem; margin: 0.7rem 0 0; font-size: 0.9rem; color: var(--text-2); }
-.checkpoint__solution code { background: var(--surface-3); border: 1px solid var(--border); padding: 0.1em 0.45em; border-radius: 5px; color: var(--text); }
+.checkpoint__reveal { display: inline-flex; align-items: center; gap: 0.35rem; align-self: flex-start; margin-top: 0.7rem; background: none; border: none; padding: 0; color: var(--warn); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.checkpoint__reveal:hover { text-decoration: underline; }
+/* Solution: visually distinct from hints (amber "answer" treatment). */
+.solution { margin-top: 0.85rem; border: 1px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); overflow: hidden; }
+.solution__head { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.8rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--warn); border-bottom: 1px solid var(--warn); }
+.solution__body { padding: 0.6rem 0.8rem; color: var(--text); }
+.solution__body .md { font-size: 0.92rem; }
 
 /* ------------------------------- Lab view ------------------------------- */
 .lab { min-height: 100%; display: flex; flex-direction: column; background: var(--page-bg); }
@@ -461,7 +477,7 @@ select.field__input { appearance: none; cursor: pointer; }
 .chip--active { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
 
 .hint-editor { margin: 0.5rem 0; padding: 0.6rem; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
-.hint-editor__row { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; }
+.hint-editor__row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.4rem; }
 .hint-editor__row .field__input:first-child { max-width: 240px; }
 
 .checkpoint-editor { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }

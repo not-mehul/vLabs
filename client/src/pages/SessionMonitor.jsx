@@ -204,10 +204,10 @@ export default function SessionMonitor() {
           {active && (
             <>
               <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
-                +30 min
+                <Icon name="clock" size={15} /> +30 min
               </button>
               <button className="btn btn--danger btn--sm" onClick={terminate} disabled={busy}>
-                End session
+                <Icon name="power" size={15} /> End session
               </button>
             </>
           )}

@@ -45,7 +45,7 @@ function VariableEditor({ variables, onChange }) {
           className="btn btn--sm btn--ghost"
           onClick={() => onChange([...variables, { name: '', expression: '' }])}
         >
-          + Add variable
+          <Icon name="plus" size={15} /> Add variable
         </button>
       </div>
       <p className="muted small">
@@ -99,7 +99,7 @@ function HintEditor({ hints, onChange }) {
           className="btn btn--xs btn--ghost"
           onClick={() => onChange([...hints, { label: '', text: '' }])}
         >
-          + Hint
+          <Icon name="plus" size={13} /> Hint
         </button>
       </div>
       {hints.map((h, i) => (
@@ -110,9 +110,10 @@ function HintEditor({ hints, onChange }) {
             value={h.label}
             onChange={(e) => update(i, 'label', e.target.value)}
           />
-          <input
-            className="field__input"
-            placeholder="Hint text (revealed on click)"
+          <textarea
+            className="field__input hint-editor__text"
+            placeholder="Hint text — Markdown supported (bullets, links…)"
+            rows={2}
             value={h.text}
             onChange={(e) => update(i, 'text', e.target.value)}
           />
@@ -184,17 +185,38 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
             type="checkbox"
             checked={hasCheckpoint}
             onChange={(e) =>
-              set({ checkpoint: e.target.checked ? { prompt: '', placeholder: '', answer: '' } : null })
+              set({ checkpoint: e.target.checked ? { prompt: '', placeholder: '', answer: '', solution: '' } : null })
             }
           />
           <span>Add a checkpoint (gates the next section once cleared)</span>
         </label>
         {hasCheckpoint && (
           <div className="checkpoint-editor__fields">
-            <input className="field__input" placeholder="Prompt shown to participant" value={step.checkpoint.prompt} onChange={(e) => set({ checkpoint: { ...step.checkpoint, prompt: e.target.value } })} />
-            <input className="field__input" placeholder="Input placeholder (optional)" value={step.checkpoint.placeholder} onChange={(e) => set({ checkpoint: { ...step.checkpoint, placeholder: e.target.value } })} />
-            <input className="field__input mono" placeholder="Expected answer (may use {{ VARIABLES }})" value={step.checkpoint.answer} onChange={(e) => set({ checkpoint: { ...step.checkpoint, answer: e.target.value } })} />
-            <p className="muted small">The answer is validated server-side and never sent to participants.</p>
+            <label className="field">
+              <span className="field__label">Prompt</span>
+              <input className="field__input" placeholder="Prompt shown to participant" value={step.checkpoint.prompt} onChange={(e) => set({ checkpoint: { ...step.checkpoint, prompt: e.target.value } })} />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span className="field__label">Input placeholder</span>
+                <input className="field__input" placeholder="optional" value={step.checkpoint.placeholder} onChange={(e) => set({ checkpoint: { ...step.checkpoint, placeholder: e.target.value } })} />
+              </label>
+              <label className="field">
+                <span className="field__label">Expected answer</span>
+                <input className="field__input mono" placeholder="may use {{ VARIABLES }}" value={step.checkpoint.answer} onChange={(e) => set({ checkpoint: { ...step.checkpoint, answer: e.target.value } })} />
+              </label>
+            </div>
+            <label className="field">
+              <span className="field__label">Solution (Markdown — revealed after all hints are opened)</span>
+              <textarea
+                className="field__input step-editor__body"
+                rows={5}
+                placeholder="Explain the answer. Markdown supported — bullet points, links, etc."
+                value={step.checkpoint.solution || ''}
+                onChange={(e) => set({ checkpoint: { ...step.checkpoint, solution: e.target.value } })}
+              />
+            </label>
+            <p className="muted small">The answer is validated server-side; the solution is only sent after every hint is opened.</p>
           </div>
         )}
       </div>
@@ -247,7 +269,7 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
       ))}
 
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => setSteps([...section.steps, BLANK_STEP()])}>
-        + Add step to this section
+        <Icon name="plus" size={15} /> Add step
       </button>
     </div>
   );
@@ -285,7 +307,7 @@ function Preview({ id, draft }) {
           <input className="field__input" type="number" min="1" value={seat} onChange={(e) => setSeat(e.target.value)} />
         </label>
         <button type="button" className="btn btn--sm btn--primary" onClick={run} disabled={busy}>
-          {busy ? 'Rendering…' : 'Render preview'}
+          <Icon name="eye" size={15} /> {busy ? 'Rendering…' : 'Render preview'}
         </button>
       </div>
 
@@ -357,6 +379,63 @@ function ImportExport({ tpl, onImport }) {
   );
 }
 
+/* --------------------------- Change history ----------------------------- */
+
+const stepsOf = (content) => (content || []).reduce((n, s) => n + ((s.steps || []).length), 0);
+
+/** Human-readable summary of what changed between two snapshots. */
+function describeChanges(prev, curr) {
+  if (!prev) return ['Initial version'];
+  const changes = [];
+  if (prev.title !== curr.title) changes.push(`Title changed to “${curr.title}”`);
+  if (prev.description !== curr.description) changes.push('Description edited');
+  if (JSON.stringify(prev.variables) !== JSON.stringify(curr.variables)) {
+    changes.push(`Variables updated (${(prev.variables || []).length} → ${(curr.variables || []).length})`);
+  }
+  const ps = prev.content || [];
+  const cs = curr.content || [];
+  if (ps.length !== cs.length) changes.push(`Sections ${ps.length} → ${cs.length}`);
+  if (stepsOf(ps) !== stepsOf(cs)) changes.push(`Steps ${stepsOf(ps)} → ${stepsOf(cs)}`);
+  const n = Math.min(ps.length, cs.length);
+  for (let i = 0; i < n; i += 1) {
+    if (ps[i].title !== cs[i].title) changes.push(`Section ${i + 1} renamed to “${cs[i].title}”`);
+    else if (JSON.stringify(ps[i]) !== JSON.stringify(cs[i])) changes.push(`Section ${i + 1} edited`);
+  }
+  return changes.length ? changes : ['No content changes'];
+}
+
+function ChangeHistory({ audit, onRevert }) {
+  return (
+    <ul className="audit__list">
+      {audit.map((a, i) => {
+        const prev = audit[i + 1]?.snapshot; // the older version
+        const changes =
+          a.action === 'deleted' ? ['Template deleted'] : describeChanges(prev, a.snapshot);
+        return (
+          <li className="audit__item" key={a.id}>
+            <div className="audit__row">
+              <span className={`audit__action audit__action--${a.action}`}>{a.action}</span>
+              {a.version != null && <span className="audit__ver">v{a.version}</span>}
+              <span className="audit__who">{a.instructor_username}</span>
+              <span className="audit__when muted">{formatDateTime(a.at)}</span>
+              {onRevert && a.snapshot && a.action !== 'deleted' && (
+                <button className="btn btn--xs btn--ghost audit__revert" onClick={() => onRevert(a)}>
+                  <Icon name="undo" size={13} /> Revert
+                </button>
+              )}
+            </div>
+            <ul className="audit__changes">
+              {changes.map((c, ci) => (
+                <li key={ci}>{c}</li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /* ------------------------------- Editor --------------------------------- */
 
 export default function TemplateEditor() {
@@ -371,6 +450,15 @@ export default function TemplateEditor() {
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [audit, setAudit] = useState([]);
+  const [tab, setTab] = useState('content'); // content | settings
+  const [revertNote, setRevertNote] = useState('');
+
+  function handleRevert(entry) {
+    setTpl(coerce(entry.snapshot));
+    setRevertNote(`Loaded v${entry.version} — review and Save to apply as a new version.`);
+    setTab('content');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   const loadAudit = useCallback(() => {
     if (isNew) return;
@@ -423,6 +511,7 @@ export default function TemplateEditor() {
         : await call((t) => api.updateTemplate(t, id, payload));
       navigate(`/instructor/templates/${saved.id}`, { replace: true });
       setTpl(coerce(saved));
+      setRevertNote('');
       call((t) => api.getTemplateAudit(t, saved.id)).then(setAudit).catch(() => {});
     } catch (err) {
       setError(err.message);
@@ -442,74 +531,92 @@ export default function TemplateEditor() {
           <h1>{isNew ? 'New template' : 'Edit template'}</h1>
         </div>
         <div className="page-head__actions">
-          <button className="btn btn--ghost" onClick={() => setShowPreview((s) => !s)}>{showPreview ? 'Hide preview' : 'Preview'}</button>
-          <button className="btn btn--primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save template'}</button>
+          {tab === 'content' && (
+            <button className="btn btn--ghost" onClick={() => setShowPreview((s) => !s)}>
+              <Icon name="eye" size={16} /> {showPreview ? 'Hide preview' : 'Preview'}
+            </button>
+          )}
+          <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
+            <Icon name="save" size={16} /> {saving ? 'Saving…' : 'Save template'}
+          </button>
         </div>
       </div>
 
-      <ImportExport tpl={tpl} onImport={(parsed) => setTpl(coerce(parsed))} />
+      <div className="tabs" role="tablist">
+        <button type="button" className={`tab ${tab === 'content' ? 'tab--active' : ''}`} onClick={() => setTab('content')}>
+          <Icon name="layers" size={15} /> Content
+        </button>
+        <button type="button" className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} onClick={() => setTab('settings')}>
+          <Icon name="settings" size={15} /> Settings
+        </button>
+      </div>
 
+      {revertNote && <div className="banner banner--success">{revertNote}</div>}
       {error && <p className="form__error">{error}</p>}
 
-      <div className={`editor-grid ${showPreview ? 'editor-grid--split' : ''}`}>
+      {tab === 'content' ? (
+        <div className={`editor-grid ${showPreview ? 'editor-grid--split' : ''}`}>
+          <div className="editor-col">
+            <section className="editor-section">
+              <label className="field">
+                <span className="field__label">Title</span>
+                <input className="field__input" value={tpl.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Network Bench Setup" />
+              </label>
+              <label className="field">
+                <span className="field__label">Description</span>
+                <input className="field__input" value={tpl.description} onChange={(e) => patch({ description: e.target.value })} placeholder="Short summary shown in the template list" />
+              </label>
+            </section>
+
+            <div className="editor-section__head">
+              <h3>Sections</h3>
+              <button type="button" className="btn btn--sm btn--ghost" onClick={() => patch({ content: [...tpl.content, BLANK_SECTION(tpl.content.length + 1)] })}>
+                <Icon name="plus" size={15} /> Add section
+              </button>
+            </div>
+            {tpl.content.map((section, i) => (
+              <SectionEditor
+                key={i}
+                section={section}
+                index={i}
+                total={tpl.content.length}
+                onChange={(s) => updateSection(i, s)}
+                onMove={moveSection}
+                onRemove={removeSection}
+              />
+            ))}
+          </div>
+
+          {showPreview && (
+            <div className="editor-col editor-col--preview">
+              <h3>Live preview</h3>
+              <Preview id={id} draft={tpl} />
+            </div>
+          )}
+        </div>
+      ) : (
         <div className="editor-col">
           <section className="editor-section">
-            <label className="field">
-              <span className="field__label">Title</span>
-              <input className="field__input" value={tpl.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Network Bench Setup" />
-            </label>
-            <label className="field">
-              <span className="field__label">Description</span>
-              <input className="field__input" value={tpl.description} onChange={(e) => patch({ description: e.target.value })} placeholder="Short summary shown in the template list" />
-            </label>
+            <div className="editor-section__head"><h3>Import &amp; export</h3></div>
+            <ImportExport tpl={tpl} onImport={(parsed) => { setTpl(coerce(parsed)); setTab('content'); }} />
           </section>
 
           <VariableEditor variables={tpl.variables} onChange={(variables) => patch({ variables })} />
 
-          <div className="editor-section__head">
-            <h3>Sections</h3>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={() => patch({ content: [...tpl.content, BLANK_SECTION(tpl.content.length + 1)] })}>
-              + Add section
-            </button>
-          </div>
-          {tpl.content.map((section, i) => (
-            <SectionEditor
-              key={i}
-              section={section}
-              index={i}
-              total={tpl.content.length}
-              onChange={(s) => updateSection(i, s)}
-              onMove={moveSection}
-              onRemove={removeSection}
-            />
-          ))}
+          {!isNew && (
+            <section className="editor-section">
+              <div className="editor-section__head">
+                <h3><Icon name="history" size={16} /> Change history</h3>
+                <span className="muted small">Read-only audit log</span>
+              </div>
+              {audit.length ? (
+                <ChangeHistory audit={audit} onRevert={handleRevert} />
+              ) : (
+                <p className="muted small">No history yet.</p>
+              )}
+            </section>
+          )}
         </div>
-
-        {showPreview && (
-          <div className="editor-col editor-col--preview">
-            <h3>Live preview</h3>
-            <Preview id={id} draft={tpl} />
-          </div>
-        )}
-      </div>
-
-      {!isNew && audit.length > 0 && (
-        <section className="editor-section audit">
-          <div className="editor-section__head">
-            <h3>Change history</h3>
-            <span className="muted small">Read-only audit log</span>
-          </div>
-          <ul className="audit__list">
-            {audit.map((a) => (
-              <li className="audit__item" key={a.id}>
-                <span className={`audit__action audit__action--${a.action}`}>{a.action}</span>
-                <span className="audit__who">{a.instructor_username}</span>
-                {a.version != null && <span className="audit__ver muted">v{a.version}</span>}
-                <span className="audit__when muted">{formatDateTime(a.at)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
     </PortalShell>
   );
