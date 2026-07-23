@@ -1,5 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1); // correct client IPs behind a reverse proxy
+
+  // gzip responses (JSON analytics payloads, the SPA bundle) to cut bandwidth.
+  app.use(compression());
 
   // Security headers. The SPA is fully self-contained, so we can run a fairly
   // strict Content-Security-Policy.
@@ -71,10 +75,23 @@ export function createApp() {
   // routing. In development the Vite dev server handles the frontend instead.
   const clientDist = path.resolve(__dirname, '..', '..', 'client', 'dist');
   if (fs.existsSync(clientDist)) {
-    app.use(express.static(clientDist));
-    app.get(/^(?!\/api).*/, (req, res) =>
-      res.sendFile(path.join(clientDist, 'index.html')),
+    app.use(
+      express.static(clientDist, {
+        setHeaders(res, filePath) {
+          // Vite emits content-hashed asset filenames, so they can be cached
+          // aggressively and immutably; index.html must always be revalidated.
+          if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      }),
     );
+    app.get(/^(?!\/api).*/, (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
   }
 
   app.use('/api', notFound);

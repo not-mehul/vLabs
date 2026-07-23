@@ -1,12 +1,17 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import Join from './pages/Join.jsx';
 import Lab from './pages/Lab.jsx';
-import InstructorLogin from './pages/InstructorLogin.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Templates from './pages/Templates.jsx';
-import TemplateEditor from './pages/TemplateEditor.jsx';
-import SessionMonitor from './pages/SessionMonitor.jsx';
+
+// The instructor portal is a separate audience from participants (the bulk of
+// traffic), so lazy-load it into its own chunk — a participant never downloads
+// the editor / monitor / markdown tooling.
+const InstructorLogin = lazy(() => import('./pages/InstructorLogin.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Templates = lazy(() => import('./pages/Templates.jsx'));
+const TemplateEditor = lazy(() => import('./pages/TemplateEditor.jsx'));
+const SessionMonitor = lazy(() => import('./pages/SessionMonitor.jsx'));
 
 /** Gate instructor-only routes behind a token. */
 function RequireInstructor({ children }) {
@@ -20,7 +25,8 @@ function RequireInstructor({ children }) {
 
 export default function App() {
   return (
-    <Routes>
+    <Suspense fallback={<div className="route-loading">Loading…</div>}>
+      <Routes>
       {/* Participant registration is the default landing page. */}
       <Route path="/" element={<Join />} />
       <Route path="/join" element={<Navigate to="/" replace />} />
@@ -61,7 +67,8 @@ export default function App() {
         }
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

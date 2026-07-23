@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, participantSession } from '../api.js';
-import { useContentProtection } from '../hooks/useContentProtection.js';
 import StepCard from '../components/StepCard.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import Icon from '../components/Icon.jsx';
@@ -33,8 +32,6 @@ export default function Lab() {
   useEffect(() => {
     if (token) participantSession.set({ token, seatNumber, name, session });
   }, [token, seatNumber, name, session]);
-
-  useContentProtection(Boolean(token));
 
   const [data, setData] = useState(null);
   const [error, setError] = useState('');

@@ -310,9 +310,8 @@ Verkada logo/symbol is never reproduced.
 | --- | --- |
 | **IP protection** | Lab content is delivered as JSON to the DOM only. No PDF/DOCX/file endpoints exist and rendered content is served with `Cache-Control: no-store`, so no lab files are ever written to the device. (An access token is persisted to enable resume — content never is.) |
 | **Session gating** | Access requires a time-limited 6-digit PIN. Every participant request re-validates the live session (`is_active` + `expires_at`), so a token is rejected the instant an instructor terminates or the session expires — no token blocklist needed. |
-| **Anti-scraping / rate limiting** | Layered `express-rate-limit` (join brute-force, checkpoint guessing, content pull, login). Progressive content delivery caps what any seat can pull. |
+| **Anti-scraping / rate limiting** | Layered `express-rate-limit` (join brute-force, checkpoint guessing, content pull, login). Authenticated limits are keyed **per seat/token**, not per IP, so a whole classroom behind one NAT isn't throttled as a single client; the join limiter counts only failed attempts. Progressive content delivery caps what any seat can pull. |
 | **Transport** | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP, `noindex`. |
-| **Client deterrents** | The lab view disables copy / context-menu / drag / save & print shortcuts and text selection. These are deterrents layered on top of the real server-side guarantees. |
 | **Credentials** | Instructor passwords hashed with bcrypt; separate JWT secrets for instructor vs participant audiences. |
 
 ## Data model
@@ -397,18 +396,27 @@ real deployment**.
 | `SEED_INSTRUCTOR_USERNAME` / `SEED_INSTRUCTOR_PASSWORD` | `instructor` / `labmanual123` | Bootstrap instructor (first run only) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Allowed origins (empty in prod same-origin) |
 
-## Testing
-
-The templating engine — the security-critical core — has unit tests:
+## Testing & CI
 
 ```bash
 cd server
-npm test
+npm test          # unit + HTTP integration tests (node:test, no extra deps)
 ```
 
-Covers arithmetic precedence, string concatenation, the spec's Seat 7 → `.107`
-example, formula composition, placeholder injection, checkpoint-answer stripping,
-and sandbox rejection of unknown/prototype identifiers.
+Two suites run under Node's built-in test runner:
+
+- **`templating.test.js`** — the security-critical templating core: arithmetic
+  precedence, string concatenation, the spec's Seat 7 → `.107` example, formula
+  composition, placeholder injection, checkpoint-answer + step-solution
+  stripping, and sandbox rejection of unknown/prototype identifiers.
+- **`api.test.js`** — boots the real Express app on an ephemeral port against an
+  isolated temp DB and drives it with `fetch`: auth gating, progressive content
+  delivery (locked sections/answers never shipped), server-side checkpoint
+  validation, step-solution hint-gating, the live-session kill-switch, and
+  audit-log immutability.
+
+`.github/workflows/ci.yml` runs the server tests and a client production build
+on every push and pull request.
 
 ## Deployment notes
 
@@ -442,14 +450,14 @@ vLabs/
 │   │   ├── lib/               # templating engine, tokens, time, validation
 │   │   ├── middleware/        # auth (session gating), rate limits, errors
 │   │   └── routes/            # auth, templates, sessions, participant
-│   └── tests/                 # templating engine unit tests
+│   └── tests/                 # templating unit tests + HTTP integration tests
 └── client/                    # React + Vite SPA
     └── src/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin
         ├── components/        # StepCard, HintBox, SolutionBox, Checkpoint, Markdown,
         │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
-        ├── hooks/             # content protection, instructor API
+        ├── hooks/             # instructor API helper
         ├── context/           # AuthContext, ThemeContext (light/dark)
         ├── lib/               # templateFormat (JSON/Markdown import & export)
         ├── styles.css         # design system + light & dark themes

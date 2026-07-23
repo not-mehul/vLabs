@@ -102,9 +102,9 @@ body {
   line-height: 1.55;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
-body.no-select { user-select: none; -webkit-user-select: none; }
 a { color: var(--brand); text-decoration: none; }
 a:hover { text-decoration: underline; }
+.route-loading { display: grid; place-items: center; min-height: 100vh; color: var(--text-3); font-size: 0.95rem; }
 h1, h2, h3 { margin: 0 0 0.35em; line-height: 1.22; letter-spacing: -0.01em; font-weight: 600; }
 h1 { letter-spacing: -0.02em; }
 code { font-family: var(--mono); font-size: 0.9em; }
