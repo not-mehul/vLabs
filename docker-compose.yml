@@ -1,0 +1,29 @@
+# vLabs — single-container deployment (frontend + backend + SQLite).
+#
+# Per the tech spec this containerises the whole app so it drops onto a single
+# VM on the training-facility network. Put a TLS-terminating reverse proxy
+# (nginx / Caddy / Traefik) in front for the mandatory HTTPS.
+
+services:
+  vlabs:
+    build: .
+    image: vlabs:latest
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      # ⚠️  Override these before any real deployment.
+      JWT_INSTRUCTOR_SECRET: ${JWT_INSTRUCTOR_SECRET:-change-me-instructor}
+      JWT_PARTICIPANT_SECRET: ${JWT_PARTICIPANT_SECRET:-change-me-participant}
+      SEED_INSTRUCTOR_USERNAME: ${SEED_INSTRUCTOR_USERNAME:-instructor}
+      SEED_INSTRUCTOR_PASSWORD: ${SEED_INSTRUCTOR_PASSWORD:-labmanual123}
+      # Same-origin in production (backend serves the SPA), so no CORS needed.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      # Persist the SQLite database across container restarts.
+      - vlabs-data:/app/server/data
+
+volumes:
+  vlabs-data:
