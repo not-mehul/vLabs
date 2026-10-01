@@ -8,6 +8,8 @@ import {
   checkpointAnswer,
   checkpointAnswers,
   isCorrectAnswer,
+  matchCheckpoint,
+  stepHasCheckpoint,
   renderManual,
   isSectionCleared,
   computeUnlockedSection,
@@ -18,7 +20,13 @@ import {
   FUNCTION_NAMES,
 } from '../src/lib/templating.js';
 import { validateTemplatePayload } from '../src/lib/validateTemplate.js';
-import { normaliseTemplate, findUnknownPlaceholders } from '../../shared/template-schema.js';
+import {
+  normaliseTemplate,
+  findUnknownPlaceholders,
+  compileMask,
+  matchMask,
+  maskExample,
+} from '../../shared/template-schema.js';
 
 /* ------------------------------ Evaluator -------------------------------- */
 
@@ -314,8 +322,11 @@ test('shared normaliser produces the canonical shape and finds unknown placehold
   assert.deepEqual(t.content[0].steps[0].checkpoint, {
     prompt: '',
     placeholder: '',
+    mode: 'exact',
     answer: 'a',
     answers: ['b'],
+    pattern: '',
+    capture: '',
   });
   assert.equal(t.content[0].steps[0].type, 'desk');
   assert.deepEqual(t.content[0].steps[0].hints, []);
@@ -381,4 +392,207 @@ test('section gating: unlocked section advances only when checkpoints clear', ()
   assert.equal(computeSectionVisibleThrough(sections[0], 0, done), 2);
   assert.equal(isStepReachable(sections, 0, 2, done), true);
   assert.equal(isStepReachable(sections, 1, 0, done), true);
+});
+
+/* ----------------------- Names, info steps, patterns --------------------- */
+
+test('resolveVariables exposes participant names as built-ins and formula identifiers', () => {
+  const ctx = resolveVariables(
+    [
+      { name: 'USERNAME', expression: "slug(first_name) + '.' + slug(last_name)" },
+      { name: 'INITIALS', expression: "initials(first_name + ' ' + last_name)" },
+    ],
+    7,
+    { firstName: 'Mary-Jane', lastName: "O'Neil" },
+  );
+  assert.equal(ctx.FIRST_NAME, 'Mary-Jane');
+  assert.equal(ctx.LAST_NAME, "O'Neil");
+  assert.equal(ctx.FULL_NAME, "Mary-Jane O'Neil");
+  assert.equal(ctx.USERNAME, 'maryjane.oneil');
+  assert.equal(ctx.INITIALS, 'MO');
+  // Names default to empty strings when unknown (validation sample, old callers).
+  const bare = resolveVariables([], 1);
+  assert.equal(bare.FULL_NAME, '');
+  // Built-in names are reserved as variable names.
+  assert.throws(() => resolveVariables([{ name: 'FIRST_NAME', expression: "'x'" }], 1), /reserved/);
+});
+
+test('captured values become placeholders but never shadow variables or built-ins', () => {
+  const ctx = resolveVariables([{ name: 'HOST', expression: "'h'" }], 3, {
+    captured: { SERIAL: 'ABCD.1234.WXYZ', HOST: 'evil', SEAT_ID: 'evil', 'bad name': 'x' },
+  });
+  assert.equal(ctx.SERIAL, 'ABCD.1234.WXYZ');
+  assert.equal(ctx.HOST, 'h');
+  assert.equal(ctx.SEAT_ID, 3);
+  assert.equal(ctx['bad name'], undefined);
+  assert.equal(injectVariables('SN {{ SERIAL }}', ctx), 'SN ABCD.1234.WXYZ');
+});
+
+test('masks: compile, match, canonicalise and reject', () => {
+  // Separators optional on input, restored on output; casing per mask.
+  assert.equal(matchMask('XXXX.XXXX.XXXX', 'abcd1234wxyz'), 'ABCD.1234.WXYZ');
+  assert.equal(matchMask('XXXX.XXXX.XXXX', ' ABCD.1234.WXYZ '), 'ABCD.1234.WXYZ');
+  assert.equal(matchMask('XXXX.XXXX.XXXX', 'abcd-1234-wxyz'), null, 'different separator');
+  assert.equal(matchMask('XXXX.XXXX.XXXX', 'abcd.1234.wxy'), null, 'too short');
+  assert.equal(matchMask('XXXX.XXXX.XXXX', 'abcd.1234.wxyz9'), null, 'too long');
+  assert.equal(matchMask('99:99', '0730'), '07:30');
+  assert.equal(matchMask('99:99', '07:3x'), null);
+  assert.equal(matchMask('aa-AA', 'XY-xy'), 'xy-XY');
+  // Literal letters/digits are required; * takes anything; ? one visible char.
+  assert.equal(matchMask('SN-9999', 'sn1234'), 'SN-1234');
+  assert.equal(matchMask('SN-9999', '1234'), null);
+  assert.equal(matchMask('SN*', 'xx'), null);
+  assert.equal(matchMask('SN*', 'sn 12 34'), 'SN 12 34');
+  assert.equal(matchMask('??-9', 'a#-1'), 'a#-1');
+  assert.equal(matchMask('\\A9', 'A5'), 'A5');
+  assert.equal(matchMask('\\A9', 'B5'), null);
+  assert.equal(matchMask('XX XX', 'abcd'), 'AB CD');
+  // Examples are plausible and vary per position.
+  assert.equal(maskExample('XXXX.XXXX.XXXX'), 'AB12.CD34.EFAB');
+  assert.equal(maskExample('AA-9999'), 'AB-1234');
+  assert.equal(maskExample(''), '');
+  // Invalid masks.
+  assert.throws(() => compileMask(''), /empty/);
+  assert.throws(() => compileMask('nope'), /no wildcards/);
+  assert.throws(() => compileMask('9\\'), /dangling/);
+  assert.throws(() => compileMask('****'), /at most three/);
+  assert.throws(() => compileMask('X'.repeat(121)), /too long/);
+});
+
+test('pattern checkpoints match on format and return the canonical value', () => {
+  const step = {
+    type: 'desk',
+    body: 'b',
+    checkpoint: { prompt: 'Serial', mode: 'pattern', pattern: 'XXXX.XXXX.XXXX', capture: 'SERIAL' },
+  };
+  const ctx = resolveVariables([], 1);
+  assert.equal(stepHasCheckpoint(step), true);
+  assert.deepEqual(matchCheckpoint(step, ctx, 'abcd1234wxyz'), {
+    ok: true,
+    value: 'ABCD.1234.WXYZ',
+  });
+  assert.deepEqual(matchCheckpoint(step, ctx, 'nope'), { ok: false, value: null });
+  assert.equal(isCorrectAnswer(step, ctx, 'ABCD.1234.WXYZ'), true);
+  assert.deepEqual(checkpointAnswers(step, ctx), [], 'no enumerable answers');
+  // Rendered shape ships the mode but never the mask.
+  const r = renderStep(step, ctx, 0);
+  assert.equal(r.checkpoint.mode, 'pattern');
+  assert.equal(r.checkpoint.pattern, undefined);
+  // Exact checkpoints report the resolved authored answer as the value.
+  const exact = {
+    type: 'computer',
+    body: 'b',
+    checkpoint: { prompt: 'IP', answer: '{{ SEAT_ID }}.1', answers: ['{{ SEAT_ID }}.1/24'] },
+  };
+  assert.deepEqual(matchCheckpoint(exact, ctx, ' 1.1/24 '), { ok: true, value: '1.1/24' });
+  assert.equal(renderStep(exact, ctx, 0).checkpoint.mode, 'exact');
+  // Pattern mode without a mask is not a checkpoint; info steps never are.
+  assert.equal(stepHasCheckpoint({ type: 'desk', checkpoint: { mode: 'pattern' } }), false);
+  assert.equal(stepHasCheckpoint({ type: 'info', checkpoint: { answer: 'x' } }), false);
+});
+
+test('info steps are context only: normaliser and renderer strip task fields', () => {
+  const t = normaliseTemplate({
+    title: 'x',
+    content: [
+      {
+        steps: [
+          {
+            type: 'info',
+            title: 'Read me',
+            body: 'ctx',
+            hints: [{ label: 'h', text: 't' }],
+            solution: 'sol',
+            checkpoint: { answer: 'a' },
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(t.content[0].steps[0], {
+    type: 'info',
+    title: 'Read me',
+    body: 'ctx',
+    hints: [],
+    solution: '',
+    checkpoint: null,
+  });
+  const r = renderStep(t.content[0].steps[0], resolveVariables([], 1), 0);
+  assert.equal(r.type, 'info');
+  assert.equal(r.checkpoint, undefined);
+  assert.deepEqual(r.hints, []);
+  // An info-only section is cleared immediately.
+  assert.equal(isSectionCleared({ steps: t.content[0].steps }, 0, new Set()), true);
+});
+
+test('validateTemplatePayload: pattern + capture rules and order-aware placeholders', () => {
+  const base = (steps, variables = []) => ({
+    title: 'Lab',
+    variables,
+    content: [{ title: 'S1', steps }],
+  });
+  const pat = (extra = {}) => ({
+    type: 'desk',
+    title: 'Serial',
+    body: 'read it',
+    checkpoint: {
+      prompt: 'Serial?',
+      mode: 'pattern',
+      pattern: 'XXXX.XXXX.XXXX',
+      capture: 'SERIAL',
+      ...extra,
+    },
+  });
+
+  // Happy path: stored shape carries mode/pattern/capture and no answer.
+  const clean = validateTemplatePayload(
+    base([pat(), { type: 'info', title: 'Next', body: 'You entered {{ SERIAL }}' }]),
+  );
+  assert.deepEqual(clean.content[0].steps[0].checkpoint, {
+    prompt: 'Serial?',
+    placeholder: '',
+    mode: 'pattern',
+    pattern: 'XXXX.XXXX.XXXX',
+    capture: 'SERIAL',
+  });
+  assert.equal(clean.content[0].steps[1].hints.length, 0);
+
+  const errorsOf = (payload) => {
+    try {
+      validateTemplatePayload(payload);
+    } catch (err) {
+      return err.details;
+    }
+    return [];
+  };
+  // Referenced before the capturing checkpoint (same step body counts as before).
+  assert.match(
+    errorsOf(base([{ ...pat(), body: 'Serial {{ SERIAL }}' }])).join(';'),
+    /before the checkpoint that captures it/,
+  );
+  // Invalid mask, bad/reserved/duplicate capture names.
+  assert.match(errorsOf(base([pat({ pattern: 'nope' })])).join(';'), /no wildcards/);
+  assert.match(
+    errorsOf(base([pat({ capture: 'bad name' })])).join(';'),
+    /not a valid variable name/,
+  );
+  assert.match(errorsOf(base([pat({ capture: 'FIRST_NAME' })])).join(';'), /reserved/);
+  assert.match(errorsOf(base([pat({ capture: 'pad' })])).join(';'), /reserved/);
+  assert.match(
+    errorsOf(base([pat({ capture: 'HOST' })], [{ name: 'HOST', expression: "'h'" }])).join(';'),
+    /already a declared variable/,
+  );
+  assert.match(errorsOf(base([pat(), pat()])).join(';'), /already captured by/);
+  // Name built-ins are reserved variable names; name placeholders need no declaration.
+  assert.match(
+    errorsOf(
+      base([{ type: 'desk', title: 't', body: 'b' }], [{ name: 'LAST_NAME', expression: "'x'" }]),
+    ).join(';'),
+    /reserved/,
+  );
+  assert.equal(
+    errorsOf(base([{ type: 'desk', title: 't', body: 'Hi {{ FIRST_NAME }} {{ FULL_NAME }}' }]))
+      .length,
+    0,
+  );
 });

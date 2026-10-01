@@ -20,6 +20,7 @@ import {
   blankStep,
   blankSection,
   findUnknownPlaceholders,
+  maskExample,
   LIMITS,
 } from '../../../shared/template-schema.js';
 
@@ -55,10 +56,15 @@ function VariableEditor({ variables, onChange, functions }) {
         </button>
       </div>
       <p className="muted small">
-        Formulas run per seat. <code>seat</code> is the participant's number. Use arithmetic and
-        string concatenation, e.g. <code>'192.168.1.' + (100 + seat)</code>. Reference these as{' '}
-        <code>{'{{ NAME }}'}</code> in step bodies. <code>{'{{ SEAT_ID }}'}</code> is always
-        available. Later formulas can reference earlier ones.
+        Formulas run per participant. <code>seat</code> is their number, <code>first_name</code> and{' '}
+        <code>last_name</code> are their registered names. Use arithmetic and string concatenation,
+        e.g. <code>'192.168.1.' + (100 + seat)</code> or{' '}
+        <code>slug(first_name) + '.' + slug(last_name)</code>. Reference these as{' '}
+        <code>{'{{ NAME }}'}</code> in step bodies. <code>{'{{ SEAT_ID }}'}</code>,{' '}
+        <code>{'{{ FIRST_NAME }}'}</code>, <code>{'{{ LAST_NAME }}'}</code> and{' '}
+        <code>{'{{ FULL_NAME }}'}</code> are always available. Later formulas can reference earlier
+        ones. Values entered at pattern checkpoints can also be saved as variables for the steps
+        that follow (see the checkpoint settings).
       </p>
       {functions.length > 0 && (
         <p className="muted small">
@@ -156,34 +162,57 @@ function HintEditor({ hints, onChange }) {
 
 /* ----------------------------- Step editor ------------------------------ */
 
+const STEP_TYPE_CHIPS = [
+  { type: 'desk', icon: 'desk', label: 'Desk' },
+  { type: 'computer', icon: 'computer', label: 'Computer' },
+  { type: 'info', icon: 'info', label: 'Info' },
+];
+
+const EMPTY_CHECKPOINT = {
+  prompt: '',
+  placeholder: '',
+  mode: 'exact',
+  answer: '',
+  answers: [],
+  pattern: '',
+  capture: '',
+};
+
 function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
   const set = (patch) => onChange({ ...step, ...patch });
-  const setCp = (patch) => set({ checkpoint: { ...step.checkpoint, ...patch } });
-  const hasCheckpoint = Boolean(step.checkpoint);
+  const setCp = (patch) =>
+    set({ checkpoint: { ...EMPTY_CHECKPOINT, ...step.checkpoint, ...patch } });
+  const isInfo = step.type === 'info';
+  const hasCheckpoint = Boolean(step.checkpoint) && !isInfo;
+  const cp = { ...EMPTY_CHECKPOINT, ...(step.checkpoint || {}) };
+  const isPattern = cp.mode === 'pattern';
   // Alternatives are edited as one-per-line text; kept as a string while
   // typing so a trailing newline doesn't get eaten by normalisation.
-  const altText = (step.checkpoint?.answers || []).join('\n');
+  const altText = (cp.answers || []).join('\n');
+  const example = isPattern ? maskExample(cp.pattern) : '';
+  // Switching to Info drops task-only fields; keep them in the object until
+  // the author saves (normalisation strips them) so flipping back is painless.
   return (
     <div className="step-editor">
       <div className="step-editor__head">
         <span className="step-editor__num">Step {index + 1}</span>
         <div className="step-editor__type" role="group" aria-label="Step type">
-          <button
-            type="button"
-            className={`chip ${step.type === 'desk' ? 'chip--active' : ''}`}
-            aria-pressed={step.type === 'desk'}
-            onClick={() => set({ type: 'desk' })}
-          >
-            <Icon name="desk" size={15} /> Desk
-          </button>
-          <button
-            type="button"
-            className={`chip ${step.type === 'computer' ? 'chip--active' : ''}`}
-            aria-pressed={step.type === 'computer'}
-            onClick={() => set({ type: 'computer' })}
-          >
-            <Icon name="computer" size={15} /> Computer
-          </button>
+          {STEP_TYPE_CHIPS.map((c) => (
+            <button
+              key={c.type}
+              type="button"
+              className={`chip ${step.type === c.type ? 'chip--active' : ''}`}
+              aria-pressed={step.type === c.type}
+              title={
+                c.type === 'info'
+                  ? 'Context only — no hints, solution or checkpoint'
+                  : `${c.label} task`
+              }
+              onClick={() => set({ type: c.type })}
+            >
+              <Icon name={c.icon} size={15} /> {c.label}
+            </button>
+          ))}
         </div>
         <div className="step-editor__move">
           <button
@@ -224,99 +253,187 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
       />
       <textarea
         className="field__input step-editor__body"
-        placeholder="Step body (Markdown supported). Use {{ VARIABLE }} placeholders."
+        placeholder={
+          isInfo
+            ? 'Context for the participant (Markdown supported). Use {{ VARIABLE }} placeholders.'
+            : 'Step body (Markdown supported). Use {{ VARIABLE }} placeholders.'
+        }
         aria-label={`Step ${index + 1} body`}
         rows={5}
         value={step.body}
         onChange={(e) => set({ body: e.target.value })}
       />
 
-      <HintEditor hints={step.hints} onChange={(hints) => set({ hints })} />
+      {isInfo && (
+        <p className="muted small">
+          <Icon name="info" size={13} /> Informational step: shown as context to read. It has no
+          hints, solution or checkpoint and never blocks progress.
+        </p>
+      )}
 
-      <label className="field solution-editor">
-        <span className="field__label">
-          <Icon name="key" size={14} /> Solution (Markdown — optional)
-        </span>
-        <textarea
-          className="field__input step-editor__body"
-          rows={4}
-          placeholder="Optional walkthrough. Markdown supported — bullet points, links, etc. Revealed to a participant once they open every hint on this step."
-          value={step.solution || ''}
-          onChange={(e) => set({ solution: e.target.value })}
-        />
-      </label>
+      {!isInfo && <HintEditor hints={step.hints} onChange={(hints) => set({ hints })} />}
 
-      <div className="checkpoint-editor">
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={hasCheckpoint}
-            onChange={(e) =>
-              set({
-                checkpoint: e.target.checked
-                  ? { prompt: '', placeholder: '', answer: '', answers: [] }
-                  : null,
-              })
-            }
+      {!isInfo && (
+        <label className="field solution-editor">
+          <span className="field__label">
+            <Icon name="key" size={14} /> Solution (Markdown — optional)
+          </span>
+          <textarea
+            className="field__input step-editor__body"
+            rows={4}
+            placeholder="Optional walkthrough. Markdown supported — bullet points, links, etc. Revealed to a participant once they open every hint on this step."
+            value={step.solution || ''}
+            onChange={(e) => set({ solution: e.target.value })}
           />
-          <span>Add a checkpoint (gates the next section once cleared)</span>
         </label>
-        {hasCheckpoint && (
-          <div className="checkpoint-editor__fields">
-            <label className="field">
-              <span className="field__label">Prompt</span>
-              <input
-                className="field__input"
-                placeholder="Prompt shown to participant"
-                value={step.checkpoint.prompt}
-                onChange={(e) => setCp({ prompt: e.target.value })}
-              />
-            </label>
-            <div className="field-row">
+      )}
+
+      {!isInfo && (
+        <div className="checkpoint-editor">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={hasCheckpoint}
+              onChange={(e) =>
+                set({ checkpoint: e.target.checked ? { ...EMPTY_CHECKPOINT } : null })
+              }
+            />
+            <span>Add a checkpoint (gates the next section once cleared)</span>
+          </label>
+          {hasCheckpoint && (
+            <div className="checkpoint-editor__fields">
               <label className="field">
-                <span className="field__label">Input placeholder</span>
+                <span className="field__label">Prompt</span>
                 <input
                   className="field__input"
-                  placeholder="optional"
-                  value={step.checkpoint.placeholder}
-                  onChange={(e) => setCp({ placeholder: e.target.value })}
+                  placeholder="Prompt shown to participant"
+                  value={cp.prompt}
+                  onChange={(e) => setCp({ prompt: e.target.value })}
                 />
               </label>
+
+              <div className="step-editor__type" role="group" aria-label="Answer type">
+                <button
+                  type="button"
+                  className={`chip ${!isPattern ? 'chip--active' : ''}`}
+                  aria-pressed={!isPattern}
+                  onClick={() => setCp({ mode: 'exact' })}
+                >
+                  <Icon name="check" size={14} /> Exact value
+                </button>
+                <button
+                  type="button"
+                  className={`chip ${isPattern ? 'chip--active' : ''}`}
+                  aria-pressed={isPattern}
+                  title="For values you can't know in advance, e.g. a serial number"
+                  onClick={() => setCp({ mode: 'pattern' })}
+                >
+                  <Icon name="key" size={14} /> Matches a format
+                </button>
+              </div>
+
+              {!isPattern ? (
+                <>
+                  <div className="field-row">
+                    <label className="field">
+                      <span className="field__label">Input placeholder</span>
+                      <input
+                        className="field__input"
+                        placeholder="optional"
+                        value={cp.placeholder}
+                        onChange={(e) => setCp({ placeholder: e.target.value })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field__label">Expected answer</span>
+                      <input
+                        className="field__input mono"
+                        placeholder="may use {{ VARIABLES }}"
+                        value={cp.answer}
+                        onChange={(e) => setCp({ answer: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <label className="field">
+                    <span className="field__label">Also accept (one per line, optional)</span>
+                    <textarea
+                      className="field__input mono"
+                      rows={2}
+                      placeholder={'e.g. {{ HOST_IP }}/24'}
+                      value={altText}
+                      onChange={(e) => setCp({ answers: e.target.value.split('\n') })}
+                      onBlur={(e) =>
+                        setCp({
+                          answers: e.target.value
+                            .split('\n')
+                            .map((a) => a.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                  </label>
+                  <p className="muted small">
+                    Answers are validated server-side (whitespace and case are forgiven) and never
+                    sent to the browser.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="field-row">
+                    <label className="field">
+                      <span className="field__label">Format (mask)</span>
+                      <input
+                        className="field__input mono"
+                        placeholder="e.g. XXXX.XXXX.XXXX"
+                        value={cp.pattern}
+                        onChange={(e) => setCp({ pattern: e.target.value })}
+                        aria-describedby={`mask-help-${index}`}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field__label">Input placeholder</span>
+                      <input
+                        className="field__input"
+                        placeholder={example ? `e.g. ${example}` : 'optional'}
+                        value={cp.placeholder}
+                        onChange={(e) => setCp({ placeholder: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <p className="muted small" id={`mask-help-${index}`}>
+                    <code>9</code> digit · <code>A</code>/<code>a</code> letter (stored upper/lower)
+                    · <code>X</code>/<code>x</code> letter or digit · <code>?</code> any character ·{' '}
+                    <code>*</code> anything · other letters/digits must match · punctuation and
+                    spaces are optional separators that are restored in the stored value.
+                    {cp.pattern ? (
+                      example ? (
+                        <>
+                          {' '}
+                          Accepts e.g. <code>{example}</code> (also without separators, any case).
+                        </>
+                      ) : (
+                        <span className="text-warn"> This mask is not valid yet.</span>
+                      )
+                    ) : null}
+                  </p>
+                </>
+              )}
+
               <label className="field">
-                <span className="field__label">Expected answer</span>
+                <span className="field__label">
+                  Save the entered value as a variable for later steps (optional)
+                </span>
                 <input
                   className="field__input mono"
-                  placeholder="may use {{ VARIABLES }}"
-                  value={step.checkpoint.answer}
-                  onChange={(e) => setCp({ answer: e.target.value })}
+                  placeholder="e.g. SERIAL  →  then use {{ SERIAL }} in the following steps"
+                  value={cp.capture}
+                  onChange={(e) => setCp({ capture: e.target.value.trim() })}
                 />
               </label>
             </div>
-            <label className="field">
-              <span className="field__label">Also accept (one per line, optional)</span>
-              <textarea
-                className="field__input mono"
-                rows={2}
-                placeholder={'e.g. {{ HOST_IP }}/24'}
-                value={altText}
-                onChange={(e) => setCp({ answers: e.target.value.split('\n') })}
-                onBlur={(e) =>
-                  setCp({
-                    answers: e.target.value
-                      .split('\n')
-                      .map((a) => a.trim())
-                      .filter(Boolean),
-                  })
-                }
-              />
-            </label>
-            <p className="muted small">
-              Answers are validated server-side (whitespace and case are forgiven) and never sent to
-              the browser.
-            </p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -851,12 +968,17 @@ export default function TemplateEditor() {
             <strong>Unknown placeholder{unknown.length > 1 ? 's' : ''}:</strong>{' '}
             {unknown.slice(0, 6).map((u, i) => (
               <span key={`${u.name}-${u.where}`}>
-                <code>{`{{ ${u.name} }}`}</code> <span className="muted">({u.where})</span>
+                <code>{`{{ ${u.name} }}`}</code>{' '}
+                <span className="muted">
+                  ({u.where}
+                  {u.early ? ' — used before the checkpoint that captures it' : ''})
+                </span>
                 {i < Math.min(unknown.length, 6) - 1 ? ', ' : ''}
               </span>
             ))}
             {unknown.length > 6 ? ` and ${unknown.length - 6} more` : ''}. Declare the variable in
-            Settings or fix the spelling — saving will be refused otherwise.
+            Settings, fix the spelling, or move the reference after the capturing checkpoint —
+            saving will be refused otherwise.
           </span>
         </div>
       )}

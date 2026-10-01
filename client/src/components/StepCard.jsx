@@ -5,10 +5,12 @@ import SolutionBox from './SolutionBox.jsx';
 import Checkpoint from './Checkpoint.jsx';
 import Icon from './Icon.jsx';
 
-// Real-world lab activity types: physical bench work vs. work on the machine.
+// Real-world lab activity types: physical bench work, work on the machine, or
+// context to read (no task, so no hints/solution/checkpoint).
 const TYPE_META = {
   desk: { label: 'Hands-On', icon: 'desk' },
   computer: { label: 'Workstation', icon: 'computer' },
+  info: { label: 'Read', icon: 'info' },
 };
 
 /**
@@ -26,7 +28,8 @@ export default function StepCard({
   onRevealSolution,
 }) {
   const meta = TYPE_META[step.type] || TYPE_META.desk;
-  const hints = step.hints || [];
+  const isInfo = step.type === 'info';
+  const hints = isInfo ? [] : step.hints || [];
 
   // Track hints opened locally, unioned with the server's "taken" flags, so the
   // reveal-solution affordance appears the instant the last hint is opened.
@@ -73,7 +76,7 @@ export default function StepCard({
         </div>
       )}
 
-      {step.has_solution && (
+      {!isInfo && step.has_solution && (
         <SolutionBox
           solution={step.solution}
           available={allHintsTaken}
@@ -81,10 +84,11 @@ export default function StepCard({
         />
       )}
 
-      {step.checkpoint && (
+      {!isInfo && step.checkpoint && (
         <Checkpoint
           prompt={step.checkpoint.prompt}
           placeholder={step.checkpoint.placeholder}
+          mode={step.checkpoint.mode}
           completed={step.checkpoint.completed}
           onSubmit={(answer) => onCheckpoint(sectionIndex, step.index, answer)}
         />

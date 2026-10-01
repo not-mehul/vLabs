@@ -46,7 +46,15 @@ export function participantsToCsv(rows) {
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = cols.join(',');
-  const lines = (rows || []).map((r) => cols.map((c) => esc(r[c])).join(','));
+  // Values captured at pattern checkpoints (e.g. SERIAL) become extra columns,
+  // in template order, taken from the first row's `captured` keys (the server
+  // emits the same keys for every row).
+  const captureCols = Object.keys((rows && rows[0] && rows[0].captured) || {});
+  const header = [...cols, ...captureCols].join(',');
+  const lines = (rows || []).map((r) =>
+    [...cols.map((c) => esc(r[c])), ...captureCols.map((c) => esc((r.captured || {})[c]))].join(
+      ',',
+    ),
+  );
   return [header, ...lines].join('\n') + '\n';
 }

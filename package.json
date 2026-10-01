@@ -1,6 +1,6 @@
 {
   "name": "vlabs",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Dynamic lab manual — repo-level dev tooling (setup/dev/build/lint/format/test) for the server and client workspaces",
   "private": true,
   "type": "module",

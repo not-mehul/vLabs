@@ -19,6 +19,14 @@ const P = {
       <path d="M8 20h8M12 16v4" />
     </>
   ),
+  // Informational step — a book (context to read, nothing to do)
+  info: (
+    <>
+      <path d="M12 6.5C10.5 5.2 8.6 4.5 6.5 4.5H4v13h2.5c2.1 0 4 .7 5.5 2" />
+      <path d="M12 6.5c1.5-1.3 3.4-2 5.5-2H20v13h-2.5c-2.1 0-4 .7-5.5 2" />
+      <path d="M12 6.5v13" />
+    </>
+  ),
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />

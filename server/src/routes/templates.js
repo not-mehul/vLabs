@@ -4,6 +4,7 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
 import { renderManual, countSteps, injectVariables, FUNCTION_NAMES } from '../lib/templating.js';
+import { maskExample } from '../../../shared/template-schema.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 
@@ -286,7 +287,9 @@ router.post('/:id/restore', (req, res) => {
  * Authoring aid: render the manual for a chosen seat so instructors can see the
  * resolved output without a live session. Also accepts an inline draft body so
  * unsaved edits can be previewed (draft is fully validated first, so authoring
- * errors such as unknown placeholders surface here too).
+ * errors such as unknown placeholders surface here too). Optional
+ * `first_name` / `last_name` stand in for the participant; values captured by
+ * pattern checkpoints are stood in by an example matching each mask.
  */
 router.post(
   '/:id/preview',
@@ -306,7 +309,24 @@ router.post(
       variables = JSON.parse(row.variables);
     }
 
-    const { context, sections } = renderManual(content, variables, seatId);
+    const name = (v, fallback) =>
+      String(v ?? '')
+        .trim()
+        .slice(0, 60) || fallback;
+    const who = {
+      firstName: name(req.body?.first_name, 'Sample'),
+      lastName: name(req.body?.last_name, 'Participant'),
+      captured: {},
+    };
+    for (const section of content) {
+      for (const step of section.steps || []) {
+        const cp = step.checkpoint;
+        if (cp?.capture) {
+          who.captured[cp.capture] = cp.pattern ? maskExample(cp.pattern) : cp.answer || '';
+        }
+      }
+    }
+    const { context, sections } = renderManual(content, variables, seatId, who);
     // Instructor preview shows authored solutions inline (unlocked) so the
     // author can see the rendered walkthrough — this path is instructor-only,
     // so it never leaks to a participant.

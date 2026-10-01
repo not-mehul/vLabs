@@ -9,7 +9,7 @@ import Icon from './Icon.jsx';
  * Hints and the (optional) solution are rendered by StepCard above the
  * checkpoint, so the checkpoint itself is purely the answer gate.
  */
-export default function Checkpoint({ prompt, placeholder, completed, onSubmit }) {
+export default function Checkpoint({ prompt, placeholder, mode, completed, onSubmit }) {
   const inputId = useId();
   const errorId = useId();
   const [value, setValue] = useState('');
@@ -35,7 +35,11 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
       const ok = await onSubmit(value.trim());
       if (!ok) {
         setStatus('wrong');
-        setError('Not quite — check your work and try again.');
+        setError(
+          mode === 'pattern'
+            ? `That doesn't look like the expected format${placeholder ? ` (${placeholder})` : ''} — check it and try again.`
+            : 'Not quite — check your work and try again.',
+        );
       }
     } catch (err) {
       setStatus('wrong');

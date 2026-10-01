@@ -28,6 +28,8 @@
   --desk-soft: rgba(255, 85, 0, 0.1);
   --computer: #007faf; /* Blue 600 */
   --computer-soft: rgba(0, 127, 175, 0.09);
+  --info: #5b6472; /* neutral slate: context, not a task */
+  --info-soft: rgba(91, 100, 114, 0.1);
 
   --success: #0f8a58; /* darkened Green 400 */
   --success-soft: rgba(38, 204, 134, 0.14);
@@ -74,6 +76,8 @@
   --desk-soft: rgba(255, 122, 51, 0.16);
   --computer: #3ac1eb;
   --computer-soft: rgba(58, 193, 235, 0.15);
+  --info: #a7b0bd;
+  --info-soft: rgba(167, 176, 189, 0.14);
 
   --success: #26cc86; /* Green 400 */
   --success-soft: rgba(38, 204, 134, 0.15);
@@ -905,6 +909,10 @@ select.field__input {
 .card--computer {
   border-left-color: var(--computer);
 }
+.card--info {
+  border-left-color: var(--info);
+  border-left-style: dashed;
+}
 .card__head {
   display: flex;
   justify-content: space-between;
@@ -935,6 +943,10 @@ select.field__input {
 .card--computer .card__kind-tile {
   background: var(--computer-soft);
   color: var(--computer);
+}
+.card--info .card__kind-tile {
+  background: var(--info-soft);
+  color: var(--info);
 }
 .card__count {
   color: var(--text-3);

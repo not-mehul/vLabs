@@ -37,13 +37,27 @@
  *   > checkpoint: Prompt shown to the participant :: {{ HOST_IP }} | {{ HOST_IP }}/24
  *   > placeholder: e.g. 10.0.0.1XX
  *
- *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]
+ *   ## [computer] Read the serial number
+ *   Body…
+ *
+ *   > checkpoint: Enter the serial printed on the label
+ *   > pattern: XXXX.XXXX.XXXX
+ *   > capture: SERIAL
+ *
+ *   ## [info] Background
+ *   Context only — no hints, solution or checkpoint.
+ *
+ *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]/[info]
  *   prefix sets the type, default desk). `> hint:` and `> checkpoint:` lines use
  *   `::` to separate the two parts; write `\::` for a literal `::`. Checkpoint
  *   answers may list alternatives separated by ` | ` (write `\|` for a literal
- *   pipe). `> placeholder:` sets the checkpoint's input placeholder.
- *   `> solution:` starts a block whose following quoted (`> `) lines are the
- *   step's markdown solution. Round-trips through export → import are lossless.
+ *   pipe). A checkpoint with no `:: answer` part followed by `> pattern: MASK`
+ *   is a pattern checkpoint (9 digit, A/a letter, X/x letter-or-digit, ? any,
+ *   * anything; punctuation = optional separator). `> capture: NAME` saves the
+ *   accepted value as {{ NAME }} for later steps. `> placeholder:` sets the
+ *   checkpoint's input placeholder. `> solution:` starts a block whose following
+ *   quoted (`> `) lines are the step's markdown solution. Round-trips through
+ *   export → import are lossless.
  */
 
 import { normaliseTemplate } from '../../../shared/template-schema.js';
@@ -88,7 +102,8 @@ function splitAnswers(str) {
 }
 
 const isFence = (line) => /^\s{0,3}(```|~~~)/.test(line);
-const isDirective = (line) => /^>\s*(hint|solution|checkpoint|placeholder):/i.test(line);
+const isDirective = (line) =>
+  /^>\s*(hint|solution|checkpoint|placeholder|pattern|capture):/i.test(line);
 
 /* ------------------------------- Export --------------------------------- */
 
@@ -149,8 +164,14 @@ export function templateToMarkdown(input) {
       if (step.checkpoint) {
         const cp = step.checkpoint;
         lines.push('');
-        const answers = [cp.answer, ...cp.answers].map((a) => escSep(escPipe(a))).join(' | ');
-        lines.push(`> checkpoint: ${escSep(cp.prompt)} :: ${answers}`);
+        if (cp.mode === 'pattern') {
+          lines.push(`> checkpoint: ${escSep(cp.prompt)}`);
+          lines.push(`> pattern: ${cp.pattern}`);
+        } else {
+          const answers = [cp.answer, ...cp.answers].map((a) => escSep(escPipe(a))).join(' | ');
+          lines.push(`> checkpoint: ${escSep(cp.prompt)} :: ${answers}`);
+        }
+        if (cp.capture) lines.push(`> capture: ${cp.capture}`);
         if (cp.placeholder) lines.push(`> placeholder: ${cp.placeholder}`);
       }
       lines.push('');
@@ -255,7 +276,7 @@ export function parseMarkdownTemplate(text) {
       }
       let heading = line.replace(/^##\s+/, '').trim();
       let type = 'desk';
-      const m = heading.match(/^\[(desk|computer)\]\s*/i);
+      const m = heading.match(/^\[(desk|computer|info)\]\s*/i);
       if (m) {
         type = m[1].toLowerCase();
         heading = heading.slice(m[0].length);
@@ -277,12 +298,29 @@ export function parseMarkdownTemplate(text) {
       const rest = line.replace(/^>\s*checkpoint:/i, '').trim();
       const [prompt, answerPart] = splitOnceUnescaped(rest);
       const [answer = '', ...alternatives] = splitAnswers(answerPart);
+      // No answer part: a `> pattern:` line is expected to follow.
       step.checkpoint = {
         prompt: (prompt || 'Enter the value to continue').trim(),
         placeholder: '',
+        mode: answer ? 'exact' : 'pattern',
         answer,
         answers: alternatives,
+        pattern: '',
+        capture: '',
       };
+      afterDirective = true;
+    } else if (/^>\s*pattern:/i.test(line) && step) {
+      const value = line.replace(/^>\s*pattern:/i, '').trim();
+      if (step.checkpoint) {
+        step.checkpoint.mode = 'pattern';
+        step.checkpoint.pattern = value;
+        step.checkpoint.answer = '';
+        step.checkpoint.answers = [];
+      }
+      afterDirective = true;
+    } else if (/^>\s*capture:/i.test(line) && step) {
+      const value = line.replace(/^>\s*capture:/i, '').trim();
+      if (step.checkpoint) step.checkpoint.capture = value;
       afterDirective = true;
     } else if (/^>\s*placeholder:/i.test(line) && step) {
       const value = line.replace(/^>\s*placeholder:/i, '').trim();
@@ -342,14 +380,26 @@ variables:
 
 # Section 1 · Bench Preparation
 
-## [desk] Prepare your bench
-Welcome, participant #{{ SEAT_ID }}.
+## [info] About this lab
+Welcome, {{ FIRST_NAME }} — you are participant #{{ SEAT_ID }}. This lab walks you through
+cabling a bench and configuring a static IP. Informational steps like this one are context
+only: there is nothing to do here.
 
+## [desk] Prepare your bench
 1. Power on your workstation.
 2. You have been assigned **switch port {{ PORT_NUM }}** (cable tag {{ SEAT_TAG }}).
 
 > hint: Where is the patch panel? :: It is the grey unit above your desk.
 > Look for the label matching your seat tag.
+
+## [desk] Record your switch's serial number
+Find the label on the underside of your switch and enter its serial number. The format is
+four groups separated by dots, e.g. \`ABCD.1234.WXYZ\` — dots are optional when typing.
+
+> checkpoint: Enter the serial number printed on the switch label
+> pattern: XXXX.XXXX.XXXX
+> capture: SERIAL
+> placeholder: e.g. ABCD.1234.WXYZ
 
 # Section 2 · Network Configuration
 
@@ -364,7 +414,8 @@ sudo ip addr add {{ HOST_IP }}/24 dev eth0
 > hint: Command line :: sudo ip addr add {{ HOST_IP }}/24 dev eth0
 
 ## [computer] Confirm
-Record your assigned Host IP below to complete the lab.
+You configured switch **{{ SERIAL }}** from seat {{ SEAT_TAG }}. Record your assigned Host IP
+below to complete the lab.
 
 > hint: How do I read my IP? :: Run \`ip addr show eth0\` and copy the IPv4 address.
 

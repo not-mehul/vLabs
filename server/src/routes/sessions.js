@@ -73,6 +73,28 @@ function ownedOr404(req) {
   return row;
 }
 
+/** Parse a JSON object column defensively. */
+function safeObject(json) {
+  try {
+    const v = JSON.parse(json || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Names captured by pattern checkpoints, in template order. */
+function captureNamesOf(sections) {
+  const out = [];
+  for (const s of sections) {
+    for (const step of s.steps || []) {
+      const c = step.checkpoint?.capture;
+      if (c && !out.includes(c)) out.push(c);
+    }
+  }
+  return out;
+}
+
 /** Build the analytics view for one participant. */
 function participantView(p, sections) {
   const completed = new Set(JSON.parse(p.completed_checkpoints));
@@ -100,6 +122,7 @@ function participantView(p, sections) {
     current_section: p.current_section,
     completed_sections: completedSections,
     completed_checkpoints: [...completed],
+    captured: safeObject(p.captured_values),
     hints_taken: JSON.parse(p.hints_taken || '[]').length,
     solutions_revealed: JSON.parse(p.revealed_solutions || '[]').length,
     finished,
@@ -206,6 +229,7 @@ router.get('/:id', (req, res) => {
 
   res.json({
     ...summarise(row),
+    capture_names: captureNamesOf(sections),
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
     section_count: sectionCount,
@@ -286,6 +310,7 @@ router.delete('/:id', (req, res) => {
 router.get('/:id/export', (req, res) => {
   const row = ownedOr404(req);
   const sections = JSON.parse(row.content);
+  const captureNames = captureNamesOf(sections);
   const participants = q.participants.all(row.id).map((p) => {
     const view = participantView(p, sections);
     return {
@@ -293,6 +318,9 @@ router.get('/:id/export', (req, res) => {
       first_name: p.first_name,
       last_name: p.last_name,
       name: view.name,
+      // One key per captured variable (empty string until the seat gets there),
+      // so every row has the same columns.
+      captured: Object.fromEntries(captureNames.map((n) => [n, view.captured[n] ?? ''])),
       current_section: view.current_section + 1,
       sections_completed: view.completed_sections,
       total_sections: sections.length,
@@ -318,6 +346,7 @@ router.get('/:id/export', (req, res) => {
       template_version: row.template_version,
       status: sessionStatus(row),
       section_count: sections.length,
+      capture_names: captureNames,
       created_at: row.created_at,
       expires_at: row.expires_at,
       ended_at: row.ended_at,

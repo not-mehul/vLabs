@@ -5,11 +5,14 @@ import { log } from '../lib/logger.js';
 
 /**
  * Sample master template. Demonstrates every content feature:
- *   - Desk Action vs Computer Action cards
- *   - mustache-style {{PLACEHOLDER}} variables resolved per seat
+ *   - Desk, Computer and Info (context-only) cards
+ *   - mustache-style {{PLACEHOLDER}} variables resolved per participant,
+ *     including the built-in {{ FIRST_NAME }}
  *   - a formula helper (pad) for zero-padded labels
  *   - collapsible hints (progressive disclosure) and a step-level solution
- *   - a state checkpoint that gates the following section
+ *   - a pattern checkpoint (serial number of unknown value, known format) whose
+ *     entry is captured as {{ SERIAL }} for later steps
+ *   - an exact checkpoint that gates the following section
  */
 const SAMPLE_VARIABLES = [
   { name: 'PORT_NUM', expression: 'seat' },
@@ -25,10 +28,17 @@ const SAMPLE_CONTENT = [
     title: 'Section 1 · Bench Preparation',
     steps: [
       {
+        type: 'info',
+        title: 'About This Lab',
+        body:
+          'Welcome, **{{ FIRST_NAME }}** — you are participant **#{{ SEAT_ID }}**.\n\n' +
+          'This lab walks you through cabling a bench and configuring a static IP. ' +
+          'Informational cards like this one are context only: there is nothing to do here.',
+      },
+      {
         type: 'desk',
         title: 'Prepare Your Bench',
         body:
-          'Welcome, participant **#{{ SEAT_ID }}**.\n\n' +
           '1. Confirm your workstation is powered on.\n' +
           '2. Locate the patch panel above your desk.\n' +
           '3. You have been assigned **switch port {{ PORT_NUM }}**.\n\n' +
@@ -52,6 +62,25 @@ const SAMPLE_CONTENT = [
             text: 'Use the cable tagged **{{ SEAT_TAG }}** (your seat number, zero-padded).',
           },
         ],
+      },
+      {
+        type: 'desk',
+        title: 'Record the Switch Serial Number',
+        body:
+          'Find the label on the underside of your switch and enter its serial number. ' +
+          'The format is four groups separated by dots, e.g. `ABCD.1234.WXYZ` — the dots ' +
+          'are optional when typing.',
+        hints: [],
+        // Pattern checkpoint: the instructor cannot know each switch's serial,
+        // only its format. The accepted value is normalised to the mask and
+        // captured as {{ SERIAL }} for every later step.
+        checkpoint: {
+          prompt: 'Enter the serial number printed on the switch label',
+          placeholder: 'e.g. ABCD.1234.WXYZ',
+          mode: 'pattern',
+          pattern: 'XXXX.XXXX.XXXX',
+          capture: 'SERIAL',
+        },
       },
     ],
   },
@@ -115,8 +144,9 @@ const SAMPLE_CONTENT = [
         type: 'desk',
         title: 'Wrap Up',
         body:
-          'Excellent work, participant #{{ SEAT_ID }}.\n\n' +
+          'Excellent work, {{ FULL_NAME }} (seat #{{ SEAT_ID }}).\n\n' +
           '- Label your cable and leave it connected to **Port {{ PORT_NUM }}**.\n' +
+          '- Switch **{{ SERIAL }}** stays at this bench.\n' +
           '- Raise your hand for the instructor to validate your bench.\n\n' +
           'Your gateway was **{{ GATEWAY_IP }}** and your host was **{{ HOST_IP }}**.',
         hints: [],
@@ -127,7 +157,7 @@ const SAMPLE_CONTENT = [
 
 const SAMPLE_TITLE = 'Network Bench Setup (Sample)';
 const SAMPLE_DESCRIPTION =
-  'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.';
+  'A three-section introductory networking lab demonstrating desk/computer/info cards, per-participant variables, hints, a pattern checkpoint that captures a serial number, and a section checkpoint.';
 
 /** True when no instructor exists yet, i.e. the seeder is about to create one. */
 export function needsBootstrapInstructor() {

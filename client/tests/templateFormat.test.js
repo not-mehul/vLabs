@@ -112,8 +112,11 @@ test('multi-line hints, escaped separators and alternative answers parse', () =>
   assert.deepEqual(step.checkpoint, {
     prompt: 'Prompt',
     placeholder: 'hint text',
+    mode: 'exact',
     answer: 'one',
     answers: ['two | three', '{{ SEAT_ID }}'],
+    pattern: '',
+    capture: '',
   });
 });
 
@@ -156,4 +159,73 @@ test('invalid inputs are rejected', () => {
   assert.throws(() => parseMarkdownTemplate('just some text'), /No sections/);
   assert.throws(() => parseJsonTemplate('[]'), /Not a template/);
   assert.throws(() => parseJsonTemplate('nope'));
+});
+
+test('info steps and pattern checkpoints round-trip through markdown', () => {
+  const md = `---
+title: Serials
+---
+
+# S1
+
+## [info] Background
+Context only. Hello {{ FIRST_NAME }}.
+
+> hint: ignored :: info steps carry no hints
+
+## [desk] Read the label
+
+> checkpoint: Enter the serial
+> pattern: XXXX.XXXX.XXXX
+> capture: SERIAL
+> placeholder: e.g. ABCD.1234.WXYZ
+
+## [computer] Use it
+You entered {{ SERIAL }}.
+
+> checkpoint: Confirm :: {{ SERIAL }}
+> capture: CONFIRMED
+`;
+  const tpl = parseMarkdownTemplate(md);
+  const [info, pat, exact] = tpl.content[0].steps;
+  assert.equal(info.type, 'info');
+  assert.deepEqual(info.hints, [], 'hints are stripped from info steps');
+  assert.equal(info.checkpoint, null);
+  assert.deepEqual(pat.checkpoint, {
+    prompt: 'Enter the serial',
+    placeholder: 'e.g. ABCD.1234.WXYZ',
+    mode: 'pattern',
+    answer: '',
+    answers: [],
+    pattern: 'XXXX.XXXX.XXXX',
+    capture: 'SERIAL',
+  });
+  assert.equal(exact.checkpoint.mode, 'exact');
+  assert.equal(exact.checkpoint.answer, '{{ SERIAL }}');
+  assert.equal(exact.checkpoint.capture, 'CONFIRMED');
+  // Captured names are known placeholders from the following step onward.
+  assert.deepEqual(findUnknownPlaceholders(tpl), []);
+
+  const out = templateToMarkdown(tpl);
+  assert.match(out, /^## \[info\] Background$/m);
+  assert.match(
+    out,
+    /^> checkpoint: Enter the serial\n> pattern: XXXX\.XXXX\.XXXX\n> capture: SERIAL$/m,
+  );
+  assert.deepEqual(parseMarkdownTemplate(out), tpl, 'lossless');
+  assert.deepEqual(parseJsonTemplate(templateToJson(tpl)), tpl, 'json lossless');
+});
+
+test('a capture referenced before its checkpoint is flagged as early', () => {
+  const tpl = parseMarkdownTemplate(`# S
+## [desk] A
+Serial is {{ SERIAL }}
+> checkpoint: Serial
+> pattern: 9999
+> capture: SERIAL
+`);
+  const unknown = findUnknownPlaceholders(tpl);
+  assert.equal(unknown.length, 1);
+  assert.equal(unknown[0].name, 'SERIAL');
+  assert.equal(unknown[0].early, true);
 });

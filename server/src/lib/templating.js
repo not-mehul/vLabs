@@ -16,7 +16,14 @@
  * called.
  */
 
-import { PLACEHOLDER_RE, IDENT_RE } from '../../../shared/template-schema.js';
+import {
+  PLACEHOLDER_RE,
+  IDENT_RE,
+  BUILTIN_PLACEHOLDERS,
+  BUILTIN_IDENTIFIERS,
+  compileMask,
+  matchMask,
+} from '../../../shared/template-schema.js';
 
 // ---------------------------------------------------------------------------
 // Safe arithmetic / string expression evaluator
@@ -75,6 +82,8 @@ function arity(name, args, min, max = min) {
  *   min(a, b, …) max(a, b, …)
  *   upper(s) lower(s)           string case
  *   str(v)                      force string (e.g. to concatenate numbers as text)
+ *   slug(s)                     lower-case letters/digits only ("Mary-Jane O'Neil" → "maryjaneoneil")
+ *   initials(s)                 first letter of each word, upper-case ("Mary Jane" → "MJ")
  */
 const FUNCTIONS = Object.freeze({
   pad(args) {
@@ -130,6 +139,23 @@ const FUNCTIONS = Object.freeze({
   str(args) {
     arity('str', args, 1);
     return toStr(args[0]);
+  },
+  slug(args) {
+    arity('slug', args, 1);
+    return toStr(args[0])
+      .normalize('NFKD')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toLowerCase();
+  },
+  initials(args) {
+    arity('initials', args, 1);
+    // One initial per whitespace-separated word ("Mary-Jane O'Neil" → "MO").
+    return toStr(args[0])
+      .split(/\s+/)
+      .map((w) => w.replace(/[^A-Za-z0-9]/g, ''))
+      .filter(Boolean)
+      .map((w) => w[0].toUpperCase())
+      .join('');
   },
 });
 
@@ -267,20 +293,39 @@ function evaluateExpression(expr, scope) {
 // Variable dictionary resolution
 // ---------------------------------------------------------------------------
 
+/** Placeholder names a template may never declare as variables or captures. */
+export const RESERVED_NAMES = Object.freeze([...BUILTIN_PLACEHOLDERS, ...BUILTIN_IDENTIFIERS]);
+
 /**
- * Resolve the full variable context for a given seat.
+ * Resolve the full variable context for a given participant.
  *
  * @param {Array<{name:string, expression:string}>} variables Author formulas.
  * @param {number|string} seatId The participant's seat identifier.
- * @returns {Object} Map of variable name -> resolved value.
+ * @param {Object} [who] Optional participant details.
+ * @param {string} [who.firstName] Registered first name ('' when unknown).
+ * @param {string} [who.lastName]  Registered last name.
+ * @param {Object} [who.captured]  Values captured at pattern checkpoints so far
+ *                                 (name → canonical value); exposed as placeholders
+ *                                 only, never to formulas (they do not exist yet
+ *                                 when the template is validated).
+ * @returns {Object} Map of placeholder name -> resolved value.
  */
-export function resolveVariables(variables, seatId) {
+export function resolveVariables(variables, seatId, who = {}) {
   const seatNumber = parseInt(String(seatId).replace(/[^0-9]/g, ''), 10);
+  const firstName = String(who.firstName ?? '').trim();
+  const lastName = String(who.lastName ?? '').trim();
   const scope = Object.create(null);
   // Built-in identifiers available to every formula.
   scope.seat = Number.isNaN(seatNumber) ? 0 : seatNumber;
-  // Built-in placeholder always available even without an explicit formula.
-  const context = { SEAT_ID: seatId };
+  scope.first_name = firstName;
+  scope.last_name = lastName;
+  // Built-in placeholders always available even without an explicit formula.
+  const context = {
+    SEAT_ID: seatId,
+    FIRST_NAME: firstName,
+    LAST_NAME: lastName,
+    FULL_NAME: `${firstName} ${lastName}`.trim(),
+  };
 
   for (const def of variables || []) {
     if (!def || !def.name) continue;
@@ -291,6 +336,9 @@ export function resolveVariables(variables, seatId) {
     if (Object.prototype.hasOwnProperty.call(FUNCTIONS, name)) {
       throw new Error(`Variable name "${name}" clashes with a built-in function`);
     }
+    if (RESERVED_NAMES.includes(name)) {
+      throw new Error(`Variable name "${name}" is reserved`);
+    }
     let value;
     try {
       value = evaluateExpression(def.expression ?? '', scope);
@@ -300,6 +348,14 @@ export function resolveVariables(variables, seatId) {
     // Expose resolved value to subsequent formulas (allows composition) and to
     // the placeholder-injection context.
     scope[name] = value;
+    context[name] = value;
+  }
+
+  // Captured checkpoint values are placeholders for LATER steps. They are
+  // applied last and never shadow a declared variable or built-in (validation
+  // rejects such a template anyway).
+  for (const [name, value] of Object.entries(who.captured || {})) {
+    if (!IDENT_RE.test(name) || Object.prototype.hasOwnProperty.call(context, name)) continue;
     context[name] = value;
   }
 
@@ -344,7 +400,7 @@ export function injectVariables(text, context) {
 export function renderStep(step, context, index) {
   const rendered = {
     index,
-    type: step.type === 'computer' ? 'computer' : 'desk',
+    type: step.type === 'computer' || step.type === 'info' ? step.type : 'desk',
     title: injectVariables(step.title || `Step ${index + 1}`, context),
     body: injectVariables(step.body || '', context),
     hints: (step.hints || []).map((h) => ({
@@ -354,14 +410,23 @@ export function renderStep(step, context, index) {
   };
 
   if (stepHasCheckpoint(step)) {
-    // Ship the prompt and its shape, but never the answer(s).
+    // Ship the prompt and its shape, but never the answer(s) or the mask.
     rendered.checkpoint = {
       prompt: injectVariables(step.checkpoint.prompt || 'Enter the value to continue', context),
       placeholder: injectVariables(step.checkpoint.placeholder || '', context),
+      mode: checkpointMode(step),
     };
   }
 
   return rendered;
+}
+
+/** 'exact' | 'pattern' for a step with a checkpoint. */
+export function checkpointMode(step) {
+  const cp = step && step.checkpoint;
+  if (!cp) return null;
+  if (cp.mode === 'pattern' || (cp.mode !== 'exact' && !cp.answer && cp.pattern)) return 'pattern';
+  return 'exact';
 }
 
 /** Normalise a participant-submitted (or authored) answer for comparison. */
@@ -374,12 +439,42 @@ export function normaliseAnswer(value) {
 
 /**
  * All accepted checkpoint answers for a seat (server-side only), normalised.
- * The primary `answer` plus any authored alternatives (`answers`).
+ * The primary `answer` plus any authored alternatives (`answers`). Empty for
+ * pattern checkpoints, which have no enumerable answers.
  */
 export function checkpointAnswers(step, context) {
-  if (!stepHasCheckpoint(step)) return [];
+  if (!stepHasCheckpoint(step) || checkpointMode(step) !== 'exact') return [];
   const all = [step.checkpoint.answer, ...(step.checkpoint.answers || [])];
   return [...new Set(all.map((a) => normaliseAnswer(injectVariables(String(a), context))))];
+}
+
+/**
+ * Check a submission against a step's checkpoint.
+ *
+ * @returns {{ ok: boolean, value: string|null }} `value` is the canonical form
+ *   of what was accepted — for exact checkpoints the authored answer (with
+ *   placeholders resolved, original casing) that matched; for pattern
+ *   checkpoints the entry normalised to the mask. It is what a `capture`
+ *   stores for later steps.
+ */
+export function matchCheckpoint(step, context, submitted) {
+  if (!stepHasCheckpoint(step)) return { ok: false, value: null };
+  if (checkpointMode(step) === 'pattern') {
+    let compiled;
+    try {
+      compiled = compileMask(step.checkpoint.pattern);
+    } catch {
+      return { ok: false, value: null };
+    }
+    const value = matchMask(compiled, submitted);
+    return value === null ? { ok: false, value: null } : { ok: true, value };
+  }
+  const want = normaliseAnswer(submitted);
+  for (const a of [step.checkpoint.answer, ...(step.checkpoint.answers || [])]) {
+    const resolved = injectVariables(String(a), context).trim();
+    if (normaliseAnswer(resolved) === want) return { ok: true, value: resolved };
+  }
+  return { ok: false, value: null };
 }
 
 /**
@@ -391,10 +486,9 @@ export function checkpointAnswer(step, context) {
   return all.length ? all[0] : null;
 }
 
-/** Does a submitted value match any accepted answer for this seat? */
+/** Does a submitted value satisfy this step's checkpoint? */
 export function isCorrectAnswer(step, context, submitted) {
-  const want = checkpointAnswers(step, context);
-  return want.includes(normaliseAnswer(submitted));
+  return matchCheckpoint(step, context, submitted).ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,9 +504,11 @@ export function checkpointKey(sectionIndex, stepIndex) {
   return `${sectionIndex}.${stepIndex}`;
 }
 
-/** Does a step carry a real (answerable) checkpoint? */
+/** Does a step carry a real (answerable) checkpoint? Info steps never do. */
 export function stepHasCheckpoint(step) {
-  return Boolean(step && step.checkpoint && step.checkpoint.answer);
+  if (!step || step.type === 'info' || !step.checkpoint) return false;
+  const cp = step.checkpoint;
+  return checkpointMode(step) === 'pattern' ? Boolean(cp.pattern) : Boolean(cp.answer);
 }
 
 /** True when every checkpoint in a section has been completed. */
@@ -501,8 +597,8 @@ export function countSteps(sections) {
  * Render an entire manual (all sections, all steps) for a seat. Used by the
  * instructor preview. Participant delivery renders a slice (see participant.js).
  */
-export function renderManual(content, variables, seatId) {
-  const context = resolveVariables(variables, seatId);
+export function renderManual(content, variables, seatId, who) {
+  const context = resolveVariables(variables, seatId, who);
   const sections = Array.isArray(content) ? content : [];
   const empty = new Set();
   return {

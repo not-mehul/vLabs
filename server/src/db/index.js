@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS participants (
   current_section        INTEGER NOT NULL DEFAULT 0,
   max_section            INTEGER NOT NULL DEFAULT 0,
   completed_checkpoints  TEXT NOT NULL DEFAULT '[]',
+  -- JSON object of values captured at pattern checkpoints: { NAME: "canonical" }.
+  captured_values        TEXT NOT NULL DEFAULT '{}',
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
   finished_at            TEXT,
@@ -223,6 +225,13 @@ const MIGRATIONS = [
         fkOnDelete('sessions', 'template_id') === 'CASCADE' ||
         !columns('sessions').includes('content');
       if (needsRebuild) rebuildSessionsTable();
+    },
+  },
+  {
+    version: 3,
+    name: 'participant captured_values (pattern checkpoints)',
+    up() {
+      addColumnIfMissing('participants', 'captured_values', "TEXT NOT NULL DEFAULT '{}'");
     },
   },
 ];

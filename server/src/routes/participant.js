@@ -14,7 +14,7 @@ import { nowIso, parseUtc } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import {
   resolveVariables,
-  isCorrectAnswer,
+  matchCheckpoint,
   renderSection,
   isSectionCleared,
   computeUnlockedSection,
@@ -44,7 +44,9 @@ const q = {
   ),
   touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?'),
   setCheckpoints: db.prepare(
-    'UPDATE participants SET completed_checkpoints = ?, last_seen_at = ? WHERE id = ?',
+    `UPDATE participants
+        SET completed_checkpoints = ?, captured_values = ?, last_seen_at = ?
+      WHERE id = ?`,
   ),
   setSection: db.prepare(
     `UPDATE participants
@@ -83,6 +85,25 @@ const parseIndex = (v) => {
 };
 
 const completedSetOf = (p) => new Set(JSON.parse(p.completed_checkpoints || '[]'));
+
+/** Values captured at pattern checkpoints so far (name → canonical value). */
+function capturedOf(p) {
+  try {
+    const v = JSON.parse(p.captured_values || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The participant's full placeholder context: seat, names, formulas, captures. */
+function contextFor(p, variables) {
+  return resolveVariables(variables, p.seat_number, {
+    firstName: p.first_name,
+    lastName: p.last_name,
+    captured: capturedOf(p),
+  });
+}
 
 /** 400/403 unless (section, step) exists and is reachable for this seat. */
 function requireReachableStep(sections, si, sti, completed) {
@@ -203,7 +224,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const p = req.participant;
     const { sections, variables } = loadManual(req.session);
-    const context = resolveVariables(variables, p.seat_number);
+    const context = contextFor(p, variables);
     const completed = completedSetOf(p);
     const unlockedSection = computeUnlockedSection(sections, completed);
 
@@ -279,9 +300,11 @@ router.get(
 /**
  * POST /api/participant/checkpoint
  * Body: { section_index, step_index, answer }
- * Validates the seat-specific unlock string server-side (against the primary
- * answer and any authored alternatives) and, on success, records completion
- * (which may clear the section and unlock the next).
+ * Validates the entry server-side — against the seat-specific answer(s) for an
+ * exact checkpoint, or against the authored mask for a pattern checkpoint —
+ * and, on success, records completion (which may clear the section and unlock
+ * the next). When the checkpoint captures a variable, the canonical value is
+ * stored so later steps can reference it as {{ NAME }}.
  */
 router.post(
   '/checkpoint',
@@ -300,17 +323,19 @@ router.post(
     const step = requireReachableStep(sections, si, sti, completed);
     if (!stepHasCheckpoint(step)) throw httpError(400, 'This step has no checkpoint');
 
-    const context = resolveVariables(variables, p.seat_number);
-    const correct = isCorrectAnswer(step, context, answer);
+    const context = contextFor(p, variables);
+    const { ok, value } = matchCheckpoint(step, context, answer);
 
     noStore(res);
-    if (!correct) {
+    if (!ok) {
       log.debug('checkpoint.wrong', { participant: p.id, section: si, step: sti });
       return res.status(200).json({ correct: false });
     }
 
     completed.add(checkpointKey(si, sti));
-    q.setCheckpoints.run(JSON.stringify([...completed]), nowIso(), p.id);
+    const captured = capturedOf(p);
+    if (step.checkpoint.capture && value !== null) captured[step.checkpoint.capture] = value;
+    q.setCheckpoints.run(JSON.stringify([...completed]), JSON.stringify(captured), nowIso(), p.id);
     log.info('checkpoint.cleared', {
       participant: p.id,
       session: req.session.id,
@@ -409,7 +434,7 @@ router.post(
     revealed.add(`${si}.${sti}`);
     q.setRevealed.run(JSON.stringify([...revealed]), nowIso(), p.id);
 
-    const context = resolveVariables(variables, p.seat_number);
+    const context = contextFor(p, variables);
     const solution = injectVariables(String(step.solution), context);
     log.info('solution.revealed', {
       participant: p.id,

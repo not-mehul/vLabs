@@ -293,6 +293,11 @@ export default function SessionMonitor() {
               <tr>
                 <th>#</th>
                 <th>Participant</th>
+                {(data.capture_names || []).map((n) => (
+                  <th key={n} className="mono">
+                    {n}
+                  </th>
+                ))}
                 <th>Section</th>
                 <th>Progress</th>
                 <th>Hints</th>
@@ -309,6 +314,11 @@ export default function SessionMonitor() {
                 >
                   <td className="mono seat-num">{p.seat_number}</td>
                   <td className="table__primary">{p.name}</td>
+                  {(data.capture_names || []).map((n) => (
+                    <td key={n} className={p.captured?.[n] ? 'mono' : 'muted'}>
+                      {p.captured?.[n] || '—'}
+                    </td>
+                  ))}
                   <td>
                     {p.current_section + 1}
                     <span className="muted"> / {data.section_count}</span>

@@ -187,20 +187,66 @@ test('content is progressively delivered and never leaks answers', async () => {
     token: participantToken,
   });
   assert.equal(status, 200);
-  // Sample has 3 sections; section 0 is checkpoint-free (auto-cleared), so the
-  // participant unlocks through section 1 (index 1) but NOT section 2.
+  // Sample has 3 sections; section 0 ends with a PATTERN checkpoint (serial
+  // number), so only section 0 is delivered until it is cleared.
   assert.equal(data.total_sections, 3);
-  assert.equal(data.unlocked_section, 1);
-  assert.equal(data.sections.length, 2, 'locked section 3 is not delivered');
-  // The checkpoint answer(s) must never appear in the rendered payload.
-  const cpStep = data.sections[1].steps.find((s) => s.checkpoint);
-  assert.ok(cpStep, 'checkpoint step is present');
+  assert.equal(data.unlocked_section, 0);
+  assert.equal(data.sections.length, 1, 'locked sections are not delivered');
+  const steps = data.sections[0].steps;
+  assert.equal(steps.length, 4, 'every step up to the first open checkpoint is visible');
+  // Info step: context only, personalised with the registered first name.
+  assert.equal(steps[0].type, 'info');
+  assert.match(steps[0].body, /Welcome, \*\*Ada\*\*/);
+  assert.equal(steps[0].checkpoint, undefined);
+  assert.deepEqual(steps[0].hints, []);
+  // The pad() helper rendered in a hint.
+  assert.match(steps[2].hints[0].text, /S01/);
+  // The pattern checkpoint ships its mode but never the mask.
+  const cpStep = steps[3];
+  assert.equal(cpStep.checkpoint.mode, 'pattern');
+  assert.equal(cpStep.checkpoint.pattern, undefined);
   assert.equal(cpStep.checkpoint.answer, undefined);
   assert.equal(cpStep.checkpoint.answers, undefined);
+});
+
+test('a pattern checkpoint accepts the format, captures the canonical value for later steps', async () => {
+  const wrong = await call('/api/participant/checkpoint', {
+    method: 'POST',
+    body: { section_index: 0, step_index: 3, answer: 'ABCD.1234' },
+    token: participantToken,
+  });
+  assert.equal(wrong.status, 200);
+  assert.equal(wrong.data.correct, false);
+
+  // Lower-case, no separators: accepted and normalised to the mask.
+  const right = await call('/api/participant/checkpoint', {
+    method: 'POST',
+    body: { section_index: 0, step_index: 3, answer: 'abcd1234wxyz' },
+    token: participantToken,
+  });
+  assert.equal(right.status, 200);
+  assert.equal(right.data.correct, true);
+  assert.equal(right.data.section_cleared, true);
+  assert.equal(right.data.unlocked_section, 1);
+
+  const after = await call('/api/participant/content', { token: participantToken });
+  assert.equal(after.data.sections.length, 2, 'section 2 now delivered');
+  assert.equal(after.data.sections[0].steps[3].checkpoint.completed, true);
+  // Section 2 / step 1 (Verify Connectivity) solution mentions nothing of the
+  // serial, but section 3 / Wrap Up does — checked once unlocked below. The
+  // exact checkpoint in section 2 is still hidden-answer.
+  const cpStep = after.data.sections[1].steps.find((s) => s.checkpoint);
+  assert.ok(cpStep, 'exact checkpoint step is present');
+  assert.equal(cpStep.checkpoint.mode, 'exact');
+  assert.equal(cpStep.checkpoint.answer, undefined);
   assert.equal(cpStep.solution, undefined, 'solution not shipped before reveal');
-  // The pad() helper rendered in a hint.
-  const hint = data.sections[0].steps[1].hints[0];
-  assert.match(hint.text, /S01/);
+
+  // Instructors see the captured value on the monitor and in the export.
+  const detail = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
+  assert.deepEqual(detail.data.capture_names, ['SERIAL']);
+  assert.equal(detail.data.participants[0].captured.SERIAL, 'ABCD.1234.WXYZ');
+  const exported = await call(`/api/sessions/${sessionId}/export`, { token: instructorToken });
+  assert.deepEqual(exported.data.participants[0].captured, { SERIAL: 'ABCD.1234.WXYZ' });
 });
 
 test('hints and progress on locked sections are refused (same gate as checkpoints)', async () => {
@@ -280,6 +326,10 @@ test('checkpoint validates server-side (incl. alternatives) and unlocks the next
   const after = await call('/api/participant/content', { token: participantToken });
   assert.equal(after.data.unlocked_section, 2, 'clearing the checkpoint unlocks section 3');
   assert.equal(after.data.sections.length, 3);
+  // The captured serial and the built-in names are injected into later steps.
+  const wrapUp = after.data.sections[2].steps[0].body;
+  assert.match(wrapUp, /Ada Lovelace/);
+  assert.match(wrapUp, /ABCD\.1234\.WXYZ/);
 });
 
 test('status poll reports liveness + template version without shipping the manual', async () => {
@@ -577,6 +627,11 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 2);
+test('database schema version is recorded (migration 3: captured_values)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 3);
+  const cols = db
+    .prepare('PRAGMA table_info(participants)')
+    .all()
+    .map((c) => c.name);
+  assert.ok(cols.includes('captured_values'));
 });

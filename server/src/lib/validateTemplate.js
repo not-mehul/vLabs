@@ -3,8 +3,11 @@ import {
   IDENT_RE,
   normaliseTemplate,
   findUnknownPlaceholders,
+  compileMask,
 } from '../../../shared/template-schema.js';
-import { resolveVariables } from './templating.js';
+import { resolveVariables, RESERVED_NAMES, FUNCTION_NAMES } from './templating.js';
+
+const SAMPLE_WHO = { firstName: 'Sample', lastName: 'Participant' };
 
 /**
  * Validate & normalise instructor-authored template payloads before they hit
@@ -93,7 +96,7 @@ export function validateTemplatePayload(payload) {
       errors.push(`Variable "${v.name}" has an invalid name`);
       continue;
     }
-    if (v.name === 'SEAT_ID' || v.name === 'seat') {
+    if (RESERVED_NAMES.includes(v.name)) {
       errors.push(`Variable "${v.name}" is reserved`);
       continue;
     }
@@ -108,10 +111,10 @@ export function validateTemplatePayload(payload) {
     }
     variables.push({ name: v.name, expression: v.expression });
   }
-  // Every formula must evaluate for a sample seat (and compose in order).
+  // Every formula must evaluate for a sample participant (and compose in order).
   if (errors.length === 0) {
     try {
-      resolveVariables(variables, 1);
+      resolveVariables(variables, 1, SAMPLE_WHO);
     } catch (err) {
       errors.push(err.message);
     }
@@ -120,27 +123,38 @@ export function validateTemplatePayload(payload) {
   // ---- Sections & steps --------------------------------------------------
   if (tpl.content.length === 0) errors.push('At least one section is required');
 
+  const captures = new Map(); // name -> where first captured
   const content = tpl.content.map((section, si) => {
     const clean = { title: section.title.trim(), steps: [] };
     if (!clean.title) errors.push(`Section ${si + 1} needs a title`);
     if (section.steps.length === 0) {
       errors.push(`Section ${si + 1} ("${clean.title || 'untitled'}") has no steps`);
     }
-    clean.steps = section.steps.map((s, i) => toStorageStep(s, si, i, errors));
+    clean.steps = section.steps.map((s, i) => toStorageStep(s, si, i, errors, seenNames, captures));
     return clean;
   });
 
   // ---- Placeholder references --------------------------------------------
-  for (const { name, where } of findUnknownPlaceholders({ variables, content })) {
-    errors.push(`Unknown placeholder {{ ${name} }} in ${where}`);
+  for (const { name, where, early } of findUnknownPlaceholders({ variables, content })) {
+    errors.push(
+      early
+        ? `{{ ${name} }} is used in ${where} before the checkpoint that captures it (captured values are available from the following step onward)`
+        : `Unknown placeholder {{ ${name} }} in ${where}`,
+    );
   }
 
   if (errors.length) return fail(errors);
   return { title, description, content, variables };
 }
 
-/** Convert a canonical step into storage shape, collecting rule violations. */
-function toStorageStep(s, sectionIndex, stepIndex, errors) {
+/**
+ * Convert a canonical step into storage shape, collecting rule violations.
+ * Storage shape keeps only the keys that apply: exact checkpoints carry
+ * `answer` (+ `answers`), pattern checkpoints carry `mode: 'pattern'` +
+ * `pattern`; `capture` is present only when set. Info steps carry no hints,
+ * solution or checkpoint (the normaliser already stripped them).
+ */
+function toStorageStep(s, sectionIndex, stepIndex, errors, variableNames, captures) {
   const at = `Section ${sectionIndex + 1} · step ${stepIndex + 1}`;
   const step = {
     type: s.type,
@@ -152,12 +166,38 @@ function toStorageStep(s, sectionIndex, stepIndex, errors) {
   if (!step.body.trim()) errors.push(`${at} has an empty body`);
 
   if (s.checkpoint) {
+    const cp = s.checkpoint;
     step.checkpoint = {
-      prompt: s.checkpoint.prompt || 'Enter the value to continue',
-      placeholder: s.checkpoint.placeholder,
-      answer: s.checkpoint.answer,
+      prompt: cp.prompt || 'Enter the value to continue',
+      placeholder: cp.placeholder,
     };
-    if (s.checkpoint.answers.length) step.checkpoint.answers = s.checkpoint.answers;
+    if (cp.mode === 'pattern') {
+      step.checkpoint.mode = 'pattern';
+      step.checkpoint.pattern = cp.pattern;
+      try {
+        compileMask(cp.pattern);
+      } catch (err) {
+        errors.push(`${at} checkpoint pattern: ${err.message}`);
+      }
+    } else {
+      step.checkpoint.answer = cp.answer;
+      if (cp.answers.length) step.checkpoint.answers = cp.answers;
+    }
+    if (cp.capture) {
+      const name = cp.capture;
+      if (!IDENT_RE.test(name)) {
+        errors.push(`${at} checkpoint: "${name}" is not a valid variable name`);
+      } else if (RESERVED_NAMES.includes(name) || FUNCTION_NAMES.includes(name)) {
+        errors.push(`${at} checkpoint: variable name "${name}" is reserved`);
+      } else if (variableNames.has(name)) {
+        errors.push(`${at} checkpoint: "${name}" is already a declared variable`);
+      } else if (captures.has(name)) {
+        errors.push(`${at} checkpoint: "${name}" is already captured by ${captures.get(name)}`);
+      } else {
+        captures.set(name, at);
+        step.checkpoint.capture = name;
+      }
+    }
   }
   return step;
 }

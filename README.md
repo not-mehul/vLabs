@@ -207,12 +207,18 @@ Instructors author variable **formulas** (not code). For example:
 
 Formulas are evaluated by a **hand-written recursive-descent evaluator** — never
 `eval()`/`Function()`. It understands numbers, quoted strings, `+ - * / %`,
-parentheses, the built-in `seat`, previously defined variables (so formulas can
-compose), and a small whitelist of pure helpers: `pad`, `hex`, `floor`, `ceil`,
-`round`, `abs`, `mod`, `min`, `max`, `upper`, `lower`, `str`. Anything else —
-unknown identifiers, prototype names, `constructor(...)`, semicolons — is
-rejected. Expressions are capped in length and nesting depth, and division by
-zero is an error.
+parentheses, the built-ins `seat`, `first_name` and `last_name`, previously
+defined variables (so formulas can compose), and a small whitelist of pure
+helpers: `pad`, `hex`, `floor`, `ceil`, `round`, `abs`, `mod`, `min`, `max`,
+`upper`, `lower`, `str`, `slug`, `initials`. Anything else — unknown
+identifiers, prototype names, `constructor(...)`, semicolons — is rejected.
+Expressions are capped in length and nesting depth, and division by zero is an
+error.
+
+Participant names are first-class: `{{ FIRST_NAME }}`, `{{ LAST_NAME }}` and
+`{{ FULL_NAME }}` are always available, and formulas can derive from them —
+`USERNAME = slug(first_name) + '.' + slug(last_name)` gives `mary.oneil`,
+`initials(first_name + ' ' + last_name)` gives `MO`.
 
 Placeholders are written `{{ NAME }}` in section titles, step titles, bodies,
 hints, solutions and checkpoint prompts/answers. `{{ SEAT_ID }}` is always
@@ -221,6 +227,17 @@ refused** with the exact location (`Unknown placeholder {{ HOST_IPP }} in
 Section 2 · step 2 checkpoint answer`), and the editor flags it live while you
 type — a typo in a checkpoint answer used to silently produce an unpassable
 checkpoint.
+
+### Step types
+
+| Type       | Card                   | Can carry                   | Use for                                           |
+| ---------- | ---------------------- | --------------------------- | ------------------------------------------------- |
+| `desk`     | Hands-On (orange)      | hints, solution, checkpoint | physical bench work                               |
+| `computer` | Workstation (blue)     | hints, solution, checkpoint | work on the machine                               |
+| `info`     | Read (neutral, dashed) | body only                   | context, background, safety notes — nothing to do |
+
+Info steps never block progress and are stripped of any hint/solution/
+checkpoint on save, so switching a step's type in the editor is always safe.
 
 ### Progressive disclosure & checkpoints
 
@@ -235,6 +252,23 @@ to the first uncompleted checkpoint:
 - **Checkpoint answers never leave the server.** The participant submits a value
   and the server compares it (whitespace/case-insensitively) against the
   seat-specific primary answer and any authored **alternative answers**.
+- **Pattern checkpoints** cover values the author _cannot_ know in advance — a
+  device serial, a MAC address, a ticket number. Instead of an answer the
+  checkpoint carries a **mask**: `9` digit, `A`/`a` letter (stored upper/lower
+  case), `X`/`x` letter or digit, `?` any character, `*` anything; other
+  letters and digits must match literally, and punctuation or spaces are
+  **optional separators**. So `XXXX.XXXX.XXXX` accepts `abcd1234wxyz` and
+  `ABCD.1234.WXYZ` alike (not `abcd-1234-wxyz`), and canonicalises both to
+  `ABCD.1234.WXYZ`. The mask, like an answer, never ships to the browser; the
+  participant only sees the prompt and an example placeholder.
+- **Captured values.** Any checkpoint may **save the accepted value as a
+  variable** (`capture: SERIAL`). From the _next_ step onward the canonical
+  value is available as `{{ SERIAL }}` in bodies, hints, solutions, prompts and
+  even exact answers of later checkpoints, so a lab can say _"label the switch
+  ABCD.1234.WXYZ"_ or verify the participant re-enters the same serial later.
+  Referencing a capture before its checkpoint is a save-time error. Captured
+  values appear per seat on the session monitor and as columns in the CSV/JSON
+  export.
 - **Hints** are collapsible; opening one is recorded (analytics). A step's
   optional **solution** (Markdown) can be revealed only after _every_ hint on
   that step has been opened — and it is only sent to the browser at that moment.
@@ -301,12 +335,15 @@ Templates can be authored entirely in the browser or imported from a file:
   grabs a ready-to-edit example.
 - The Markdown convention (documented in `client/src/lib/templateFormat.js`)
   uses frontmatter for `title`/`description`/`variables`, `#` for sections,
-  `## [desk|computer]` for steps, and `> hint:` / `> solution:` /
-  `> checkpoint:` / `> placeholder:` directives. Fenced code blocks are copied
-  verbatim (a `#` inside one is not a heading), hints may span multiple quoted
-  lines, `\::` and `\|` escape the separators, and checkpoint answers may list
-  alternatives separated by `|`. **Round-trips are lossless** (covered by
-  `client/tests/templateFormat.test.js`).
+  `## [desk|computer|info]` for steps, and `> hint:` / `> solution:` /
+  `> checkpoint:` / `> pattern:` / `> capture:` / `> placeholder:` directives.
+  Fenced code blocks are copied verbatim (a `#` inside one is not a heading),
+  hints may span multiple quoted lines, `\::` and `\|` escape the separators,
+  and checkpoint answers may list alternatives separated by `|`. A
+  `> checkpoint: prompt` line without an `:: answer` part followed by
+  `> pattern: XXXX.XXXX.XXXX` is a pattern checkpoint; `> capture: SERIAL`
+  saves the accepted value for later steps. **Round-trips are lossless**
+  (covered by `client/tests/templateFormat.test.js`).
 
 ### Theming
 
@@ -361,9 +398,10 @@ SQLite tables (`server/src/db/index.js`), migrated with `PRAGMA user_version`
   keeps room codes unique among _active_ sessions only.
 - **`participants`** — `id`, `session_id`, `seat_number` (1–100),
   `first_name`, `last_name`, `name_key`, `current_section`, `max_section`,
-  `completed_checkpoints` (JSON `"section.step"` keys), `hints_taken`,
-  `revealed_solutions`, `finished_at`, `section_entered_at`, `joined_at`,
-  `last_seen_at`. Unique on `(session_id, seat_number)` and
+  `completed_checkpoints` (JSON `"section.step"` keys), `captured_values`
+  (JSON `{ NAME: "canonical value" }` from pattern/capturing checkpoints),
+  `hints_taken`, `revealed_solutions`, `finished_at`, `section_entered_at`,
+  `joined_at`, `last_seen_at`. Unique on `(session_id, seat_number)` and
   `(session_id, name_key)`.
 
 Step storage shape (per section `steps[]`):
@@ -398,40 +436,40 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 
 ### Instructor (Bearer instructor token)
 
-| Method   | Path                          | Description                                                                                                |
-| -------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/auth/me`                    | Current instructor                                                                                         |
-| `PUT`    | `/auth/password`              | `{ current_password, new_password }` → fresh token; revokes older tokens                                   |
-| `GET`    | `/templates`                  | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at`          |
-| `GET`    | `/templates/functions`        | Formula helper names                                                                                       |
-| `POST`   | `/templates`                  | Create (validated; `400` with `details[]`)                                                                 |
-| `GET`    | `/templates/:id`              | Full template                                                                                              |
-| `PUT`    | `/templates/:id`              | Update → new version; running sessions unaffected                                                          |
-| `DELETE` | `/templates/:id`              | **Archive** (`204`)                                                                                        |
-| `DELETE` | `/templates/:id?permanent=1`  | Permanently delete; `409` while sessions are active                                                        |
-| `POST`   | `/templates/:id/restore`      | Un-archive                                                                                                 |
-| `GET`    | `/templates/:id/audit`        | Change history (newest first)                                                                              |
-| `POST`   | `/templates/:id/preview`      | `{ seat_id, draft? }` → rendered manual for one seat (solutions inline)                                    |
-| `GET`    | `/sessions`                   | This instructor's sessions with `participant_count`, `template_version`, `update_available`                |
-| `POST`   | `/sessions`                   | `{ template_id, title?, duration_minutes? }` → session (snapshot taken; `409` if template archived)        |
-| `GET`    | `/sessions/:id`               | Detail + live analytics (`section_distribution`, `participants[]`, `template_exists`, `template_archived`) |
-| `POST`   | `/sessions/:id/terminate`     | End now; participant tokens rejected immediately                                                           |
-| `POST`   | `/sessions/:id/extend`        | `{ minutes }` added to the later of now / current expiry                                                   |
-| `POST`   | `/sessions/:id/push-template` | Copy the template's latest version into the live session                                                   |
-| `DELETE` | `/sessions/:id`               | Delete session and its participants                                                                        |
-| `GET`    | `/sessions/:id/export`        | JSON export (works after template deletion)                                                                |
+| Method   | Path                          | Description                                                                                                                                  |
+| -------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/auth/me`                    | Current instructor                                                                                                                           |
+| `PUT`    | `/auth/password`              | `{ current_password, new_password }` → fresh token; revokes older tokens                                                                     |
+| `GET`    | `/templates`                  | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at`                                            |
+| `GET`    | `/templates/functions`        | Formula helper names                                                                                                                         |
+| `POST`   | `/templates`                  | Create (validated; `400` with `details[]`)                                                                                                   |
+| `GET`    | `/templates/:id`              | Full template                                                                                                                                |
+| `PUT`    | `/templates/:id`              | Update → new version; running sessions unaffected                                                                                            |
+| `DELETE` | `/templates/:id`              | **Archive** (`204`)                                                                                                                          |
+| `DELETE` | `/templates/:id?permanent=1`  | Permanently delete; `409` while sessions are active                                                                                          |
+| `POST`   | `/templates/:id/restore`      | Un-archive                                                                                                                                   |
+| `GET`    | `/templates/:id/audit`        | Change history (newest first)                                                                                                                |
+| `POST`   | `/templates/:id/preview`      | `{ seat_id, first_name?, last_name?, draft? }` → rendered manual for one seat (solutions inline; captures stood in by mask examples)         |
+| `GET`    | `/sessions`                   | This instructor's sessions with `participant_count`, `template_version`, `update_available`                                                  |
+| `POST`   | `/sessions`                   | `{ template_id, title?, duration_minutes? }` → session (snapshot taken; `409` if template archived)                                          |
+| `GET`    | `/sessions/:id`               | Detail + live analytics (`section_distribution`, `participants[]` incl. `captured`, `capture_names`, `template_exists`, `template_archived`) |
+| `POST`   | `/sessions/:id/terminate`     | End now; participant tokens rejected immediately                                                                                             |
+| `POST`   | `/sessions/:id/extend`        | `{ minutes }` added to the later of now / current expiry                                                                                     |
+| `POST`   | `/sessions/:id/push-template` | Copy the template's latest version into the live session                                                                                     |
+| `DELETE` | `/sessions/:id`               | Delete session and its participants                                                                                                          |
+| `GET`    | `/sessions/:id/export`        | JSON export incl. per-participant `captured` values (works after template deletion)                                                          |
 
 ### Participant (Bearer participant token; every call re-validates the session)
 
-| Method | Path                      | Description                                                                                  |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------- |
-| `GET`  | `/participant/content`    | Unlocked sections rendered for the seat; `template_version`                                  |
-| `GET`  | `/participant/status`     | Heartbeat: `expires_at`, `finished`, `template_version`                                      |
-| `POST` | `/participant/checkpoint` | `{ section_index, step_index, answer }` → `{ correct, section_cleared?, unlocked_section? }` |
-| `POST` | `/participant/progress`   | `{ section_index }` — section being viewed                                                   |
-| `POST` | `/participant/hint`       | `{ section_index, step_index, hint_index }`                                                  |
-| `POST` | `/participant/solution`   | `{ section_index, step_index }` → `{ solution }` once all hints are open                     |
-| `POST` | `/participant/finish`     | Mark the lab complete                                                                        |
+| Method | Path                      | Description                                                                                                                                               |
+| ------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/participant/content`    | Unlocked sections rendered for the seat (checkpoints carry `mode`, never answers/masks); `template_version`                                               |
+| `GET`  | `/participant/status`     | Heartbeat: `expires_at`, `finished`, `template_version`                                                                                                   |
+| `POST` | `/participant/checkpoint` | `{ section_index, step_index, answer }` → `{ correct, section_cleared?, unlocked_section? }`; stores the canonical value when the checkpoint captures one |
+| `POST` | `/participant/progress`   | `{ section_index }` — section being viewed                                                                                                                |
+| `POST` | `/participant/hint`       | `{ section_index, step_index, hint_index }`                                                                                                               |
+| `POST` | `/participant/solution`   | `{ section_index, step_index }` → `{ solution }` once all hints are open                                                                                  |
+| `POST` | `/participant/finish`     | Mark the lab complete                                                                                                                                     |
 
 Participant error codes: `SESSION_ENDED`, `SESSION_EXPIRED`, `SEAT_REMOVED`.
 Instructor: `TOKEN_REVOKED`.
@@ -545,11 +583,12 @@ Per the spec's deployment section:
 
 ## Upgrading an existing deployment
 
-- The database migrates automatically on first boot (`user_version` 0/1 → 2).
+- The database migrates automatically on first boot (`user_version` 0/1 → 3).
   Migration 2 **rebuilds the `sessions` table** to make `template_id` nullable
   and to add the per-session content snapshot; existing sessions are
   back-filled from the audit snapshot matching their `template_version` (or
-  the live template if none). **Back up the database first** (`update.sh` does).
+  the live template if none). Migration 3 adds `participants.captured_values`
+  (additive). **Back up the database first** (`update.sh` does).
 - Production **requires** `JWT_INSTRUCTOR_SECRET`, `JWT_PARTICIPANT_SECRET` and
   `SEED_INSTRUCTOR_PASSWORD`. Secrets that are short or look like placeholders
   (`change-me…`, `dev-…`) are rejected.

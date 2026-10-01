@@ -168,3 +168,66 @@ secrets, `/api/health` + served SPA) and a `systemd-analyze verify` of the
 units. Docs: README quick start / hosting / configuration / deployment
 sections and DEPLOYMENT.md Part 1 rewritten; Part 2 adjusted to reuse the
 same scripts on a VPS with a public Caddy site block.
+
+## 1.3.0 — info steps, participant-name variables, pattern checkpoints (2026-10-01)
+
+### Informational steps
+
+- New step type `info` alongside `desk` and `computer`: title + Markdown body
+  only. The shared normaliser strips hints, solution and checkpoint, so an
+  info step can never block progress; the renderer tags it `type: 'info'`.
+- Editor: third **Info** chip; hint/solution/checkpoint panels hide for info
+  steps. Participant card: neutral "Read" tile with a dashed accent.
+- Markdown: `## [info] Title`.
+
+### Participant names as variables
+
+- Built-in placeholders `{{ FIRST_NAME }}`, `{{ LAST_NAME }}`, `{{ FULL_NAME }}`
+  and formula identifiers `first_name`, `last_name` (strings), all reserved as
+  variable names.
+- New pure helpers `slug(s)` (lower-case letters/digits only) and
+  `initials(s)` — e.g. `USERNAME = slug(first_name) + '.' + slug(last_name)`.
+- `resolveVariables(variables, seat, { firstName, lastName, captured })`;
+  every participant route passes the registered names. Validation evaluates
+  formulas for a sample participant. The instructor preview accepts
+  `first_name` / `last_name` (defaults "Sample Participant").
+
+### Pattern checkpoints + captured values
+
+- Checkpoints gain `mode: 'exact' | 'pattern'`. Pattern checkpoints carry a
+  **mask** instead of answers: `9` digit, `A`/`a` letter (upper/lower on
+  output), `X`/`x` letter-or-digit, `?` any visible character, `*` anything
+  (max 3), `\c` literal; other letters/digits are required literals;
+  punctuation/whitespace are optional separators restored in the canonical
+  value. `compileMask` / `matchMask` / `maskExample` live in the shared schema
+  so the editor shows a live example. No regex is ever authored or executed.
+- Any checkpoint may `capture: NAME`. On success the canonical value (mask
+  form for patterns, the resolved authored answer for exact ones) is stored in
+  a new `participants.captured_values` JSON column (migration 3) and injected
+  as `{{ NAME }}` into every later step, hint, solution, prompt and exact
+  answer. Captures never shadow variables/built-ins and are placeholders only
+  (not formula identifiers).
+- Order-aware validation: `findUnknownPlaceholders` now walks fields in
+  reading order and flags a capture used before its checkpoint (`early: true`;
+  the editor banner and the save error say so). Capture names must be valid
+  identifiers, not reserved/helper names, not declared variables, and unique.
+- Rendered checkpoints ship `mode` so the client can phrase a format error;
+  the mask, like answers, never leaves the server.
+- Monitor: one column per captured variable (`capture_names` on the session
+  detail); CSV/JSON export: one `captured` key/column per variable.
+- Markdown: `> checkpoint: prompt` (no `::`) + `> pattern: MASK`, and
+  `> capture: NAME` on any checkpoint. Lossless round-trip tested.
+
+### Sample lab
+
+The seeded template and the editor's downloadable sample now open with an
+info step greeting `{{ FIRST_NAME }}`, ask for the switch serial via a
+`XXXX.XXXX.XXXX` pattern checkpoint captured as `SERIAL`, and reference it in
+later steps. Existing databases keep their old copy of the sample.
+
+### Tests
+
+`server/tests/templating.test.js` +6 (names, captures, masks, pattern
+matching, info steps, validation rules), `server/tests/api.test.js` updated
+for the new seed flow plus an end-to-end pattern → capture → later-step test,
+`client/tests/templateFormat.test.js` +2.
