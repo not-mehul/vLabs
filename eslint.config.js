@@ -16,9 +16,9 @@ export default [
 
   js.configs.recommended,
 
-  // ---- Server: Node + ESM ------------------------------------------------
+  // ---- Server + shared: Node + ESM ---------------------------------------
   {
-    files: ['server/**/*.js'],
+    files: ['server/**/*.js', 'shared/**/*.js'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
@@ -31,7 +31,7 @@ export default [
 
   // ---- Client: browser + React + JSX ------------------------------------
   {
-    files: ['client/**/*.{js,jsx}'],
+    files: ['client/src/**/*.{js,jsx}'],
     plugins: { react, 'react-hooks': reactHooks },
     languageOptions: {
       ecmaVersion: 2023,
@@ -48,6 +48,19 @@ export default [
       'react/prop-types': 'off',
       // Apostrophes in user-facing copy are intentional, not markup bugs.
       'react/no-unescaped-entities': 'off',
+      'no-unused-vars': noUnusedVars,
+    },
+  },
+
+  // ---- Client unit tests run under node:test ----------------------------
+  {
+    files: ['client/tests/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
       'no-unused-vars': noUnusedVars,
     },
   },

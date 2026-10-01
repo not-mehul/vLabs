@@ -9,18 +9,31 @@
  *
  * SECURITY: formulas are NEVER passed to eval()/Function(). They are parsed by
  * a tiny hand-written recursive-descent evaluator that only understands
- * numbers, quoted strings, a fixed set of identifiers, arithmetic operators and
- * parentheses. This keeps instructor-authored content fully sandboxed.
+ * numbers, quoted strings, a fixed set of identifiers, arithmetic operators,
+ * parentheses and a small whitelist of pure helper functions. Instructor
+ * content stays fully sandboxed: unknown identifiers (including `__proto__`,
+ * `constructor`, `process`…) are rejected, and only names in FUNCTIONS may be
+ * called.
  */
+
+import { PLACEHOLDER_RE, IDENT_RE } from '../../../shared/template-schema.js';
 
 // ---------------------------------------------------------------------------
 // Safe arithmetic / string expression evaluator
 // ---------------------------------------------------------------------------
 
 const TOKEN_RE =
-  /\s*([0-9]*\.?[0-9]+|'[^']*'|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[+\-*/%()])/y;
+  /\s*([0-9]*\.?[0-9]+|'[^']*'|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[+\-*/%(),])/y;
+
+/** Hard cap on formula length: keeps a pathological expression from doing work. */
+const MAX_EXPRESSION_LENGTH = 500;
+/** Hard cap on nesting depth (parentheses / function calls). */
+const MAX_DEPTH = 32;
 
 function tokenize(expr) {
+  if (expr.length > MAX_EXPRESSION_LENGTH) {
+    throw new Error(`Expression is too long (max ${MAX_EXPRESSION_LENGTH} characters)`);
+  }
   const tokens = [];
   let lastIndex = 0;
   TOKEN_RE.lastIndex = 0;
@@ -36,18 +49,115 @@ function tokenize(expr) {
   return tokens;
 }
 
+const toNum = (v) => {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  if (Number.isNaN(n)) throw new Error(`"${v}" is not a number`);
+  return n;
+};
+const toInt = (v) => Math.trunc(toNum(v));
+const toStr = (v) => String(v);
+
+function arity(name, args, min, max = min) {
+  if (args.length < min || args.length > max) {
+    const want = min === max ? `${min}` : `${min}–${max}`;
+    throw new Error(`${name}() expects ${want} argument${want === '1' ? '' : 's'}`);
+  }
+}
+
+/**
+ * Whitelisted pure helper functions available inside formulas. Each receives
+ * already-evaluated argument values and must not touch anything outside its
+ * arguments. Keep this list small and boring.
+ *
+ *   pad(value, width [, char])  zero-pad (default) or pad with `char` on the left
+ *   hex(n)                      lowercase hexadecimal of an integer
+ *   floor(n) ceil(n) round(n) abs(n)
+ *   mod(a, b)                   mathematical modulo (always >= 0 for b > 0)
+ *   min(a, b, …) max(a, b, …)
+ *   upper(s) lower(s)           string case
+ *   str(v)                      force string (e.g. to concatenate numbers as text)
+ */
+const FUNCTIONS = Object.freeze({
+  pad(args) {
+    arity('pad', args, 2, 3);
+    const [value, width, ch = '0'] = args;
+    const padChar = toStr(ch);
+    if (padChar.length !== 1) throw new Error('pad() padding character must be one character');
+    return toStr(value).padStart(Math.max(0, Math.min(64, toInt(width))), padChar);
+  },
+  hex(args) {
+    arity('hex', args, 1);
+    return toInt(args[0]).toString(16);
+  },
+  floor(args) {
+    arity('floor', args, 1);
+    return Math.floor(toNum(args[0]));
+  },
+  ceil(args) {
+    arity('ceil', args, 1);
+    return Math.ceil(toNum(args[0]));
+  },
+  round(args) {
+    arity('round', args, 1);
+    return Math.round(toNum(args[0]));
+  },
+  abs(args) {
+    arity('abs', args, 1);
+    return Math.abs(toNum(args[0]));
+  },
+  mod(args) {
+    arity('mod', args, 2);
+    const a = toNum(args[0]);
+    const b = toNum(args[1]);
+    if (b === 0) throw new Error('mod() by zero');
+    return ((a % b) + b) % b;
+  },
+  min(args) {
+    arity('min', args, 1, 16);
+    return Math.min(...args.map(toNum));
+  },
+  max(args) {
+    arity('max', args, 1, 16);
+    return Math.max(...args.map(toNum));
+  },
+  upper(args) {
+    arity('upper', args, 1);
+    return toStr(args[0]).toUpperCase();
+  },
+  lower(args) {
+    arity('lower', args, 1);
+    return toStr(args[0]).toLowerCase();
+  },
+  str(args) {
+    arity('str', args, 1);
+    return toStr(args[0]);
+  },
+});
+
+/** Names instructors may call in formulas (exposed for docs / editor help). */
+export const FUNCTION_NAMES = Object.freeze(Object.keys(FUNCTIONS));
+
 /**
  * Grammar (standard precedence):
  *   expr    := term (('+' | '-') term)*
  *   term    := factor (('*' | '/' | '%') factor)*
- *   factor  := NUMBER | STRING | IDENT | '(' expr ')' | ('-' factor)
+ *   factor  := NUMBER | STRING | IDENT | IDENT '(' args? ')' | '(' expr ')' | ('-' factor)
+ *   args    := expr (',' expr)*
  */
 function evaluateExpression(expr, scope) {
   const tokens = tokenize(String(expr));
   let pos = 0;
+  let depth = 0;
 
   const peek = () => tokens[pos];
   const next = () => tokens[pos++];
+  const enter = () => {
+    depth += 1;
+    if (depth > MAX_DEPTH) throw new Error('Expression is nested too deeply');
+  };
+  const leave = () => {
+    depth -= 1;
+  };
 
   function parseExpr() {
     let left = parseTerm();
@@ -73,10 +183,28 @@ function evaluateExpression(expr, scope) {
       const op = next();
       const right = parseFactor();
       if (op === '*') left = toNum(left) * toNum(right);
-      else if (op === '/') left = toNum(left) / toNum(right);
-      else left = toNum(left) % toNum(right);
+      else if (op === '/') {
+        const d = toNum(right);
+        if (d === 0) throw new Error('Division by zero');
+        left = toNum(left) / d;
+      } else {
+        const d = toNum(right);
+        if (d === 0) throw new Error('Modulo by zero');
+        left = toNum(left) % d;
+      }
     }
     return left;
+  }
+
+  function parseArgs() {
+    const args = [];
+    if (peek() === ')') return args;
+    args.push(parseExpr());
+    while (peek() === ',') {
+      next();
+      args.push(parseExpr());
+    }
+    return args;
   }
 
   function parseFactor() {
@@ -85,7 +213,9 @@ function evaluateExpression(expr, scope) {
 
     if (tok === '(') {
       next();
+      enter();
       const val = parseExpr();
+      leave();
       if (next() !== ')') throw new Error('Missing closing parenthesis');
       return val;
     }
@@ -93,7 +223,7 @@ function evaluateExpression(expr, scope) {
       next();
       return -toNum(parseFactor());
     }
-    if (/^[0-9]/.test(tok)) {
+    if (/^[0-9.]/.test(tok)) {
       next();
       return parseFloat(tok);
     }
@@ -103,6 +233,19 @@ function evaluateExpression(expr, scope) {
     }
     if (/^[A-Za-z_]/.test(tok)) {
       next();
+      // Function call?
+      if (peek() === '(') {
+        // hasOwnProperty so `constructor(...)`, `toString(...)` etc. are rejected.
+        if (!Object.prototype.hasOwnProperty.call(FUNCTIONS, tok)) {
+          throw new Error(`Unknown function "${tok}"`);
+        }
+        next(); // '('
+        enter();
+        const args = parseArgs();
+        leave();
+        if (next() !== ')') throw new Error(`Missing closing parenthesis after ${tok}(`);
+        return FUNCTIONS[tok](args);
+      }
       // hasOwnProperty (not `in`) so inherited keys like __proto__/constructor
       // are treated as unknown variables rather than resolving up the chain.
       if (!Object.prototype.hasOwnProperty.call(scope, tok)) {
@@ -113,15 +256,12 @@ function evaluateExpression(expr, scope) {
     throw new Error(`Unexpected token "${tok}"`);
   }
 
-  function toNum(v) {
-    const n = typeof v === 'number' ? v : parseFloat(v);
-    if (Number.isNaN(n)) throw new Error(`"${v}" is not a number`);
-    return n;
-  }
-
   const result = parseExpr();
   if (pos !== tokens.length) {
     throw new Error(`Unexpected token "${peek()}"`);
+  }
+  if (typeof result === 'number' && !Number.isFinite(result)) {
+    throw new Error('Expression did not produce a finite number');
   }
   return result;
 }
@@ -139,18 +279,20 @@ function evaluateExpression(expr, scope) {
  */
 export function resolveVariables(variables, seatId) {
   const seatNumber = parseInt(String(seatId).replace(/[^0-9]/g, ''), 10);
-  const scope = {
-    // Built-in identifiers available to every formula.
-    seat: Number.isNaN(seatNumber) ? 0 : seatNumber,
-  };
+  const scope = Object.create(null);
+  // Built-in identifiers available to every formula.
+  scope.seat = Number.isNaN(seatNumber) ? 0 : seatNumber;
   // Built-in placeholder always available even without an explicit formula.
   const context = { SEAT_ID: seatId };
 
   for (const def of variables || []) {
     if (!def || !def.name) continue;
     const name = String(def.name).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    if (!IDENT_RE.test(name)) {
       throw new Error(`Invalid variable name "${def.name}"`);
+    }
+    if (Object.prototype.hasOwnProperty.call(FUNCTIONS, name)) {
+      throw new Error(`Variable name "${name}" clashes with a built-in function`);
     }
     let value;
     try {
@@ -171,12 +313,11 @@ export function resolveVariables(variables, seatId) {
 // Placeholder injection
 // ---------------------------------------------------------------------------
 
-const PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
-
 /**
  * Replace {{ NAME }} tokens in a string with values from the context.
  * Unknown placeholders are left visibly marked so authoring mistakes surface
- * rather than silently vanishing.
+ * rather than silently vanishing. (Templates are also rejected at save time
+ * when they reference unknown placeholders — see validateTemplate.js.)
  */
 export function injectVariables(text, context) {
   if (typeof text !== 'string') return text;
@@ -196,11 +337,12 @@ export function injectVariables(text, context) {
  *
  * IP-PROTECTION NOTE: checkpoint answers are intentionally stripped from the
  * rendered output. The server keeps them private and validates submissions,
- * so the "unlock string" is never shipped to the browser.
+ * so the "unlock string" is never shipped to the browser. Solutions are also
+ * omitted here; the participant route adds them only once revealed.
  *
  * @param {Object} step Raw authored step.
  * @param {Object} context Resolved variable context for the seat.
- * @param {number} index Step index within the manual.
+ * @param {number} index Step index within the section.
  */
 export function renderStep(step, context, index) {
   const rendered = {
@@ -214,8 +356,8 @@ export function renderStep(step, context, index) {
     })),
   };
 
-  if (step.checkpoint && step.checkpoint.answer) {
-    // Ship the prompt and its shape, but never the answer.
+  if (stepHasCheckpoint(step)) {
+    // Ship the prompt and its shape, but never the answer(s).
     rendered.checkpoint = {
       prompt: injectVariables(
         step.checkpoint.prompt || 'Enter the value to continue',
@@ -228,20 +370,37 @@ export function renderStep(step, context, index) {
   return rendered;
 }
 
-/**
- * Compute the expected checkpoint answer for a seat (server-side only).
- * Comparison is case-insensitive and whitespace-trimmed to be forgiving of
- * participant input while still requiring the correct value.
- */
-export function checkpointAnswer(step, context) {
-  if (!step || !step.checkpoint || !step.checkpoint.answer) return null;
-  return injectVariables(String(step.checkpoint.answer), context)
+/** Normalise a participant-submitted (or authored) answer for comparison. */
+export function normaliseAnswer(value) {
+  return String(value ?? '')
     .trim()
+    .replace(/\s+/g, ' ')
     .toLowerCase();
 }
 
-export function normaliseAnswer(value) {
-  return String(value ?? '').trim().toLowerCase();
+/**
+ * All accepted checkpoint answers for a seat (server-side only), normalised.
+ * The primary `answer` plus any authored alternatives (`answers`).
+ */
+export function checkpointAnswers(step, context) {
+  if (!stepHasCheckpoint(step)) return [];
+  const all = [step.checkpoint.answer, ...(step.checkpoint.answers || [])];
+  return [...new Set(all.map((a) => normaliseAnswer(injectVariables(String(a), context))))];
+}
+
+/**
+ * Compute the primary expected checkpoint answer for a seat (server-side only).
+ * Kept for backwards compatibility; prefer `isCorrectAnswer` / `checkpointAnswers`.
+ */
+export function checkpointAnswer(step, context) {
+  const all = checkpointAnswers(step, context);
+  return all.length ? all[0] : null;
+}
+
+/** Does a submitted value match any accepted answer for this seat? */
+export function isCorrectAnswer(step, context, submitted) {
+  const want = checkpointAnswers(step, context);
+  return want.includes(normaliseAnswer(submitted));
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +457,20 @@ export function computeSectionVisibleThrough(section, sectionIndex, completedSet
     }
   }
   return Math.max(steps.length - 1, 0);
+}
+
+/**
+ * Is (sectionIndex, stepIndex) currently reachable by a participant with the
+ * given completed-checkpoint set? Shared by every participant action route so
+ * hints, solutions, checkpoints and progress all apply the same gate.
+ */
+export function isStepReachable(sections, sectionIndex, stepIndex, completedSet) {
+  if (!Number.isInteger(sectionIndex) || !Number.isInteger(stepIndex)) return false;
+  const section = sections[sectionIndex];
+  if (!section || !section.steps || !section.steps[stepIndex]) return false;
+  if (sectionIndex > computeUnlockedSection(sections, completedSet)) return false;
+  if (isSectionCleared(section, sectionIndex, completedSet)) return true;
+  return stepIndex <= computeSectionVisibleThrough(section, sectionIndex, completedSet);
 }
 
 /**

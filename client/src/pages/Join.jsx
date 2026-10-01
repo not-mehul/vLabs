@@ -22,15 +22,23 @@ export default function Join() {
   const [stored, setStored] = useState(() => participantSession.get());
 
   // Validate the stored session on mount; drop it if it's no longer live.
+  // /status is the cheap liveness probe (no rendered content, no scrape-limit
+  // cost) — /content used to be pulled here just to check the token.
   useEffect(() => {
     const s = participantSession.get();
     if (!s) return;
-    api.content(s.token).catch((err) => {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        participantSession.clear();
-        setStored(null);
-      }
-    });
+    api
+      .status(s.token)
+      .then((res) => {
+        // Keep the resume banner's expiry fresh.
+        participantSession.set({ ...s, session: { ...s.session, expires_at: res.expires_at } });
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          participantSession.clear();
+          setStored(null);
+        }
+      });
   }, []);
 
   async function handleSubmit(e) {
@@ -90,13 +98,14 @@ export default function Join() {
           Enter the code from the instructor's screen and register your name.
         </p>
 
-        <form onSubmit={handleSubmit} className="form">
+        <form onSubmit={handleSubmit} className="form" noValidate>
           <label className="field">
             <span className="field__label">Room code</span>
             <input
               className="field__input field__input--code"
               inputMode="numeric"
-              autoComplete="off"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
               maxLength={6}
               placeholder="123456"
               value={roomCode}
@@ -114,6 +123,7 @@ export default function Join() {
                 className="field__input"
                 autoComplete="given-name"
                 placeholder="Ada"
+                maxLength={60}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
               />
@@ -124,13 +134,14 @@ export default function Join() {
                 className="field__input"
                 autoComplete="family-name"
                 placeholder="Lovelace"
+                maxLength={60}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
               />
             </label>
           </div>
 
-          {error && <p className="form__error">{error}</p>}
+          {error && <p className="form__error" role="alert">{error}</p>}
 
           <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
             {busy ? 'Registering…' : 'Register & enter lab'}

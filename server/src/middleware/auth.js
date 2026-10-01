@@ -1,28 +1,37 @@
 import db from '../db/index.js';
-import {
-  verifyInstructorToken,
-  verifyParticipantToken,
-  bearer,
-} from '../lib/tokens.js';
+import { verifyInstructorToken, verifyParticipantToken, bearer } from '../lib/tokens.js';
 import { parseUtc } from '../lib/time.js';
+
+const q = {
+  instructor: db.prepare('SELECT id, username, token_version FROM instructors WHERE id = ?'),
+  participant: db.prepare('SELECT * FROM participants WHERE id = ? AND session_id = ?'),
+  session: db.prepare('SELECT * FROM sessions WHERE id = ?'),
+};
 
 /** Guard instructor-only routes. */
 export function requireInstructor(req, res, next) {
   const token = bearer(req);
   if (!token) return res.status(401).json({ error: 'Authentication required' });
+
+  let claims;
   try {
-    const claims = verifyInstructorToken(token);
-    const instructor = db
-      .prepare('SELECT id, username FROM instructors WHERE id = ?')
-      .get(claims.sub);
-    if (!instructor) {
-      return res.status(401).json({ error: 'Instructor no longer exists' });
-    }
-    req.instructor = instructor;
-    next();
+    claims = verifyInstructorToken(token);
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+
+  // Database errors from here on are real 500s, not auth failures — let them
+  // reach the error handler instead of masquerading as "invalid token".
+  const instructor = q.instructor.get(Number(claims.sub));
+  if (!instructor) {
+    return res.status(401).json({ error: 'Instructor no longer exists' });
+  }
+  // Password changes bump token_version; older tokens are rejected.
+  if ((claims.tv ?? 0) !== (instructor.token_version ?? 0)) {
+    return res.status(401).json({ error: 'Session expired — please sign in again', code: 'TOKEN_REVOKED' });
+  }
+  req.instructor = { id: instructor.id, username: instructor.username };
+  next();
 }
 
 /**
@@ -44,16 +53,12 @@ export function requireParticipant(req, res, next) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  const participant = db
-    .prepare('SELECT * FROM participants WHERE id = ? AND session_id = ?')
-    .get(claims.sub, claims.session);
+  const participant = q.participant.get(Number(claims.sub), claims.session);
   if (!participant) {
-    return res.status(401).json({ error: 'Seat is no longer registered' });
+    return res.status(401).json({ error: 'Seat is no longer registered', code: 'SEAT_REMOVED' });
   }
 
-  const session = db
-    .prepare('SELECT * FROM sessions WHERE id = ?')
-    .get(claims.session);
+  const session = q.session.get(claims.session);
 
   if (!session || !session.is_active) {
     return res

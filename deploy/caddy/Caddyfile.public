@@ -1,0 +1,11 @@
+# Internet-facing: automatic Let's Encrypt certificates via HTTP-01.
+# Requirements: SITE_ADDRESS resolves to this host's public IP and ports 80
+# and 443 are reachable from the internet. HTTP → HTTPS redirect is automatic.
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy vlabs:4000
+}

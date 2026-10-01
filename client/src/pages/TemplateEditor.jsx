@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { formatDateTime } from '../lib/datetime.js';
+import { slug } from '../lib/format.js';
+import { downloadFile, readTextFile } from '../lib/files.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import StepCard from '../components/StepCard.jsx';
@@ -11,29 +13,33 @@ import {
   templateToMarkdown,
   parseJsonTemplate,
   parseMarkdownTemplate,
-  downloadFile,
-  readTextFile,
   SAMPLE_MARKDOWN,
 } from '../lib/templateFormat.js';
+import {
+  normaliseTemplate,
+  blankStep,
+  blankSection,
+  findUnknownPlaceholders,
+  LIMITS,
+} from '../../../shared/template-schema.js';
 
-const BLANK_STEP = () => ({ type: 'desk', title: '', body: '', hints: [], solution: '', checkpoint: null });
-const BLANK_SECTION = (n = 1) => ({ title: `Section ${n}`, steps: [BLANK_STEP()] });
+const NEW_TEMPLATE = () =>
+  normaliseTemplate({
+    title: '',
+    description: '',
+    variables: [
+      { name: 'PORT_NUM', expression: 'seat' },
+      { name: 'GATEWAY_IP', expression: "'192.168.1.' + (100 + seat)" },
+    ],
+    content: [blankSection(1)],
+  });
 
-const NEW_TEMPLATE = () => ({
-  title: '',
-  description: '',
-  variables: [
-    { name: 'PORT_NUM', expression: 'seat' },
-    { name: 'GATEWAY_IP', expression: "'192.168.1.' + (100 + seat)" },
-  ],
-  content: [BLANK_SECTION(1)],
-});
-
-const slug = (s) => (s || 'lab').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/** Coerce a template from the API/import/history into the editor's shape. */
+const coerce = (t) => normaliseTemplate(t);
 
 /* --------------------------- Variable editor ---------------------------- */
 
-function VariableEditor({ variables, onChange }) {
+function VariableEditor({ variables, onChange, functions }) {
   const update = (i, key, val) =>
     onChange(variables.map((v, idx) => (idx === i ? { ...v, [key]: val } : v)));
   return (
@@ -53,14 +59,27 @@ function VariableEditor({ variables, onChange }) {
         arithmetic and string concatenation, e.g.{' '}
         <code>'192.168.1.' + (100 + seat)</code>. Reference these as{' '}
         <code>{'{{ NAME }}'}</code> in step bodies. <code>{'{{ SEAT_ID }}'}</code>{' '}
-        is always available.
+        is always available. Later formulas can reference earlier ones.
       </p>
+      {functions.length > 0 && (
+        <p className="muted small">
+          Helpers: {functions.map((f, i) => (
+            <span key={f}>
+              <code>{f}()</code>
+              {i < functions.length - 1 ? ', ' : ''}
+            </span>
+          ))}
+          . For example <code>'S' + pad(seat, 2)</code> → <code>S07</code>,{' '}
+          <code>hex(seat + 15)</code> → <code>16</code>.
+        </p>
+      )}
       {variables.length === 0 && <p className="muted small">No variables defined.</p>}
       {variables.map((v, i) => (
         <div className="var-row" key={i}>
           <input
             className="field__input mono"
             placeholder="NAME"
+            aria-label={`Variable ${i + 1} name`}
             value={v.name}
             onChange={(e) => update(i, 'name', e.target.value)}
           />
@@ -68,6 +87,7 @@ function VariableEditor({ variables, onChange }) {
           <input
             className="field__input mono"
             placeholder="expression"
+            aria-label={`Variable ${i + 1} formula`}
             value={v.expression}
             onChange={(e) => update(i, 'expression', e.target.value)}
           />
@@ -97,6 +117,7 @@ function HintEditor({ hints, onChange }) {
         <button
           type="button"
           className="btn btn--xs btn--ghost"
+          disabled={hints.length >= LIMITS.hintsPerStep}
           onClick={() => onChange([...hints, { label: '', text: '' }])}
         >
           <Icon name="plus" size={13} /> Hint
@@ -107,12 +128,14 @@ function HintEditor({ hints, onChange }) {
           <input
             className="field__input"
             placeholder="Hint label (the clickable prompt)"
+            aria-label={`Hint ${i + 1} label`}
             value={h.label}
             onChange={(e) => update(i, 'label', e.target.value)}
           />
           <textarea
             className="field__input hint-editor__text"
             placeholder="Hint text — Markdown supported (bullets, links…)"
+            aria-label={`Hint ${i + 1} text`}
             rows={2}
             value={h.text}
             onChange={(e) => update(i, 'text', e.target.value)}
@@ -135,15 +158,20 @@ function HintEditor({ hints, onChange }) {
 
 function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
   const set = (patch) => onChange({ ...step, ...patch });
+  const setCp = (patch) => set({ checkpoint: { ...step.checkpoint, ...patch } });
   const hasCheckpoint = Boolean(step.checkpoint);
+  // Alternatives are edited as one-per-line text; kept as a string while
+  // typing so a trailing newline doesn't get eaten by normalisation.
+  const altText = (step.checkpoint?.answers || []).join('\n');
   return (
     <div className="step-editor">
       <div className="step-editor__head">
         <span className="step-editor__num">Step {index + 1}</span>
-        <div className="step-editor__type">
+        <div className="step-editor__type" role="group" aria-label="Step type">
           <button
             type="button"
             className={`chip ${step.type === 'desk' ? 'chip--active' : ''}`}
+            aria-pressed={step.type === 'desk'}
             onClick={() => set({ type: 'desk' })}
           >
             <Icon name="desk" size={15} /> Desk
@@ -151,6 +179,7 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
           <button
             type="button"
             className={`chip ${step.type === 'computer' ? 'chip--active' : ''}`}
+            aria-pressed={step.type === 'computer'}
             onClick={() => set({ type: 'computer' })}
           >
             <Icon name="computer" size={15} /> Computer
@@ -159,19 +188,21 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
         <div className="step-editor__move">
           <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move step up"><Icon name="arrowUp" size={14} /></button>
           <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move step down"><Icon name="arrowDown" size={14} /></button>
-          <button type="button" className="btn btn--xs btn--danger-ghost" onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete</button>
+          <button type="button" className="btn btn--xs btn--danger-ghost" disabled={total === 1} onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete</button>
         </div>
       </div>
 
       <input
         className="field__input step-editor__title"
         placeholder="Step title"
+        aria-label={`Step ${index + 1} title`}
         value={step.title}
         onChange={(e) => set({ title: e.target.value })}
       />
       <textarea
         className="field__input step-editor__body"
         placeholder="Step body (Markdown supported). Use {{ VARIABLE }} placeholders."
+        aria-label={`Step ${index + 1} body`}
         rows={5}
         value={step.body}
         onChange={(e) => set({ body: e.target.value })}
@@ -198,7 +229,11 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
             type="checkbox"
             checked={hasCheckpoint}
             onChange={(e) =>
-              set({ checkpoint: e.target.checked ? { prompt: '', placeholder: '', answer: '' } : null })
+              set({
+                checkpoint: e.target.checked
+                  ? { prompt: '', placeholder: '', answer: '', answers: [] }
+                  : null,
+              })
             }
           />
           <span>Add a checkpoint (gates the next section once cleared)</span>
@@ -207,19 +242,34 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
           <div className="checkpoint-editor__fields">
             <label className="field">
               <span className="field__label">Prompt</span>
-              <input className="field__input" placeholder="Prompt shown to participant" value={step.checkpoint.prompt} onChange={(e) => set({ checkpoint: { ...step.checkpoint, prompt: e.target.value } })} />
+              <input className="field__input" placeholder="Prompt shown to participant" value={step.checkpoint.prompt} onChange={(e) => setCp({ prompt: e.target.value })} />
             </label>
             <div className="field-row">
               <label className="field">
                 <span className="field__label">Input placeholder</span>
-                <input className="field__input" placeholder="optional" value={step.checkpoint.placeholder} onChange={(e) => set({ checkpoint: { ...step.checkpoint, placeholder: e.target.value } })} />
+                <input className="field__input" placeholder="optional" value={step.checkpoint.placeholder} onChange={(e) => setCp({ placeholder: e.target.value })} />
               </label>
               <label className="field">
                 <span className="field__label">Expected answer</span>
-                <input className="field__input mono" placeholder="may use {{ VARIABLES }}" value={step.checkpoint.answer} onChange={(e) => set({ checkpoint: { ...step.checkpoint, answer: e.target.value } })} />
+                <input className="field__input mono" placeholder="may use {{ VARIABLES }}" value={step.checkpoint.answer} onChange={(e) => setCp({ answer: e.target.value })} />
               </label>
             </div>
-            <p className="muted small">The answer is validated server-side and never sent to the browser.</p>
+            <label className="field">
+              <span className="field__label">Also accept (one per line, optional)</span>
+              <textarea
+                className="field__input mono"
+                rows={2}
+                placeholder={'e.g. {{ HOST_IP }}/24'}
+                value={altText}
+                onChange={(e) => setCp({ answers: e.target.value.split('\n') })}
+                onBlur={(e) =>
+                  setCp({ answers: e.target.value.split('\n').map((a) => a.trim()).filter(Boolean) })
+                }
+              />
+            </label>
+            <p className="muted small">
+              Answers are validated server-side (whitespace and case are forgiven) and never sent to the browser.
+            </p>
           </div>
         )}
       </div>
@@ -249,6 +299,7 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
         <input
           className="field__input section-editor__title"
           placeholder="Section title"
+          aria-label={`Section ${index + 1} title`}
           value={section.title}
           onChange={(e) => onChange({ ...section, title: e.target.value })}
         />
@@ -271,7 +322,12 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
         />
       ))}
 
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => setSteps([...section.steps, BLANK_STEP()])}>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        disabled={section.steps.length >= LIMITS.stepsPerSection}
+        onClick={() => setSteps([...section.steps, blankStep()])}
+      >
         <Icon name="plus" size={15} /> Add step
       </button>
     </div>
@@ -295,7 +351,7 @@ function Preview({ id, draft }) {
       const res = await call((t) => api.previewTemplate(t, previewId, Number(seat), draft));
       setResult(res);
     } catch (err) {
-      setError(err.message);
+      setError(err.details ? err.details.join('\n') : err.message);
       setResult(null);
     } finally {
       setBusy(false);
@@ -307,14 +363,14 @@ function Preview({ id, draft }) {
       <div className="preview__controls">
         <label className="field field--narrow">
           <span className="field__label">Preview seat #</span>
-          <input className="field__input" type="number" min="1" value={seat} onChange={(e) => setSeat(e.target.value)} />
+          <input className="field__input" type="number" min="1" max="9999" value={seat} onChange={(e) => setSeat(e.target.value)} />
         </label>
         <button type="button" className="btn btn--sm btn--primary" onClick={run} disabled={busy}>
           <Icon name="eye" size={15} /> {busy ? 'Rendering…' : 'Render preview'}
         </button>
       </div>
 
-      {error && <p className="form__error">{error}</p>}
+      {error && <pre className="form__error preview__error">{error}</pre>}
 
       {result && (
         <>
@@ -374,10 +430,10 @@ function ImportExport({ tpl, onImport }) {
     <div className="io-bar">
       <input ref={fileRef} type="file" accept=".md,.markdown,.json,text/markdown,application/json" hidden onChange={handleFile} />
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}><Icon name="upload" size={16} /> Import file</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={16} /> Export .md</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title)}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={16} /> Export .json</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title, 'lab')}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={16} /> Export .md</button>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title, 'lab')}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={16} /> Export .json</button>
       <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile('sample-lab.md', SAMPLE_MARKDOWN, 'text/markdown')}>Download sample</button>
-      {msg && <span className="io-bar__msg">{msg}</span>}
+      {msg && <span className="io-bar__msg" role="status">{msg}</span>}
     </div>
   );
 }
@@ -407,13 +463,22 @@ function describeChanges(prev, curr) {
   return changes.length ? changes : ['No content changes'];
 }
 
+const LIFECYCLE_LABEL = { archived: 'Template archived', restored: 'Template restored', deleted: 'Template deleted' };
+
 function ChangeHistory({ audit, onRevert }) {
+  // Only content versions ("created"/"updated") participate in diffing.
+  const versions = audit.filter((a) => a.snapshot && (a.action === 'created' || a.action === 'updated'));
   return (
     <ul className="audit__list">
-      {audit.map((a, i) => {
-        const prev = audit[i + 1]?.snapshot; // the older version
-        const changes =
-          a.action === 'deleted' ? ['Template deleted'] : describeChanges(prev, a.snapshot);
+      {audit.map((a) => {
+        let changes;
+        if (LIFECYCLE_LABEL[a.action]) {
+          changes = [LIFECYCLE_LABEL[a.action]];
+        } else {
+          const idx = versions.indexOf(a);
+          const prev = idx >= 0 ? versions[idx + 1]?.snapshot : null; // the older version
+          changes = describeChanges(prev, a.snapshot || {});
+        }
         return (
           <li className="audit__item" key={a.id}>
             <div className="audit__row">
@@ -448,13 +513,16 @@ export default function TemplateEditor() {
   const { call } = useInstructorApi();
 
   const [tpl, setTpl] = useState(isNew ? NEW_TEMPLATE() : null);
+  const [meta, setMeta] = useState({ archived_at: null, version: null });
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [audit, setAudit] = useState([]);
   const [tab, setTab] = useState('content'); // content | settings
   const [revertNote, setRevertNote] = useState('');
+  const [functions, setFunctions] = useState([]);
 
   function handleRevert(entry) {
     setTpl(coerce(entry.snapshot));
@@ -471,11 +539,18 @@ export default function TemplateEditor() {
   }, [call, id, isNew]);
 
   useEffect(() => {
+    call((tok) => api.templateFunctions(tok))
+      .then((r) => setFunctions(r.functions || []))
+      .catch(() => {});
+  }, [call]);
+
+  useEffect(() => {
     if (isNew) return;
     (async () => {
       try {
         const t = await call((tok) => api.getTemplate(tok, id));
         setTpl(coerce(t));
+        setMeta({ archived_at: t.archived_at, version: t.version });
       } catch (err) {
         setError(err.message);
       } finally {
@@ -499,9 +574,14 @@ export default function TemplateEditor() {
   const removeSection = (i) =>
     patch({ content: tpl.content.length > 1 ? tpl.content.filter((_, idx) => idx !== i) : tpl.content });
 
+  // Live authoring check: the same rule the server enforces, surfaced while
+  // typing so a typo like {{ HOST_IPP }} is caught before Save.
+  const unknown = useMemo(() => (tpl ? findUnknownPlaceholders(tpl) : []), [tpl]);
+
   async function handleSave() {
     setSaving(true);
     setError('');
+    setErrorDetails([]);
     try {
       const payload = {
         title: tpl.title,
@@ -514,12 +594,25 @@ export default function TemplateEditor() {
         : await call((t) => api.updateTemplate(t, id, payload));
       navigate(`/instructor/templates/${saved.id}`, { replace: true });
       setTpl(coerce(saved));
+      setMeta({ archived_at: saved.archived_at, version: saved.version });
       setRevertNote('');
       call((t) => api.getTemplateAudit(t, saved.id)).then(setAudit).catch(() => {});
     } catch (err) {
-      setError(err.message);
+      setError(err.details ? 'Please fix the following before saving:' : err.message);
+      setErrorDetails(err.details || []);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const t = await call((tok) => api.restoreTemplate(tok, id));
+      setMeta({ archived_at: t.archived_at, version: t.version });
+      loadAudit();
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -531,7 +624,10 @@ export default function TemplateEditor() {
       <div className="page-head page-head--row">
         <div>
           <button className="linkback" onClick={() => navigate('/instructor/templates')}><Icon name="chevronLeft" size={15} /> Templates</button>
-          <h1>{isNew ? 'New template' : 'Edit template'}</h1>
+          <h1>
+            {isNew ? 'New template' : 'Edit template'}
+            {meta.version != null && <span className="muted small"> · v{meta.version}</span>}
+          </h1>
         </div>
         <div className="page-head__actions">
           {tab === 'content' && (
@@ -545,17 +641,62 @@ export default function TemplateEditor() {
         </div>
       </div>
 
-      <div className="tabs" role="tablist">
-        <button type="button" className={`tab ${tab === 'content' ? 'tab--active' : ''}`} onClick={() => setTab('content')}>
+      {meta.archived_at && (
+        <div className="banner banner--warn" role="status">
+          <span>
+            <strong>This template is archived.</strong> It is hidden from the session launcher; you can
+            still edit it.
+          </span>
+          <button className="btn btn--sm btn--ghost" onClick={handleRestore}>
+            <Icon name="undo" size={14} /> Restore
+          </button>
+        </div>
+      )}
+
+      {!isNew && (
+        <p className="muted small">
+          Saving creates a new version. Sessions already running keep the version they were launched
+          with until you push the update from the session monitor.
+        </p>
+      )}
+
+      <div className="tabs" role="tablist" aria-label="Editor sections">
+        <button type="button" role="tab" aria-selected={tab === 'content'} className={`tab ${tab === 'content' ? 'tab--active' : ''}`} onClick={() => setTab('content')}>
           <Icon name="layers" size={15} /> Content
         </button>
-        <button type="button" className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} onClick={() => setTab('settings')}>
+        <button type="button" role="tab" aria-selected={tab === 'settings'} className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} onClick={() => setTab('settings')}>
           <Icon name="settings" size={15} /> Settings
         </button>
       </div>
 
       {revertNote && <div className="banner banner--success">{revertNote}</div>}
-      {error && <p className="form__error">{error}</p>}
+      {error && (
+        <div className="form__error" role="alert">
+          {error}
+          {errorDetails.length > 0 && (
+            <ul className="error-list">
+              {errorDetails.map((d, i) => (
+                <li key={i}>{d}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {unknown.length > 0 && (
+        <div className="banner banner--warn" role="status">
+          <span>
+            <strong>Unknown placeholder{unknown.length > 1 ? 's' : ''}:</strong>{' '}
+            {unknown.slice(0, 6).map((u, i) => (
+              <span key={`${u.name}-${u.where}`}>
+                <code>{`{{ ${u.name} }}`}</code> <span className="muted">({u.where})</span>
+                {i < Math.min(unknown.length, 6) - 1 ? ', ' : ''}
+              </span>
+            ))}
+            {unknown.length > 6 ? ` and ${unknown.length - 6} more` : ''}. Declare the variable in
+            Settings or fix the spelling — saving will be refused otherwise.
+          </span>
+        </div>
+      )}
 
       {tab === 'content' ? (
         <div className={`editor-grid ${showPreview ? 'editor-grid--split' : ''}`}>
@@ -563,17 +704,22 @@ export default function TemplateEditor() {
             <section className="editor-section">
               <label className="field">
                 <span className="field__label">Title</span>
-                <input className="field__input" value={tpl.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Network Bench Setup" />
+                <input className="field__input" value={tpl.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Network Bench Setup" maxLength={LIMITS.title} />
               </label>
               <label className="field">
                 <span className="field__label">Description</span>
-                <input className="field__input" value={tpl.description} onChange={(e) => patch({ description: e.target.value })} placeholder="Short summary shown in the template list" />
+                <input className="field__input" value={tpl.description} onChange={(e) => patch({ description: e.target.value })} placeholder="Short summary shown in the template list" maxLength={LIMITS.description} />
               </label>
             </section>
 
             <div className="editor-section__head">
               <h3>Sections</h3>
-              <button type="button" className="btn btn--sm btn--ghost" onClick={() => patch({ content: [...tpl.content, BLANK_SECTION(tpl.content.length + 1)] })}>
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost"
+                disabled={tpl.content.length >= LIMITS.sections}
+                onClick={() => patch({ content: [...tpl.content, blankSection(tpl.content.length + 1)] })}
+              >
                 <Icon name="plus" size={15} /> Add section
               </button>
             </div>
@@ -604,7 +750,11 @@ export default function TemplateEditor() {
             <ImportExport tpl={tpl} onImport={(parsed) => { setTpl(coerce(parsed)); setTab('content'); }} />
           </section>
 
-          <VariableEditor variables={tpl.variables} onChange={(variables) => patch({ variables })} />
+          <VariableEditor
+            variables={tpl.variables}
+            functions={functions}
+            onChange={(variables) => patch({ variables })}
+          />
 
           {!isNew && (
             <section className="editor-section">
@@ -623,17 +773,4 @@ export default function TemplateEditor() {
       )}
     </PortalShell>
   );
-}
-
-/** Coerce a template from the API/import into the editor's mutable shape. */
-function coerce(t) {
-  return {
-    title: t.title || '',
-    description: t.description || '',
-    variables: t.variables || [],
-    content: (t.content || []).map((s) => ({
-      title: s.title || '',
-      steps: (s.steps || []).map((st) => ({ hints: [], solution: '', checkpoint: null, ...st })),
-    })),
-  };
 }

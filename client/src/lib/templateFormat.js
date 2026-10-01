@@ -21,8 +21,11 @@
  *
  *   ## [desk] Prepare your bench
  *   Body markdown for the step. Use {{ VARIABLE }} placeholders.
+ *   Fenced code blocks (``` or ~~~) are copied verbatim — headings and
+ *   directives inside them are NOT interpreted.
  *
  *   > hint: Label shown on the toggle :: Hidden hint text
+ *   > continues on quoted lines until a blank line
  *
  *   > solution:
  *   > A multi-line markdown walkthrough, revealed once every hint is opened.
@@ -31,68 +34,122 @@
  *   ## [computer] Assign an IP
  *   Body…
  *
- *   > checkpoint: Prompt shown to the participant :: {{ HOST_IP }}
+ *   > checkpoint: Prompt shown to the participant :: {{ HOST_IP }} | {{ HOST_IP }}/24
+ *   > placeholder: e.g. 10.0.0.1XX
  *
  *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]
  *   prefix sets the type, default desk). `> hint:` and `> checkpoint:` lines use
- *   `::` to separate the two parts. `> solution:` starts a block whose following
- *   quoted (`> `) lines are the step's markdown solution.
+ *   `::` to separate the two parts; write `\::` for a literal `::`. Checkpoint
+ *   answers may list alternatives separated by ` | ` (write `\|` for a literal
+ *   pipe). `> placeholder:` sets the checkpoint's input placeholder.
+ *   `> solution:` starts a block whose following quoted (`> `) lines are the
+ *   step's markdown solution. Round-trips through export → import are lossless.
  */
+
+import { normaliseTemplate } from '../../../shared/template-schema.js';
+// Re-exported for backwards compatibility with earlier imports of this module.
+export { downloadFile, readTextFile } from './files.js';
+
+/* ------------------------------- Escaping -------------------------------- */
+
+const escSep = (s) => String(s ?? '').replace(/::/g, '\\::');
+const unescSep = (s) => String(s ?? '').replace(/\\::/g, '::');
+const escPipe = (s) => String(s ?? '').replace(/\|/g, '\\|');
+
+/** Split on the first `::` that is not escaped as `\::`. */
+function splitOnceUnescaped(str) {
+  const s = String(str ?? '');
+  for (let i = 0; i < s.length - 1; i += 1) {
+    if (s[i] === ':' && s[i + 1] === ':' && s[i - 1] !== '\\') {
+      return [unescSep(s.slice(0, i)), unescSep(s.slice(i + 2))];
+    }
+  }
+  return [unescSep(s), ''];
+}
+
+/** Split answers on ` | ` respecting `\|` escapes. */
+function splitAnswers(str) {
+  const out = [];
+  let cur = '';
+  const s = String(str ?? '');
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === '\\' && s[i + 1] === '|') {
+      cur += '|';
+      i += 1;
+    } else if (s[i] === '|') {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += s[i];
+    }
+  }
+  out.push(cur);
+  return out.map((a) => a.trim()).filter(Boolean);
+}
+
+const isFence = (line) => /^\s{0,3}(```|~~~)/.test(line);
+const isDirective = (line) => /^>\s*(hint|solution|checkpoint|placeholder):/i.test(line);
 
 /* ------------------------------- Export --------------------------------- */
 
 export function templateToJson(tpl) {
+  const t = normaliseTemplate(tpl);
   return JSON.stringify(
-    {
-      title: tpl.title,
-      description: tpl.description,
-      variables: tpl.variables,
-      content: tpl.content,
-    },
+    { title: t.title, description: t.description, variables: t.variables, content: t.content },
     null,
     2,
   );
 }
 
-export function templateToMarkdown(tpl) {
+/** Emit a possibly multi-line text as `> ` quoted continuation lines. */
+function quotedLines(text) {
+  return String(text ?? '')
+    .replace(/\s+$/, '')
+    .split('\n')
+    .map((l) => `> ${l}`.replace(/\s+$/, ''));
+}
+
+export function templateToMarkdown(input) {
+  const tpl = normaliseTemplate(input);
   const lines = [];
   lines.push('---');
-  lines.push(`title: ${tpl.title || ''}`);
+  lines.push(`title: ${tpl.title}`);
   if (tpl.description) lines.push(`description: ${tpl.description}`);
-  if (tpl.variables && tpl.variables.length) {
+  if (tpl.variables.length) {
     lines.push('variables:');
     for (const v of tpl.variables) {
-      if (v.name) lines.push(`  ${v.name} = ${v.expression || ''}`);
+      if (v.name) lines.push(`  ${v.name} = ${v.expression}`);
     }
   }
   lines.push('---');
   lines.push('');
 
-  for (const section of tpl.content || []) {
+  for (const section of tpl.content) {
     lines.push(`# ${section.title || 'Section'}`);
     lines.push('');
-    for (const step of section.steps || []) {
-      lines.push(`## [${step.type === 'computer' ? 'computer' : 'desk'}] ${step.title || ''}`);
+    for (const step of section.steps) {
+      lines.push(`## [${step.type}] ${step.title}`.trimEnd());
       if (step.body) {
         lines.push('');
         lines.push(step.body.trimEnd());
       }
-      for (const h of step.hints || []) {
+      for (const h of step.hints) {
         lines.push('');
-        lines.push(`> hint: ${h.label || 'Hint'} :: ${(h.text || '').replace(/\n/g, ' ')}`);
+        const [first, ...rest] = String(h.text ?? '').replace(/\s+$/, '').split('\n');
+        lines.push(`> hint: ${escSep(h.label || 'Hint')} :: ${escSep(first)}`.trimEnd());
+        for (const l of rest) lines.push(`> ${l}`.replace(/\s+$/, ''));
       }
       if (step.solution && step.solution.trim()) {
         lines.push('');
         lines.push('> solution:');
-        // Multi-line markdown solution: each line is quoted so its structure
-        // (bullets, blank lines) survives the round-trip.
-        for (const l of step.solution.replace(/\s+$/, '').split('\n')) {
-          lines.push(`> ${l}`.replace(/\s+$/, ''));
-        }
+        lines.push(...quotedLines(step.solution));
       }
-      if (step.checkpoint && step.checkpoint.answer) {
+      if (step.checkpoint) {
+        const cp = step.checkpoint;
         lines.push('');
-        lines.push(`> checkpoint: ${step.checkpoint.prompt || ''} :: ${step.checkpoint.answer}`);
+        const answers = [cp.answer, ...cp.answers].map((a) => escSep(escPipe(a))).join(' | ');
+        lines.push(`> checkpoint: ${escSep(cp.prompt)} :: ${answers}`);
+        if (cp.placeholder) lines.push(`> placeholder: ${cp.placeholder}`);
       }
       lines.push('');
     }
@@ -104,13 +161,15 @@ export function templateToMarkdown(tpl) {
 
 export function parseJsonTemplate(text) {
   const obj = JSON.parse(text);
-  if (!obj || typeof obj !== 'object') throw new Error('Not a template object');
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new Error('Not a template object');
+  }
   return normaliseTemplate(obj);
 }
 
 /** Parse the documented markdown convention into a template object. */
 export function parseMarkdownTemplate(text) {
-  const src = String(text).replace(/\r\n/g, '\n');
+  const src = String(text).replace(/\r\n?/g, '\n');
   let body = src;
   const tpl = { title: '', description: '', variables: [], content: [] };
 
@@ -125,41 +184,63 @@ export function parseMarkdownTemplate(text) {
   let section = null;
   let step = null;
   let bodyLines = [];
-  let solLines = null; // non-null while collecting a `> solution:` block
+  let inFence = false;
+  // Exactly one of these collectors may be open at a time.
+  let solLines = null; // `> solution:` block
+  let hint = null; // the hint whose text is being continued
+  // Blank lines that merely separate a directive from what follows are layout,
+  // not body content; dropping them keeps export → import from growing gaps.
+  let afterDirective = false;
 
   const flushBody = () => {
     if (step) step.body = bodyLines.join('\n').trim();
     bodyLines = [];
   };
-  const flushSolution = () => {
+  const closeCollectors = () => {
     if (step && solLines) step.solution = solLines.join('\n').trim();
     solLines = null;
+    if (hint) hint.text = hint.lines.join('\n').trim();
+    hint = null;
   };
 
-  for (const raw of lines) {
-    const line = raw;
-    // While collecting a solution, keep consuming quoted lines; the first line
-    // that is not a blockquote (or is another directive) ends the block.
-    if (solLines !== null) {
-      if (/^>\s*(hint|checkpoint|solution):/i.test(line)) {
-        flushSolution();
-        // fall through to directive handling below
+  for (const line of lines) {
+    // Fenced code inside a step body is verbatim: no headings/directives apply.
+    if (isFence(line)) {
+      closeCollectors();
+      afterDirective = false;
+      inFence = !inFence;
+      bodyLines.push(line);
+      continue;
+    }
+    if (inFence) {
+      bodyLines.push(line);
+      continue;
+    }
+
+    // Continuation of an open `> solution:` / `> hint:` block: quoted lines
+    // that are not a new directive belong to it; anything else closes it.
+    if (solLines !== null || hint) {
+      if (isDirective(line)) {
+        closeCollectors();
       } else if (/^>/.test(line)) {
-        solLines.push(line.replace(/^>\s?/, ''));
+        const content = line.replace(/^>\s?/, '');
+        if (solLines !== null) solLines.push(content);
+        else hint.lines.push(content);
         continue;
       } else {
-        flushSolution();
-        // fall through to normal handling below
+        closeCollectors();
       }
     }
-    if (/^#\s+/.test(line) && !/^##\s+/.test(line)) {
-      flushSolution();
+
+    if (afterDirective && line.trim() === '') continue;
+    afterDirective = false;
+
+    if (/^#\s+/.test(line)) {
       flushBody();
       step = null;
       section = { title: line.replace(/^#\s+/, '').trim(), steps: [] };
       tpl.content.push(section);
     } else if (/^##\s+/.test(line)) {
-      flushSolution();
       flushBody();
       if (!section) {
         section = { title: 'Section 1', steps: [] };
@@ -176,28 +257,41 @@ export function parseMarkdownTemplate(text) {
       section.steps.push(step);
     } else if (/^>\s*hint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*hint:/i, '').trim();
-      const [label, textPart] = splitOnce(rest, '::');
-      step.hints.push({ label: (label || 'Hint').trim(), text: (textPart || '').trim() });
+      const [label, textPart] = splitOnceUnescaped(rest);
+      hint = { label: (label || 'Hint').trim(), text: '', lines: [textPart.trim()] };
+      step.hints.push(hint);
+      afterDirective = true;
     } else if (/^>\s*solution:/i.test(line) && step) {
       // Begin a solution block; any text after "solution:" seeds the first line.
       const inline = line.replace(/^>\s*solution:/i, '').trim();
       solLines = inline ? [inline] : [];
+      afterDirective = true;
     } else if (/^>\s*checkpoint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*checkpoint:/i, '').trim();
-      const [prompt, answer] = splitOnce(rest, '::');
+      const [prompt, answerPart] = splitOnceUnescaped(rest);
+      const [answer = '', ...alternatives] = splitAnswers(answerPart);
       step.checkpoint = {
         prompt: (prompt || 'Enter the value to continue').trim(),
         placeholder: '',
-        answer: (answer || '').trim(),
+        answer,
+        answers: alternatives,
       };
+      afterDirective = true;
+    } else if (/^>\s*placeholder:/i.test(line) && step) {
+      const value = line.replace(/^>\s*placeholder:/i, '').trim();
+      if (step.checkpoint) step.checkpoint.placeholder = value;
+      afterDirective = true;
     } else {
       bodyLines.push(line);
     }
   }
-  flushSolution();
+  closeCollectors();
   flushBody();
 
+  if (inFence) throw new Error('Unterminated code fence (``` without a closing ```)');
   if (!tpl.content.length) throw new Error('No sections found (use "# Section title").');
+  // Strip the parser's scratch field before normalising.
+  for (const s of tpl.content) for (const st of s.steps) for (const h of st.hints) delete h.lines;
   return normaliseTemplate(tpl);
 }
 
@@ -228,68 +322,13 @@ function splitOnce(str, sep) {
   return [str.slice(0, i), str.slice(i + sep.length)];
 }
 
-/** Coerce an imported object into the editor's template shape. */
-function normaliseTemplate(obj) {
-  const content = Array.isArray(obj.content) ? obj.content : [];
-  return {
-    title: String(obj.title || '').slice(0, 200),
-    description: String(obj.description || '').slice(0, 1000),
-    variables: (Array.isArray(obj.variables) ? obj.variables : [])
-      .filter((v) => v && v.name)
-      .map((v) => ({ name: String(v.name), expression: String(v.expression || '') })),
-    content: content.map((s) => ({
-      title: String(s.title || 'Section'),
-      steps: (Array.isArray(s.steps) ? s.steps : []).map((st) => ({
-        type: st.type === 'computer' ? 'computer' : 'desk',
-        title: String(st.title || ''),
-        body: String(st.body || ''),
-        hints: (Array.isArray(st.hints) ? st.hints : []).map((h) => ({
-          label: String(h.label || 'Hint'),
-          text: String(h.text || ''),
-        })),
-        solution: String(st.solution || ''),
-        checkpoint:
-          st.checkpoint && st.checkpoint.answer
-            ? {
-                prompt: String(st.checkpoint.prompt || ''),
-                placeholder: String(st.checkpoint.placeholder || ''),
-                answer: String(st.checkpoint.answer),
-              }
-            : null,
-      })),
-    })),
-  };
-}
-
-/* ------------------------------ File I/O -------------------------------- */
-
-export function downloadFile(filename, text, mime = 'text/plain') {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-export function readTextFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Could not read the file'));
-    reader.readAsText(file);
-  });
-}
-
 /** A ready-to-import sample lab, offered as a download in the editor. */
 export const SAMPLE_MARKDOWN = `---
 title: Sample Networking Lab
 description: A two-section starter lab you can import and adapt.
 variables:
   PORT_NUM = seat
+  SEAT_TAG = 'S' + pad(seat, 2)
   HOST_IP = '10.0.0.' + (100 + seat)
   GATEWAY_IP = '192.168.1.' + (100 + seat)
 ---
@@ -300,14 +339,20 @@ variables:
 Welcome, participant #{{ SEAT_ID }}.
 
 1. Power on your workstation.
-2. You have been assigned **switch port {{ PORT_NUM }}**.
+2. You have been assigned **switch port {{ PORT_NUM }}** (cable tag {{ SEAT_TAG }}).
 
 > hint: Where is the patch panel? :: It is the grey unit above your desk.
+> Look for the label matching your seat tag.
 
 # Section 2 · Network Configuration
 
 ## [computer] Assign a static IP
 Set your IP address to \`{{ HOST_IP }}\` and gateway to \`{{ GATEWAY_IP }}\`.
+
+\`\`\`
+# this comment inside a code block is not a section heading
+sudo ip addr add {{ HOST_IP }}/24 dev eth0
+\`\`\`
 
 > hint: Command line :: sudo ip addr add {{ HOST_IP }}/24 dev eth0
 
@@ -321,5 +366,6 @@ Record your assigned Host IP below to complete the lab.
 > - Base network: \`10.0.0.\`
 > - Host octet: \`100 + seat\` → **{{ HOST_IP }}**
 
-> checkpoint: Enter your Host IP address :: {{ HOST_IP }}
+> checkpoint: Enter your Host IP address :: {{ HOST_IP }} | {{ HOST_IP }}/24
+> placeholder: e.g. 10.0.0.1XX
 `;

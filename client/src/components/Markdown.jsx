@@ -12,6 +12,15 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 });
 
+const SANITIZE_OPTIONS = {
+  USE_PROFILES: { html: true },
+  // Inline style attributes are stripped: the production CSP no longer allows
+  // 'unsafe-inline' styles, so they would be ignored by the browser anyway,
+  // and authored content should not be able to restyle the surrounding UI.
+  FORBID_ATTR: ['style'],
+  FORBID_TAGS: ['style', 'form', 'input', 'button'],
+};
+
 /**
  * Render trusted-but-sanitised Markdown. Content originates from instructor
  * templates and is server-rendered per seat, but we still sanitise on the
@@ -20,7 +29,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 export default function Markdown({ children }) {
   const html = useMemo(() => {
     const raw = marked.parse(String(children || ''));
-    return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+    return DOMPurify.sanitize(raw, SANITIZE_OPTIONS);
   }, [children]);
 
   return <div className="md" dangerouslySetInnerHTML={{ __html: html }} />;

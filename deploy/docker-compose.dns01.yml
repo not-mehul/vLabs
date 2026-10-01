@@ -1,0 +1,11 @@
+# Override: build Caddy with the Cloudflare DNS plugin for DNS-01 challenges.
+# Use together with CADDYFILE=./caddy/Caddyfile.dns01 and CLOUDFLARE_API_TOKEN:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.dns01.yml up -d --build
+# Swap the plugin in caddy/Dockerfile.dns01 if your DNS lives elsewhere
+# (see https://github.com/caddy-dns for the list).
+services:
+  caddy:
+    image: vlabs-caddy-dns01:latest
+    build:
+      context: ./caddy
+      dockerfile: Dockerfile.dns01

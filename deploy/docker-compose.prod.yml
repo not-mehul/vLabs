@@ -1,0 +1,86 @@
+# vLabs — production stack: the app container + Caddy as TLS terminator.
+#
+# The SAME file serves the Raspberry Pi pilot and the hosted deployment; only
+# .env differs (see deploy/.env.example). Caddy's behaviour is chosen by which
+# Caddyfile is mounted:
+#
+#   CADDYFILE=./caddy/Caddyfile.http      plain HTTP on :80 (LAN pilot, BYOD devices)
+#   CADDYFILE=./caddy/Caddyfile.internal  HTTPS with Caddy's own CA (LAN, managed devices)
+#   CADDYFILE=./caddy/Caddyfile.public    HTTPS via Let's Encrypt, HTTP-01 (internet-facing)
+#   CADDYFILE=./caddy/Caddyfile.dns01     HTTPS via Let's Encrypt, DNS-01 (real cert on a LAN;
+#                                         also add -f docker-compose.dns01.yml)
+#
+# Usage (from the deploy/ directory):
+#   cp .env.example .env && edit
+#   docker compose -f docker-compose.prod.yml up -d --build      # build locally (Pi)
+#   docker compose -f docker-compose.prod.yml pull && ... up -d  # pull from GHCR
+
+services:
+  vlabs:
+    image: ${VLABS_IMAGE:-ghcr.io/OWNER/vlabs:latest}
+    build:
+      context: ..
+    restart: unless-stopped
+    init: true
+    expose:
+      - "4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      JWT_INSTRUCTOR_SECRET: ${JWT_INSTRUCTOR_SECRET:?Set JWT_INSTRUCTOR_SECRET (openssl rand -hex 32)}
+      JWT_PARTICIPANT_SECRET: ${JWT_PARTICIPANT_SECRET:?Set JWT_PARTICIPANT_SECRET (openssl rand -hex 32)}
+      SEED_INSTRUCTOR_USERNAME: ${SEED_INSTRUCTOR_USERNAME:-instructor}
+      SEED_INSTRUCTOR_PASSWORD: ${SEED_INSTRUCTOR_PASSWORD:?Set SEED_INSTRUCTOR_PASSWORD for the first start}
+      # Exactly one proxy hop (Caddy) sits in front of the app.
+      TRUST_PROXY: "1"
+      # true ONLY with Caddyfile.http (no TLS anywhere). See DEPLOYMENT.md.
+      SERVE_PLAIN_HTTP: ${SERVE_PLAIN_HTTP:-false}
+      CORS_ORIGINS: ""
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: json
+      EXPIRED_SESSION_GRACE_MINUTES: ${EXPIRED_SESSION_GRACE_MINUTES:-60}
+    volumes:
+      - vlabs-data:/app/server/data
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      # Site address(es) for the TLS Caddyfiles, e.g. "labs.partner.example"
+      # or "vlabs.local, 192.168.1.50". Ignored by Caddyfile.http (catch-all).
+      SITE_ADDRESS: ${SITE_ADDRESS:-vlabs.local}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    volumes:
+      - ${CADDYFILE:-./caddy/Caddyfile.http}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      vlabs:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  vlabs-data:
+  caddy-data:
+  caddy-config:

@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import config from './config.js';
+import db from './db/index.js';
+import { requestLogger } from './lib/logger.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
@@ -15,16 +17,28 @@ import sessionRoutes from './routes/sessions.js';
 import participantRoutes from './routes/participant.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const healthCheck = db.prepare('SELECT 1 AS ok');
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1); // correct client IPs behind a reverse proxy
+
+  // Which proxy hops to trust for X-Forwarded-For. Comes from TRUST_PROXY so
+  // it matches the real topology: a hard-coded `1` let clients spoof their IP
+  // (and dodge the per-IP limiters) whenever the app was exposed directly.
+  app.set('trust proxy', config.trustProxy);
+  app.disable('x-powered-by');
 
   // gzip responses (JSON analytics payloads, the SPA bundle) to cut bandwidth.
   app.use(compression());
 
-  // Security headers. The SPA is fully self-contained, so we can run a fairly
-  // strict Content-Security-Policy.
+  // Security headers. The SPA is fully self-contained, so we can run a strict
+  // Content-Security-Policy. No 'unsafe-inline' for styles: React applies the
+  // `style` prop via the CSSOM (allowed under CSP), the font CSS is a linked
+  // stylesheet, and DOMPurify strips style attributes from authored Markdown.
+  //
+  // SERVE_PLAIN_HTTP (LAN pilots only) drops `upgrade-insecure-requests` and
+  // HSTS; with them, a page loaded from http://192.168.x.x has all its /api
+  // requests upgraded to https:// by the browser and the app cannot load.
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -32,16 +46,21 @@ export function createApp() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'"],
+          fontSrc: ["'self'"],
           imgSrc: ["'self'", 'data:'],
           connectSrc: ["'self'"],
           objectSrc: ["'none'"],
+          baseUri: ["'none'"],
           frameAncestors: ["'none'"],
           formAction: ["'self'"],
+          upgradeInsecureRequests: config.plainHttp ? null : [],
         },
       },
+      ...(config.plainHttp ? { strictTransportSecurity: false } : {}),
       // Content is delivered as JSON to the DOM only; discourage embedding.
       crossOriginResourcePolicy: { policy: 'same-origin' },
+      referrerPolicy: { policy: 'no-referrer' },
     }),
   );
 
@@ -56,12 +75,22 @@ export function createApp() {
     }),
   );
 
-  app.use(express.json({ limit: '256kb' }));
+  // 1 MB comfortably exceeds the validator's own template size cap
+  // (LIMITS.serialisedBytes) so authors hit the readable error, not a 413.
+  app.use(express.json({ limit: '1mb' }));
+
+  app.use(requestLogger());
 
   // Health check (unauthenticated, unlimited) for container orchestration.
-  app.get('/api/health', (req, res) =>
-    res.json({ status: 'ok', time: new Date().toISOString() }),
-  );
+  // Touches the database so a wedged/locked SQLite file is reported as down.
+  app.get('/api/health', (req, res) => {
+    try {
+      healthCheck.get();
+      res.json({ status: 'ok', time: new Date().toISOString() });
+    } catch (err) {
+      res.status(503).json({ status: 'degraded', error: 'database unavailable' });
+    }
+  });
 
   // Broad rate limit across the whole API surface.
   app.use('/api', apiLimiter);
@@ -77,6 +106,7 @@ export function createApp() {
   if (fs.existsSync(clientDist)) {
     app.use(
       express.static(clientDist, {
+        index: false,
         setHeaders(res, filePath) {
           // Vite emits content-hashed asset filenames, so they can be cached
           // aggressively and immutably; index.html must always be revalidated.

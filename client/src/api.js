@@ -13,10 +13,11 @@ const INSTRUCTOR_KEY = 'vlabs.instructor.token';
 const PARTICIPANT_KEY = 'vlabs.participant.session';
 
 export class ApiError extends Error {
-  constructor(message, status, code) {
+  constructor(message, status, code, details) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -53,6 +54,7 @@ async function request(path, { method = 'GET', body, token } = {}) {
       (data && data.error) || `Request failed (${res.status})`,
       res.status,
       data && data.code,
+      data && data.details,
     );
   }
   return data;
@@ -81,25 +83,45 @@ export const participantSession = {
     }
   },
   set(session) {
-    localStorage.setItem(PARTICIPANT_KEY, JSON.stringify(session));
+    try {
+      localStorage.setItem(PARTICIPANT_KEY, JSON.stringify(session));
+    } catch {
+      /* storage may be unavailable (private mode / quota); resume just won't work */
+    }
   },
-  clear: () => localStorage.removeItem(PARTICIPANT_KEY),
+  clear() {
+    try {
+      localStorage.removeItem(PARTICIPANT_KEY);
+    } catch {
+      /* ignore */
+    }
+  },
 };
 
 export const api = {
   login: (username, password) =>
     request('/auth/login', { method: 'POST', body: { username, password } }),
   me: (token) => request('/auth/me', { token }),
+  changePassword: (token, currentPassword, newPassword) =>
+    request('/auth/password', {
+      method: 'PUT',
+      body: { current_password: currentPassword, new_password: newPassword },
+      token,
+    }),
 
-  listTemplates: (token) => request('/templates', { token }),
+  listTemplates: (token, { includeArchived = false } = {}) =>
+    request(`/templates${includeArchived ? '?include_archived=1' : ''}`, { token }),
+  templateFunctions: (token) => request('/templates/functions', { token }),
   getTemplate: (token, id) => request(`/templates/${id}`, { token }),
   getTemplateAudit: (token, id) => request(`/templates/${id}/audit`, { token }),
   createTemplate: (token, payload) =>
     request('/templates', { method: 'POST', body: payload, token }),
   updateTemplate: (token, id, payload) =>
     request(`/templates/${id}`, { method: 'PUT', body: payload, token }),
-  deleteTemplate: (token, id) =>
-    request(`/templates/${id}`, { method: 'DELETE', token }),
+  /** Archive (default) or permanently delete a template. */
+  deleteTemplate: (token, id, { permanent = false } = {}) =>
+    request(`/templates/${id}${permanent ? '?permanent=1' : ''}`, { method: 'DELETE', token }),
+  restoreTemplate: (token, id) => request(`/templates/${id}/restore`, { method: 'POST', token }),
   previewTemplate: (token, id, seatId, draft) =>
     request(`/templates/${id}/preview`, {
       method: 'POST',
@@ -115,6 +137,7 @@ export const api = {
     request(`/sessions/${id}/terminate`, { method: 'POST', token }),
   extendSession: (token, id, minutes) =>
     request(`/sessions/${id}/extend`, { method: 'POST', body: { minutes }, token }),
+  pushTemplate: (token, id) => request(`/sessions/${id}/push-template`, { method: 'POST', token }),
   deleteSession: (token, id) =>
     request(`/sessions/${id}`, { method: 'DELETE', token }),
   exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),

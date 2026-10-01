@@ -1,0 +1,92 @@
+# vLabs — code review change set
+
+Everything in this archive mirrors the repository layout: copy the tree over
+the repo root (or unzip into it). Files not present here are unchanged.
+
+**No new npm dependencies were added anywhere**, so `package-lock.json` files
+are untouched. Node **22** is now assumed everywhere (CI, Docker, `engines`).
+
+## Decisions taken (from your answers)
+
+| Question | Decision | Where |
+| --- | --- | --- |
+| Template edited during a live session | **Frozen at launch.** Session monitor shows "v*N* available" with a **Push latest version** button (with a warning about reordering). Participants pick up a push within ~15 s via the status poll. | `sessions` snapshot columns, `POST /sessions/:id/push-template`, `SessionMonitor.jsx`, `Lab.jsx` |
+| Deleting a template with ended sessions | **Archive (hide) by default; restore possible; permanent delete allowed with a warning + typed confirmation**, refused while sessions are active. Sessions keep their own copy; audit survives. | `templates.archived_at`, `DELETE /templates/:id[?permanent=1]`, `POST /templates/:id/restore`, `Templates.jsx` |
+| Seat rejoin | **Name-only, unchanged.** Documented as a known trade-off in the README. | — |
+| Default seed password in production | Refuse to **create** the bootstrap account with the default; existing deployments unaffected. New **Account → Change password** page; changing it revokes older tokens. | `index.js`, `PUT /auth/password`, `Account.jsx` |
+| Expired-but-never-terminated sessions | Swept to *ended* 60 min after expiry (configurable) so codes recycle. | `lib/sessionLifecycle.js` |
+| Content deterrents | Print-hiding CSS only; README wording corrected. | `styles.additions.css` |
+
+## What changed, by finding
+
+### High priority
+1. **Compose placeholder secrets bypassed the prod guard** → `config.isWeakSecret` judges length (< 32) and placeholder markers; identical secrets also fatal. `docker-compose.yml` uses `${VAR:?required}` so it cannot start without real values.
+2. **Default seed password** → fatal in production when the bootstrap account would be created; password-change endpoint + UI; `token_version` on instructors for revocation; portal banner until changed.
+3. **Rate limiters keyed on the unverified bearer string** → keyed on the *verified* identity (`identifyToken`); per-seat limiters mounted after `requireParticipant`; new per-IP join flood cap (300 / 5 min) alongside the failed-join cap (20 / 5 min); IPv6 /64 bucketing.
+4. **Hard-coded `trust proxy: 1`** → `TRUST_PROXY` env (default off), warning in production when unset, documented.
+5. **Template DELETE cascaded to sessions** → `sessions.template_id` nullable with `ON DELETE SET NULL` (table rebuild migration), archive-by-default.
+6. **Sessions rendered from the live template** → per-session snapshot (`template_title/content/variables/template_version`), explicit push.
+7. **`Lab.jsx` refetch loop on resume** → `useState(() => location.state || participantSession.get())`.
+
+### Medium
+- **Unknown placeholders** rejected at save time (server) with precise locations, and flagged live in the editor (client) via the shared `findUnknownPlaceholders`.
+- **`/hint` reachability gate** — all participant actions now go through one `requireReachableStep`.
+- **Markdown import/export** — fence-aware parser; multi-line hints; `\::` / `\|` escapes; `> placeholder:` directive; alternative answers; lossless round-trip with tests.
+- **Three duplicated normalisers** → one `shared/template-schema.js` used by server validation, client importer and editor `coerce`.
+- **Destructive ad-hoc migrations** → `PRAGMA user_version` runner (`MIGRATIONS[]` in `db/index.js`), legacy drop only ever runs once.
+- **Expression language** — `pad`, `hex`, `floor`, `ceil`, `round`, `abs`, `mod`, `min`, `max`, `upper`, `lower`, `str`; div/mod-by-zero errors; length/depth caps; multi-answer checkpoints (`checkpoint.answers[]`).
+- **Graceful shutdown** — `closeIdleConnections`, 8 s force timeout, `db.close()`; `keepAliveTimeout` 5 s; compose `init: true` + `stop_grace_period`.
+- **Logging** — dependency-free structured logger (`lib/logger.js`), per-request lines (no bodies/tokens), lifecycle/audit events.
+- **Health check** runs `SELECT 1` (503 on failure).
+- **Expired sessions** swept (list/create + 10-min timer).
+- **CSP** — `styleSrc 'self'` (no `unsafe-inline`), `baseUri 'none'`, `fontSrc 'self'`, `no-referrer`; DOMPurify strips `style`/form elements.
+- **Accessibility** — pinch-zoom re-enabled; stepper is a `<nav>` of buttons with `aria-current="step"`; real `role=tab`/`aria-selected` in the editor; `role=alert` / live regions for errors; progress bars carry ARIA values; skip link.
+- **Join** validates a stored session with `/status` instead of `/content`.
+- **Prepared statements** hoisted to module scope in every route/middleware.
+- **`requireInstructor`** no longer masks DB errors as 401.
+- **`express.json` limit** 1 MB with a readable validator cap (900 kB) below it.
+- **Prettier** config added; `format:check` in CI; **client tests** (`node:test`, no new deps); CI on Node 22 with `npm audit`, Docker build + smoke test; Dependabot.
+- **README** rewritten (API, data model, config, upgrade notes, corrected deterrent wording, formula helpers).
+
+### Not changed on purpose
+- Seat rejoin stays name-only (your call).
+- `client/src/styles.css` is untouched; new rules live in `styles.additions.css` (imported from `main.jsx`).
+- `client/src/components/Icon.jsx`, `StepCard.jsx`, `HintBox.jsx`, `SolutionBox.jsx`, `ThemeToggle.jsx`, `ThemeContext.jsx`, `InstructorLogin.jsx`, `hooks/useInstructorApi.js`, `lib/datetime.js`, `server/src/lib/time.js`, `server/tests/time.test.js`, `server/package.json`, `.gitignore`, `.dockerignore` — unchanged.
+
+## Manual steps after applying
+
+1. `npm run format` once from the repo root (CI now enforces `format:check`; the
+   new files follow the `.prettierrc` style but the untouched ones may not).
+2. `npm run lint && npm test` from the repo root.
+3. **Run `server/tests/api.test.js` locally.** The sandbox this change set was
+   produced in has no package registry access, so the HTTP integration suite
+   could not be executed there (it is syntax-checked and written against the
+   same behaviour the passing unit tests cover). The templating and client
+   format suites were run and pass (21/21 and 10/10).
+4. Before deploying over an existing database: **back up the SQLite volume**.
+   First boot runs migration 2 (sessions table rebuild + back-fill).
+5. Set `JWT_INSTRUCTOR_SECRET`, `JWT_PARTICIPANT_SECRET`,
+   `SEED_INSTRUCTOR_PASSWORD` and `TRUST_PROXY` in your deployment environment;
+   compose will not start without the first three.
+
+## API changes to be aware of
+
+- `DELETE /api/templates/:id` now **archives**. Use `?permanent=1` to delete.
+- `GET /api/templates` hides archived templates unless `?include_archived=1`; rows gain `archived_at`, `session_count`, `active_session_count`.
+- `POST /api/sessions` returns `409` for an archived template; session objects gain `template_version`, `latest_template_version`, `update_available`; detail gains `template_exists`, `template_archived`.
+- New: `POST /api/sessions/:id/push-template`, `POST /api/templates/:id/restore`, `GET /api/templates/functions`, `GET /api/auth/me`, `PUT /api/auth/password`.
+- Participant `join`/`content`/`status` include `template_version`.
+- Validation errors include `details: string[]`; instructor 401 may carry `code: "TOKEN_REVOKED"`.
+- Templates may carry `checkpoint.answers: string[]` (alternatives).
+
+## Deployment add-on (2026-10-01)
+
+Added for the Raspberry Pi pilot and the later hosted deployment (see `DEPLOYMENT.md`):
+
+- `SERVE_PLAIN_HTTP` (config/app/index): drops the CSP `upgrade-insecure-requests` directive and HSTS for TLS-less LAN pilots. Without it the app cannot load from `http://<lan-ip>` — browsers upgrade every `/api` call to HTTPS. Never enable on the internet.
+- `deploy/docker-compose.prod.yml` — app + Caddy; TLS mode chosen by `CADDYFILE` (`Caddyfile.http` / `.internal` / `.public` / `.dns01`), `deploy/docker-compose.dns01.yml` + `deploy/caddy/Dockerfile.dns01` for DNS-01 certificates on a LAN, `deploy/.env.example`.
+- `deploy/backup.sh` + `server/scripts/backup.js` — consistent online SQLite backups (backup API), pruned, copied out of the volume.
+- `server/scripts/instructors.js` — `list` / `create` / `reset-password` (interim admin path; revokes tokens on reset).
+- `deploy/pi/vlabs.service` — bare-metal systemd alternative.
+- `.github/workflows/release.yml` — multi-arch (amd64 + arm64) image to GHCR so the Pi and the VPS run the same artefact.
+- `Dockerfile` now copies `server/scripts/`; root `docker-compose.yml` and `.env.example` pass `SERVE_PLAIN_HTTP` through.

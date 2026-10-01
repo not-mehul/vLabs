@@ -5,20 +5,50 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
 import { isSectionCleared, stepHasCheckpoint } from '../lib/templating.js';
+import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
+import { log } from '../lib/logger.js';
 
 const router = Router();
 router.use(requireInstructor);
+
+const q = {
+  codeClash: db.prepare('SELECT 1 FROM sessions WHERE room_code = ? AND is_active = 1'),
+  template: db.prepare('SELECT * FROM templates WHERE id = ?'),
+  insert: db.prepare(
+    `INSERT INTO sessions
+       (room_code, title, template_id, instructor_id, template_version, template_title,
+        content, variables, is_active, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+  ),
+  byId: db.prepare('SELECT * FROM sessions WHERE id = ?'),
+  // LEFT JOIN: the master template may have been archived or deleted since;
+  // the session's own copy is authoritative for content and title.
+  detail: db.prepare(
+    `SELECT s.*, t.version AS latest_template_version, t.archived_at AS template_archived_at,
+            t.title AS latest_template_title
+       FROM sessions s LEFT JOIN templates t ON t.id = s.template_id
+      WHERE s.id = ? AND s.instructor_id = ?`,
+  ),
+  list: db.prepare(
+    `SELECT s.id, s.room_code, s.title, s.template_id, s.template_title, s.template_version,
+            s.is_active, s.expires_at, s.created_at, s.ended_at,
+            t.version AS latest_template_version,
+            (SELECT COUNT(*) FROM participants p WHERE p.session_id = s.id) AS participant_count
+       FROM sessions s LEFT JOIN templates t ON t.id = s.template_id
+      WHERE s.instructor_id = ?
+      ORDER BY s.created_at DESC`,
+  ),
+  participants: db.prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number'),
+  terminate: db.prepare('UPDATE sessions SET is_active = 0, ended_at = ? WHERE id = ?'),
+  extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?'),
+  remove: db.prepare('DELETE FROM sessions WHERE id = ?'),
+};
 
 /** Generate a 6-digit code not currently used by an active session. */
 function generateRoomCode() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-    const clash = db
-      .prepare(
-        'SELECT 1 FROM sessions WHERE room_code = ? AND is_active = 1',
-      )
-      .get(code);
-    if (!clash) return code;
+    if (!q.codeClash.get(code)) return code;
   }
   throw httpError(503, 'Unable to allocate a room code, please retry');
 }
@@ -28,6 +58,19 @@ function sessionStatus(row) {
   if (!row.is_active) return 'ended';
   if (parseUtc(row.expires_at) < Date.now()) return 'expired';
   return 'active';
+}
+
+/** Parse and validate a numeric :id param. */
+function idParam(req) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw httpError(404, 'Session not found');
+  return id;
+}
+
+function ownedOr404(req) {
+  const row = q.detail.get(idParam(req), req.instructor.id);
+  if (!row) throw httpError(404, 'Session not found');
+  return row;
 }
 
 /** Build the analytics view for one participant. */
@@ -74,97 +117,77 @@ function participantView(p, sections) {
   };
 }
 
-/** POST /api/sessions — create a live class. */
+/** Common session summary fields. */
+function summarise(row) {
+  return {
+    id: row.id,
+    room_code: row.room_code,
+    title: row.title,
+    template_id: row.template_id,
+    template_title: row.template_title,
+    template_version: row.template_version,
+    latest_template_version: row.latest_template_version ?? null,
+    update_available:
+      row.latest_template_version != null && row.latest_template_version > row.template_version,
+    status: sessionStatus(row),
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+    ended_at: row.ended_at,
+  };
+}
+
+/**
+ * POST /api/sessions — create a live class.
+ * The template's current title/content/variables are COPIED into the session
+ * (frozen at launch). Archived templates cannot be launched.
+ */
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const templateId = req.body?.template_id;
+    sweepExpiredSessions();
+    const templateId = Number(req.body?.template_id);
     const durationMinutes = Math.min(
       Math.max(parseInt(req.body?.duration_minutes ?? 120, 10) || 120, 5),
       24 * 60,
     );
     const title = String(req.body?.title || '').trim().slice(0, 200);
 
-    const template = db
-      .prepare('SELECT * FROM templates WHERE id = ?')
-      .get(templateId);
+    const template = Number.isInteger(templateId) ? q.template.get(templateId) : null;
     if (!template) throw httpError(400, 'template_id does not reference a template');
+    if (template.archived_at) throw httpError(409, 'This template is archived — restore it to launch a session');
 
     const roomCode = generateRoomCode();
-    const info = db
-      .prepare(
-        `INSERT INTO sessions
-           (room_code, title, template_id, instructor_id, template_version, is_active, expires_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?)`,
-      )
-      .run(
-        roomCode,
-        title || template.title,
-        template.id,
-        req.instructor.id,
-        template.version,
-        isoInMinutes(durationMinutes),
-      );
+    const info = q.insert.run(
+      roomCode,
+      title || template.title,
+      template.id,
+      req.instructor.id,
+      template.version,
+      template.title,
+      template.content,
+      template.variables,
+      isoInMinutes(durationMinutes),
+    );
 
-    const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(info.lastInsertRowid);
-    res.status(201).json({
-      id: row.id,
-      room_code: row.room_code,
-      title: row.title,
-      template_id: row.template_id,
-      template_title: template.title,
-      status: sessionStatus(row),
-      expires_at: row.expires_at,
-      created_at: row.created_at,
-    });
+    const row = q.detail.get(info.lastInsertRowid, req.instructor.id);
+    log.info('session.created', { session: row.id, template: template.id, instructor: req.instructor.id });
+    res.status(201).json(summarise(row));
   }),
 );
 
 /** GET /api/sessions — list this instructor's sessions with live counts. */
 router.get('/', (req, res) => {
-  const rows = db
-    .prepare(
-      `SELECT s.*, t.title AS template_title,
-              (SELECT COUNT(*) FROM participants p WHERE p.session_id = s.id) AS participant_count
-         FROM sessions s
-         JOIN templates t ON t.id = s.template_id
-        WHERE s.instructor_id = ?
-        ORDER BY s.created_at DESC`,
-    )
-    .all(req.instructor.id);
-  res.json(
-    rows.map((r) => ({
-      id: r.id,
-      room_code: r.room_code,
-      title: r.title,
-      template_id: r.template_id,
-      template_title: r.template_title,
-      participant_count: r.participant_count,
-      status: sessionStatus(r),
-      expires_at: r.expires_at,
-      created_at: r.created_at,
-      ended_at: r.ended_at,
-    })),
-  );
+  sweepExpiredSessions();
+  const rows = q.list.all(req.instructor.id);
+  res.json(rows.map((r) => ({ ...summarise(r), participant_count: r.participant_count })));
 });
 
 /** GET /api/sessions/:id — detail + live analytics dashboard data. */
 router.get('/:id', (req, res) => {
-  const row = db
-    .prepare(
-      `SELECT s.*, t.title AS template_title, t.content AS template_content
-         FROM sessions s JOIN templates t ON t.id = s.template_id
-        WHERE s.id = ? AND s.instructor_id = ?`,
-    )
-    .get(req.params.id, req.instructor.id);
-  if (!row) throw httpError(404, 'Session not found');
-
-  const sections = JSON.parse(row.template_content);
+  const row = ownedOr404(req);
+  const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
-  const participants = db
-    .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number')
-    .all(row.id)
-    .map((p) => participantView(p, sections));
+  const participants = q.participants.all(row.id).map((p) => participantView(p, sections));
 
   // Aggregate: how many seats are currently on each section.
   const sectionDistribution = sections.map((s, i) => ({
@@ -176,15 +199,9 @@ router.get('/:id', (req, res) => {
   }));
 
   res.json({
-    id: row.id,
-    room_code: row.room_code,
-    title: row.title,
-    template_id: row.template_id,
-    template_title: row.template_title,
-    status: sessionStatus(row),
-    expires_at: row.expires_at,
-    created_at: row.created_at,
-    ended_at: row.ended_at,
+    ...summarise(row),
+    template_exists: row.latest_template_version != null,
+    template_archived: Boolean(row.template_archived_at),
     section_count: sectionCount,
     section_distribution: sectionDistribution,
     participants,
@@ -197,16 +214,12 @@ router.get('/:id', (req, res) => {
  * outstanding token (spec: "access tokens are invalidated immediately").
  */
 router.post('/:id/terminate', (req, res) => {
-  const row = db
-    .prepare('SELECT * FROM sessions WHERE id = ? AND instructor_id = ?')
-    .get(req.params.id, req.instructor.id);
-  if (!row) throw httpError(404, 'Session not found');
+  const row = ownedOr404(req);
   if (!row.is_active) {
     return res.json({ id: row.id, status: 'ended', already: true });
   }
-  db.prepare(
-    'UPDATE sessions SET is_active = 0, ended_at = ? WHERE id = ?',
-  ).run(nowIso(), row.id);
+  q.terminate.run(nowIso(), row.id);
+  log.info('session.terminated', { session: row.id, instructor: req.instructor.id });
   res.json({ id: row.id, status: 'ended' });
 });
 
@@ -218,69 +231,72 @@ router.post('/:id/terminate', (req, res) => {
  */
 router.post('/:id/extend', (req, res) => {
   const minutes = Math.min(Math.max(parseInt(req.body?.minutes ?? 30, 10) || 30, 5), 24 * 60);
-  const row = db
-    .prepare('SELECT * FROM sessions WHERE id = ? AND instructor_id = ?')
-    .get(req.params.id, req.instructor.id);
-  if (!row) throw httpError(404, 'Session not found');
+  const row = ownedOr404(req);
   if (!row.is_active) throw httpError(409, 'Cannot extend an ended session');
   const base = Math.max(parseUtc(row.expires_at), Date.now());
   const expiresAt = new Date(base + minutes * 60_000).toISOString();
-  db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiresAt, row.id);
+  q.extend.run(expiresAt, row.id);
+  log.info('session.extended', { session: row.id, minutes, instructor: req.instructor.id });
   res.json({ id: row.id, expires_at: expiresAt });
+});
+
+/**
+ * POST /api/sessions/:id/push-template — copy the template's LATEST version
+ * into this live session. Participants pick it up on their next content load
+ * (the status poll reports template_version so the client reloads promptly).
+ * Checkpoints already cleared are re-evaluated against the new structure, so
+ * a reordered manual can move participants forwards or backwards — the UI
+ * warns before calling this.
+ */
+router.post('/:id/push-template', (req, res) => {
+  const row = ownedOr404(req);
+  if (!row.is_active) throw httpError(409, 'Cannot update an ended session');
+  if (!row.template_id) throw httpError(409, 'The master template was deleted; nothing to push');
+  const result = snapshotTemplateIntoSession(row.id, row.template_id);
+  log.info('session.template.pushed', { session: row.id, version: result.version, instructor: req.instructor.id });
+  res.json({ id: row.id, template_version: result.version, section_count: result.section_count });
 });
 
 /** DELETE /api/sessions/:id — permanently delete a session and its data. */
 router.delete('/:id', (req, res) => {
-  const row = db
-    .prepare('SELECT * FROM sessions WHERE id = ? AND instructor_id = ?')
-    .get(req.params.id, req.instructor.id);
-  if (!row) throw httpError(404, 'Session not found');
+  const row = ownedOr404(req);
   // Participants cascade-delete via the FK. The room code (if it was active) is
   // freed for reuse.
-  db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id);
+  q.remove.run(row.id);
+  log.warn('session.deleted', { session: row.id, instructor: req.instructor.id });
   res.status(204).end();
 });
 
 /**
  * GET /api/sessions/:id/export — full session data for archival/reporting.
- * Returns a JSON document (meta + per-participant analytics). Handy for
- * exporting a completed session.
+ * Returns a JSON document (meta + per-participant analytics). Works for
+ * sessions whose master template has since been archived or deleted, because
+ * the session carries its own copy.
  */
 router.get('/:id/export', (req, res) => {
-  const row = db
-    .prepare(
-      `SELECT s.*, t.title AS template_title, t.content AS template_content
-         FROM sessions s JOIN templates t ON t.id = s.template_id
-        WHERE s.id = ? AND s.instructor_id = ?`,
-    )
-    .get(req.params.id, req.instructor.id);
-  if (!row) throw httpError(404, 'Session not found');
-
-  const sections = JSON.parse(row.template_content);
-  const participants = db
-    .prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number')
-    .all(row.id)
-    .map((p) => {
-      const view = participantView(p, sections);
-      return {
-        number: view.seat_number,
-        first_name: p.first_name,
-        last_name: p.last_name,
-        name: view.name,
-        current_section: view.current_section + 1,
-        sections_completed: view.completed_sections,
-        total_sections: sections.length,
-        progress_pct: view.progress_pct,
-        checkpoints_cleared: view.completed_checkpoints.length,
-        hints_taken: view.hints_taken,
-        solutions_revealed: view.solutions_revealed,
-        finished: view.finished,
-        finished_at: p.finished_at,
-        total_seconds: view.total_seconds,
-        joined_at: p.joined_at,
-        last_seen_at: p.last_seen_at,
-      };
-    });
+  const row = ownedOr404(req);
+  const sections = JSON.parse(row.content);
+  const participants = q.participants.all(row.id).map((p) => {
+    const view = participantView(p, sections);
+    return {
+      number: view.seat_number,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      name: view.name,
+      current_section: view.current_section + 1,
+      sections_completed: view.completed_sections,
+      total_sections: sections.length,
+      progress_pct: view.progress_pct,
+      checkpoints_cleared: view.completed_checkpoints.length,
+      hints_taken: view.hints_taken,
+      solutions_revealed: view.solutions_revealed,
+      finished: view.finished,
+      finished_at: p.finished_at,
+      total_seconds: view.total_seconds,
+      joined_at: p.joined_at,
+      last_seen_at: p.last_seen_at,
+    };
+  });
 
   res.json({
     exported_at: nowIso(),
@@ -289,6 +305,7 @@ router.get('/:id/export', (req, res) => {
       title: row.title,
       room_code: row.room_code,
       template_title: row.template_title,
+      template_version: row.template_version,
       status: sessionStatus(row),
       section_count: sections.length,
       created_at: row.created_at,
@@ -299,4 +316,5 @@ router.get('/:id/export', (req, res) => {
   });
 });
 
+export { sessionStatus };
 export default router;

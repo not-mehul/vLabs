@@ -1,58 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, copyToClipboard } from '../api.js';
-import { downloadFile } from '../lib/templateFormat.js';
+import { downloadFile } from '../lib/files.js';
+import { slug, fmtDuration, participantsToCsv } from '../lib/format.js';
+import { useCountdown } from '../hooks/useCountdown.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
-
-const slug = (s) => (s || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-/** Build a CSV from the export participant rows. */
-function participantsToCsv(rows) {
-  const cols = [
-    'number', 'name', 'first_name', 'last_name', 'current_section', 'sections_completed',
-    'total_sections', 'progress_pct', 'checkpoints_cleared', 'hints_taken',
-    'solutions_revealed', 'finished', 'finished_at', 'total_seconds', 'joined_at', 'last_seen_at',
-  ];
-  const esc = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const header = cols.join(',');
-  const lines = rows.map((r) => cols.map((c) => esc(r[c])).join(','));
-  return [header, ...lines].join('\n') + '\n';
-}
-
-function fmtDuration(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m < 60) return `${m}m ${s}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
-
-/** Live countdown to a session's expiry. */
-function useCountdown(expiresAt) {
-  const [label, setLabel] = useState('');
-  useEffect(() => {
-    if (!expiresAt) return undefined;
-    const tick = () => {
-      const ms = new Date(expiresAt).getTime() - Date.now();
-      if (ms <= 0) return setLabel('expired');
-      const total = Math.floor(ms / 1000);
-      const h = Math.floor(total / 3600);
-      const m = Math.floor((total % 3600) / 60);
-      const s = total % 60;
-      return setLabel(h > 0 ? `${h}h ${m}m` : `${m}:${String(s).padStart(2, '0')}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  return label;
-}
 
 /** Highlight seats that appear stuck (long time on a section). */
 function stuckClass(seconds) {
@@ -85,8 +39,9 @@ export default function SessionMonitor() {
   const { call } = useInstructorApi();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null);
+  const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null, { hours: true });
 
   const refresh = useCallback(async () => {
     try {
@@ -103,26 +58,38 @@ export default function SessionMonitor() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  async function terminate() {
-    if (!window.confirm('End this session now? All participant access will be revoked immediately.')) return;
+  async function act(fn, { confirmText, okMessage } = {}) {
+    if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true);
+    setError('');
+    setNotice('');
     try {
-      await call((t) => api.terminateSession(t, id));
+      await call(fn);
+      if (okMessage) setNotice(okMessage);
       await refresh();
+    } catch (err) {
+      setError(err.message);
     } finally {
       setBusy(false);
     }
   }
 
-  async function extend() {
-    setBusy(true);
-    try {
-      await call((t) => api.extendSession(t, id, 30));
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
+  const terminate = () =>
+    act((t) => api.terminateSession(t, id), {
+      confirmText: 'End this session now? All participant access will be revoked immediately.',
+    });
+
+  const extend = () => act((t) => api.extendSession(t, id, 30));
+
+  const pushTemplate = () =>
+    act((t) => api.pushTemplate(t, id), {
+      confirmText:
+        `Push template v${data.latest_template_version} to this live session?\n\n` +
+        'Participants will see the updated manual within a few seconds. Progress is kept, ' +
+        'but if sections or checkpoints were added, removed or reordered, some participants ' +
+        'may move forwards or backwards to match the new structure.',
+      okMessage: `Session updated to template v${data.latest_template_version}.`,
+    });
 
   async function remove() {
     if (!window.confirm('Delete this session and all its participant data? This cannot be undone.')) return;
@@ -130,18 +97,23 @@ export default function SessionMonitor() {
     try {
       await call((t) => api.deleteSession(t, id));
       navigate('/instructor');
-    } finally {
+    } catch (err) {
+      setError(err.message);
       setBusy(false);
     }
   }
 
   async function exportData(format) {
-    const doc = await call((t) => api.exportSession(t, id));
-    const base = slug(doc.session.title || 'session');
-    if (format === 'csv') {
-      downloadFile(`${base}.csv`, participantsToCsv(doc.participants), 'text/csv');
-    } else {
-      downloadFile(`${base}.json`, JSON.stringify(doc, null, 2), 'application/json');
+    try {
+      const doc = await call((t) => api.exportSession(t, id));
+      const base = slug(doc.session.title, 'session');
+      if (format === 'csv') {
+        downloadFile(`${base}.csv`, participantsToCsv(doc.participants), 'text/csv');
+      } else {
+        downloadFile(`${base}.json`, JSON.stringify(doc, null, 2), 'application/json');
+      }
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -171,7 +143,22 @@ export default function SessionMonitor() {
         <div>
           <h1>{data.title}</h1>
           <p className="muted">
-            {data.template_title} · {data.section_count} sections
+            {data.template_exists ? (
+              <Link to={`/instructor/templates/${data.template_id}`} className="inline-link">
+                {data.template_title}
+              </Link>
+            ) : (
+              data.template_title
+            )}{' '}
+            · v{data.template_version} · {data.section_count} sections
+            {!data.template_exists && (
+              <span className="tag tag--archived" title="The master template was deleted; this session runs on its own copy.">
+                template deleted
+              </span>
+            )}
+            {data.template_exists && data.template_archived && (
+              <span className="tag tag--archived">template archived</span>
+            )}
           </p>
         </div>
         <div className="monitor-head__code">
@@ -180,6 +167,19 @@ export default function SessionMonitor() {
           <span className={`pill pill--${data.status}`}>{data.status}</span>
         </div>
       </div>
+
+      {active && data.update_available && (
+        <div className="banner banner--info" role="status">
+          <span>
+            <strong>Template v{data.latest_template_version} is available.</strong> This session is
+            running v{data.template_version}. Participants keep seeing the version they started with
+            until you push the update.
+          </span>
+          <button className="btn btn--sm btn--primary" onClick={pushTemplate} disabled={busy}>
+            <Icon name="refresh" size={15} /> Push latest version
+          </button>
+        </div>
+      )}
 
       <div className="stat-row">
         <div className="stat">
@@ -225,7 +225,8 @@ export default function SessionMonitor() {
         </div>
       </div>
 
-      {error && <p className="form__error">{error}</p>}
+      {error && <p className="form__error" role="alert">{error}</p>}
+      {notice && <div className="banner banner--success" role="status">{notice}</div>}
 
       <div className="panel">
         <h2 className="panel__title">Section distribution</h2>
@@ -244,7 +245,7 @@ export default function SessionMonitor() {
                     <span className="dist__lock" title="Has a checkpoint"><Icon name="lock" size={14} /></span>
                   )}
                 </span>
-                <div className="dist__bar">
+                <div className="dist__bar" role="img" aria-label={`${s.seats_here} seats on section ${s.index + 1}`}>
                   <div className="dist__bar-fill" style={{ width: `${pct}%` }} />
                 </div>
                 <span className="dist__count">{s.seats_here}</span>
@@ -282,7 +283,14 @@ export default function SessionMonitor() {
                     <span className="muted"> / {data.section_count}</span>
                   </td>
                   <td>
-                    <div className="minibar" title={`${p.completed_sections}/${data.section_count} sections`}>
+                    <div
+                      className="minibar"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={p.progress_pct}
+                      title={`${p.completed_sections}/${data.section_count} sections`}
+                    >
                       <div className="minibar__fill" style={{ width: `${p.progress_pct}%` }} />
                     </div>
                   </td>

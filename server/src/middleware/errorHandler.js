@@ -1,4 +1,5 @@
 import config from '../config.js';
+import { log } from '../lib/logger.js';
 
 /** 404 fallback for unmatched API routes. */
 export function notFound(req, res) {
@@ -8,16 +9,28 @@ export function notFound(req, res) {
 /** Centralised error handler. Hides internals in production. */
 // eslint-disable-next-line no-unused-vars -- Express identifies this by arity.
 export function errorHandler(err, req, res, next) {
-  const status = err.status || err.statusCode || 500;
-  if (status >= 500) {
-    console.error('[error]', err);
+  let status = err.status || err.statusCode || 500;
+  let message = err.message || 'Internal server error';
+
+  // body-parser errors carry a `type`; give them friendly, non-leaky messages.
+  if (err.type === 'entity.too.large') {
+    status = 413;
+    message = 'Request body is too large';
+  } else if (err.type === 'entity.parse.failed') {
+    status = 400;
+    message = 'Request body is not valid JSON';
   }
-  res.status(status).json({
-    error:
-      status >= 500 && config.env === 'production'
-        ? 'Internal server error'
-        : err.message || 'Internal server error',
-  });
+
+  if (status >= 500) {
+    log.error('unhandled', { err, method: req.method, path: req.path });
+  }
+
+  const body = {
+    error: status >= 500 && config.env === 'production' ? 'Internal server error' : message,
+  };
+  if (err.code && status < 500) body.code = err.code;
+  if (Array.isArray(err.details) && status < 500) body.details = err.details;
+  res.status(status).json(body);
 }
 
 /** Wrap an async route so rejected promises reach the error handler. */
@@ -26,8 +39,9 @@ export function asyncHandler(fn) {
 }
 
 /** Throw a typed HTTP error from anywhere in a handler. */
-export function httpError(status, message) {
+export function httpError(status, message, code) {
   const err = new Error(message);
   err.status = status;
+  if (code) err.code = code;
   return err;
 }

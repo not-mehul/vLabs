@@ -1,0 +1,129 @@
+/*
+ * Additions layered on top of styles.css (kept separate so the large base
+ * stylesheet does not need to be touched). Uses the same CSS custom
+ * properties as the base theme; every rule degrades gracefully if a variable
+ * is missing.
+ */
+
+/* ---- Accessibility -------------------------------------------------- */
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0.5rem;
+  z-index: 1000;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--accent, #007faf);
+  color: #fff;
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 0.5rem;
+}
+
+/* ---- Banners -------------------------------------------------------- */
+
+.banner--warn {
+  background: color-mix(in srgb, #f5a524 14%, transparent);
+  border: 1px solid color-mix(in srgb, #f5a524 45%, transparent);
+  color: inherit;
+}
+.banner--info {
+  background: color-mix(in srgb, var(--accent, #007faf) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #007faf) 40%, transparent);
+  color: inherit;
+}
+.banner--warn,
+.banner--info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  margin: 0 0 1rem;
+}
+.portal__banner {
+  margin: 0.75rem auto 0;
+  max-width: 1200px;
+}
+.lab__notice {
+  margin: 0 0 1rem;
+}
+
+/* ---- Tags / table states ------------------------------------------- */
+
+.tag--archived,
+.tag--update {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.tag--archived {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 0.8;
+}
+.tag--update {
+  background: color-mix(in srgb, var(--accent, #007faf) 15%, transparent);
+  color: var(--accent, #007faf);
+}
+.row--archived td {
+  opacity: 0.65;
+}
+.portal__user {
+  margin-right: 0.25rem;
+  white-space: nowrap;
+}
+
+/* ---- Editor extras -------------------------------------------------- */
+
+.error-list {
+  margin: 0.5rem 0 0 1.1rem;
+  padding: 0;
+  font-weight: 400;
+}
+.error-list li + li {
+  margin-top: 0.15rem;
+}
+.preview__error {
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+/* ---- Account page --------------------------------------------------- */
+
+.account-panel {
+  max-width: 520px;
+}
+.account-form .field + .field {
+  margin-top: 0.75rem;
+}
+.account-form .btn {
+  margin-top: 1rem;
+}
+
+/* ---- Print deterrent ------------------------------------------------ */
+/* Lab content is meant to be read on the seat's device, not printed or
+   saved as PDF. This hides the manual when printing; it is a deterrent, not
+   a security control (the participant can still see the screen). */
+@media print {
+  .lab,
+  .lab * {
+    visibility: hidden !important;
+  }
+  .lab::before {
+    content: 'Lab content is not printable. Please use your assigned device.';
+    visibility: visible;
+    display: block;
+    padding: 2rem;
+    font: 16px/1.5 sans-serif;
+  }
+}

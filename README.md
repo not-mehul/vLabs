@@ -40,12 +40,18 @@ Participant registration (the default landing page) is in
 - [How it works](#how-it-works)
   - [The templating engine](#the-templating-engine)
   - [Progressive disclosure & checkpoints](#progressive-disclosure--checkpoints)
+  - [Sessions are snapshots](#sessions-are-snapshots)
+  - [Registration, seat numbers & resume](#registration-seat-numbers--resume)
+  - [Template lifecycle: versions, archive, delete](#template-lifecycle-versions-archive-delete)
+  - [Template import / export](#template-import--export)
+  - [Theming](#theming)
   - [Security & IP protection](#security--ip-protection)
 - [Data model](#data-model)
 - [API reference](#api-reference)
 - [Configuration](#configuration)
-- [Testing](#testing)
+- [Testing & CI](#testing--ci)
 - [Deployment notes](#deployment-notes)
+- [Upgrading an existing deployment](#upgrading-an-existing-deployment)
 - [Project layout](#project-layout)
 
 ---
@@ -54,67 +60,61 @@ Participant registration (the default landing page) is in
 
 | Spec requirement | Where it lives |
 | --- | --- |
-| **Instructor Portal** — create sessions, generate 6-digit codes, monitor, extend & terminate | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js` |
+| **Instructor Portal** — create sessions, generate 6-digit codes, monitor, extend, push template updates & terminate | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js` |
 | **Participant registration** — first + last name, auto-assigned number (1–100) in join order | `client/src/pages/Join.jsx`; `server/src/routes/participant.js` |
-| **Participant-first login** — registration is the default page; a small link goes to the instructor sign-in | `client/src/App.jsx`, `Join.jsx` |
-| **Sections** — labs are sections of steps, delivered one page at a time with a transition animation | `client/src/pages/Lab.jsx`; `server/src/lib/templating.js` |
-| **Section-based progress** — progress bar + analytics count completed sections | `Lab.jsx`; `participantView` in `sessions.js` |
-| **Resume + logout** — close the browser and return to the same seat/section; explicit Exit | persisted token (`participantSession`) + idempotent name rejoin |
-| **Dynamic templating** — inject seat/IP/port variables at render time | `server/src/lib/templating.js` |
-| **Structured cards** — Hands-On vs Workstation activities (subtle icon-tile indicator) | `client/src/components/StepCard.jsx` |
-| **Collapsible hints** (`<HintBox>`), **step-level solutions** (`<SolutionBox>`, revealed once every hint is opened) and **state checkpoints** — all validated / gated server-side | `HintBox.jsx`, `SolutionBox.jsx`, `Checkpoint.jsx` |
-| **Completion flow** — finish screen + graceful logout; participant shown as *finished* to the instructor | `Lab.jsx`; `finished_at` |
-| **Instructor analytics & lifecycle** — time remaining, copy code, section distribution, hints taken, total time, plus **delete** and **export** (JSON/CSV) of completed sessions | `SessionMonitor.jsx`, `Dashboard.jsx` |
-| **Template authoring** — Content/Settings-tabbed editor with a live per-seat preview; Settings holds Variables, JSON/Markdown import & export, and an **immutable change-history audit log** (append-only via DB triggers) that shows *what changed* per version and supports **revert** | `TemplateEditor.jsx`, `templateFormat.js`; `template_audit` table with `snapshot` |
-| **Light & dark themes** — professional slate + indigo design system | `client/src/context/ThemeContext.jsx`; `styles.css` |
-| **IP protection** — no file downloads, in-memory content, progressive per-section delivery | no download endpoints; `no-store` headers |
-| **Session gating** — time-limited PIN, instant revocation | `server/src/middleware/auth.js` |
-| **Rate limiting & anti-scraping** | `server/src/middleware/rateLimit.js`; progressive content delivery |
-| **Dockerization** | `Dockerfile`, `docker-compose.yml` |
+| **Participant-first login** — registration is the default page; a small link goes to the instructor sign-in | `client/src/App.jsx` |
+| **Dynamic templating** — one master template, `{{ PLACEHOLDERS }}` resolved per seat from sandboxed formulas | `server/src/lib/templating.js` |
+| **Sectioned manuals** — desk vs computer cards, hints, step solutions, checkpoints gating the next section | `server/src/lib/templating.js`, `client/src/pages/Lab.jsx`, `components/StepCard.jsx` |
+| **Frozen-at-launch sessions** — a running class never changes under participants; instructor pushes updates explicitly | `server/src/lib/sessionLifecycle.js`, `routes/sessions.js` |
+| **Template authoring** — in-page editor, live per-seat preview, Markdown/JSON import & export, immutable change history with revert | `client/src/pages/TemplateEditor.jsx`, `client/src/lib/templateFormat.js`, `shared/template-schema.js` |
+| **Archive instead of delete** — templates archive by default; permanent deletion keeps session analytics and history | `server/src/routes/templates.js` |
+| **IP protection** — content is JSON to the DOM only, `no-store`, no file endpoints, print-hidden | `server/src/routes/participant.js`, `client/src/styles.additions.css` |
+| **Session gating & kill-switch** — every participant request re-validates the live session | `server/src/middleware/auth.js` |
+| **Rate limiting & anti-scraping** — identity-keyed limiters, failed-join brute-force cap, progressive delivery | `server/src/middleware/rateLimit.js` |
+| **Live analytics** — per-seat section, time-on-section, hints, solutions, finished; section distribution | `server/src/routes/sessions.js`, `client/src/pages/SessionMonitor.jsx` |
+| **Instructor account** — password change with revocation of older tokens | `server/src/routes/auth.js`, `client/src/pages/Account.jsx` |
 
 ## Architecture
 
-Client–server model with a Single Page Application frontend and a RESTful JSON
-API backend, exactly as specified.
-
 ```
-┌──────────────────────────┐         HTTPS (JSON only)        ┌──────────────────────────┐
-│  React SPA (Vite)        │  ───────────────────────────────▶│  Express REST API        │
-│  • Participant lab view  │                                   │  • Auth (JWT)            │
-│  • Instructor portal     │◀───────────────────────────────  │  • Templating engine     │
-│  • In-memory rendering   │      rendered, per-seat steps     │  • Session gating        │
-└──────────────────────────┘                                   │  • Rate limiting         │
-                                                               └────────────┬─────────────┘
-                                                                            │
-                                                                   ┌────────▼─────────┐
-                                                                   │  SQLite          │
-                                                                   │  templates /     │
-                                                                   │  sessions /      │
-                                                                   │  participants    │
-                                                                   └──────────────────┘
+┌────────────────────────┐      HTTPS (reverse proxy)      ┌──────────────────────────────┐
+│  Browser (SPA)         │ ──────────────────────────────▶ │  Node 22 · Express            │
+│  React 18 + Vite       │   /api/*  JSON, bearer tokens   │  helmet · cors · rate limits  │
+│  participant or        │ ◀────────────────────────────── │  templating engine (sandboxed)│
+│  instructor audience   │   no-store rendered content     │  better-sqlite3 (WAL)         │
+└────────────────────────┘                                 └──────────────┬───────────────┘
+                                                                          │
+                                                          ┌───────────────▼──────────────┐
+                                                          │ SQLite: instructors,         │
+                                                          │ templates, template_audit,   │
+                                                          │ sessions (own content copy), │
+                                                          │ participants                 │
+                                                          └──────────────────────────────┘
 ```
 
-In production the Express server also serves the built SPA, so the whole
-application ships as **one container** that drops onto a single VM on the
-training-facility network (put an HTTPS reverse proxy in front).
+- In production the Express app serves the built SPA from `client/dist` and the
+  API from `/api`, so everything is same-origin behind one TLS proxy.
+- In development Vite serves the SPA on `:5173` and proxies `/api` to `:4000`.
+- `shared/template-schema.js` is a dependency-free ESM module imported by both
+  the server (validation) and the client (editor, import/export) so the template
+  shape cannot drift between them.
 
 ## Tech stack
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Frontend | **React 18 + Vite** SPA (`react-router`) | Strong state management for live sessions; fast dynamic Markdown rendering |
-| Backend | **Node.js + Express** | Lightweight token generation and JSON template serving |
-| Database | **SQLite** (`better-sqlite3`) | Structured storage for templates, sessions and seats; zero external service |
-| Auth | **JWT** (`jsonwebtoken`) + `bcryptjs` | Stateless tokens; live session re-check enables instant revocation |
-| Security | `helmet`, `express-rate-limit`, CSP | Headers, rate limiting, anti-scraping |
-| Markdown | `marked` + `DOMPurify` | Render + sanitise instructor content |
-| Deploy | **Docker** (multi-stage) | Single-VM containerised deployment |
-
-The stack matches the spec's suggested options (React SPA + Node/Express + SQLite).
+| Backend | Node 22, Express 4 | Small, well understood, easy to containerise |
+| Database | SQLite via `better-sqlite3` (WAL) | Single-VM deployment; zero ops; synchronous API keeps handlers simple |
+| Auth | `jsonwebtoken` (HS256, separate secrets per audience), `bcryptjs` | Stateless tokens + live-session re-validation = instant revocation without a blocklist |
+| Security | `helmet` (strict CSP), `express-rate-limit`, `cors` | Spec's IP protection and anti-scraping requirements |
+| Frontend | React 18, React Router 6, Vite 6 | Fast SPA with code-split instructor portal |
+| Markdown | `marked` + `DOMPurify` | Rich step bodies with defence-in-depth sanitisation |
+| Tests | `node:test` (server + client libs) | No extra test dependencies |
+| Tooling | ESLint 9 (flat config), Prettier 3, GitHub Actions, Dependabot | |
 
 ## Quick start (local dev)
 
-Requires **Node 20+**.
+Requires **Node 22+**.
 
 ```bash
 # 1. Backend  (terminal 1)
@@ -130,12 +130,16 @@ npm run dev            # http://localhost:5173  (proxies /api to :4000)
 
 Open **http://localhost:5173**.
 
-Default instructor credentials (created on first run, override via env):
+Default instructor credentials (created on first run only, override via env):
 
 ```
 username: instructor
 password: labmanual123
 ```
+
+The portal shows a banner until this password is changed (**Account → Change
+password**). In production the server refuses to *create* the bootstrap account
+with the default password at all.
 
 Try it end-to-end:
 
@@ -146,22 +150,31 @@ Try it end-to-end:
    and last name. The server assigns the next number in join order (the first
    participant is `#1`).
 3. The lab opens **section by section**, personalised for that number
-   (participant `#1` → gateway `192.168.1.101`, host `10.0.0.101`, port `1`…).
-   Expand hints, and in section 2 clear the checkpoint to unlock the next
-   section. Close the tab and reopen — a **Resume** banner brings you straight
-   back to the same seat and section, or use **Exit** to leave.
+   (participant `#1` → gateway `192.168.1.101`, host `10.0.0.101`, port `1`,
+   cable tag `S01`…). Expand hints, and in section 2 clear the checkpoint
+   (`10.0.0.101` or `10.0.0.101/24` — alternative answers are supported) to
+   unlock the next section. Close the tab and reopen — a **Resume** banner
+   brings you straight back to the same seat and section, or use **Exit** to
+   leave.
 4. Back in the instructor **session monitor**, watch each named participant's
    live section progress, time-on-section, total time and the session's time
    remaining; **End session** to revoke access instantly.
-5. In **Templates**, edit sections in-page, import/export a `.md`/`.json`, and
-   toggle **light / dark mode** from the ☾/☀ control on any screen.
+5. Edit the template while the session is running: nothing changes for
+   participants until you click **Push latest version** on the monitor.
+6. In **Templates**, edit sections in-page, import/export a `.md`/`.json`,
+   archive a template, and toggle **light / dark mode** from the ☾/☀ control on
+   any screen.
 
 ## Running with Docker
 
-The whole app (SPA + API + SQLite) builds into a single image.
+The whole app (SPA + API + SQLite) builds into a single image. Secrets are
+**required** — compose refuses to start without them, and the server
+independently refuses weak or placeholder values in production.
 
 ```bash
-# Set secrets first (see .env.example), then:
+export JWT_INSTRUCTOR_SECRET="$(openssl rand -hex 32)"
+export JWT_PARTICIPANT_SECRET="$(openssl rand -hex 32)"
+export SEED_INSTRUCTOR_PASSWORD="a strong first-run password"   # first start only
 docker compose up --build     # http://localhost:4000
 ```
 
@@ -169,128 +182,139 @@ Or with plain Docker:
 
 ```bash
 docker build -t vlabs:latest .
-docker run -p 4000:4000 \
-  -e JWT_INSTRUCTOR_SECRET="$(openssl rand -hex 48)" \
-  -e JWT_PARTICIPANT_SECRET="$(openssl rand -hex 48)" \
+docker run -p 4000:4000 --init \
+  -e JWT_INSTRUCTOR_SECRET="$(openssl rand -hex 32)" \
+  -e JWT_PARTICIPANT_SECRET="$(openssl rand -hex 32)" \
+  -e SEED_INSTRUCTOR_PASSWORD="a strong first-run password" \
+  -e TRUST_PROXY=1 \
   -v vlabs-data:/app/server/data \
   vlabs:latest
 ```
 
-> **Note on this repo's CI/sandbox:** the image was not built inside the
-> authoring sandbox because its egress policy blocks Docker Hub base-image
-> pulls. The Dockerfile is a standard multi-stage build and the exact runtime
-> command (`NODE_ENV=production node server/src/index.js` serving `client/dist`)
-> is verified end-to-end outside the container.
+Set `TRUST_PROXY` to the number of reverse-proxy hops in front of the container
+(`1` for a single nginx/Caddy). Leave it empty when the container is exposed
+directly; a wrong value lets clients spoof their IP and dodge the per-IP limits.
 
 ## How it works
 
 ### The templating engine
 
 Instead of maintaining 20 separate manuals, one **master template** is stored as
-structured JSON steps containing mustache-style placeholders. Variables are
-resolved **per seat** at render time.
+structured JSON sections/steps containing mustache-style placeholders. Variables
+are resolved **per seat** at render time.
 
 Instructors author variable **formulas** (not code). For example:
 
 | Variable | Expression | Seat 7 → |
 | --- | --- | --- |
 | `PORT_NUM` | `seat` | `7` |
+| `SEAT_TAG` | `'S' + pad(seat, 2)` | `S07` |
 | `GATEWAY_IP` | `'192.168.1.' + (100 + seat)` | `192.168.1.107` |
 | `HOST_IP` | `'10.0.0.' + (100 + seat)` | `10.0.0.107` |
-| `VLAN` | `10 + seat` | `17` |
+| `MAC_SUFFIX` | `pad(hex(seat), 2)` | `07` |
 
-A step body then reads:
+Formulas are evaluated by a **hand-written recursive-descent evaluator** — never
+`eval()`/`Function()`. It understands numbers, quoted strings, `+ - * / %`,
+parentheses, the built-in `seat`, previously defined variables (so formulas can
+compose), and a small whitelist of pure helpers: `pad`, `hex`, `floor`, `ceil`,
+`round`, `abs`, `mod`, `min`, `max`, `upper`, `lower`, `str`. Anything else —
+unknown identifiers, prototype names, `constructor(...)`, semicolons — is
+rejected. Expressions are capped in length and nesting depth, and division by
+zero is an error.
 
-```markdown
-Connect your patch cable to **Port {{ PORT_NUM }}**, then ping the gateway at
-**{{ GATEWAY_IP }}**.
-```
-
-…and seat 7 receives *“Port 7 … ping the gateway at 192.168.1.107”*.
-
-**Formulas are never `eval`'d.** `server/src/lib/templating.js` contains a small
-hand-written recursive-descent evaluator that only understands numbers, quoted
-strings, a fixed set of identifiers (`seat` plus earlier variables), arithmetic
-operators and parentheses. Instructor content is fully sandboxed — even
-`__proto__` is rejected as an unknown variable (covered by tests).
+Placeholders are written `{{ NAME }}` in section titles, step titles, bodies,
+hints, solutions and checkpoint prompts/answers. `{{ SEAT_ID }}` is always
+available. **Saving a template that references an undeclared placeholder is
+refused** with the exact location (`Unknown placeholder {{ HOST_IPP }} in
+Section 2 · step 2 checkpoint answer`), and the editor flags it live while you
+type — a typo in a checkpoint answer used to silently produce an unpassable
+checkpoint.
 
 ### Progressive disclosure & checkpoints
 
-- **Hints** (`<HintBox>`) hide answers behind a click to encourage critical
-  thinking.
-- **Checkpoints** require the participant to enter a validation string (e.g. the
-  value they discovered) to unlock the next page of instructions.
+Content is delivered **progressively**. A participant only ever receives the
+sections they have unlocked, and within the furthest section only the steps up
+to the first uncompleted checkpoint:
 
-Checkpoints are enforced **server-side**: the server only ever sends the steps a
-seat has legitimately reached, and the expected answer is stripped from every
-payload. Submissions are validated against the per-seat expected value. This
-doubles as the anti-scraping mechanism — locked steps and answers simply never
-reach the browser.
+- **Sections** gate on checkpoints: section *n* is reachable only once every
+  checkpoint in sections *0 … n−1* is cleared.
+- **Steps** within a section reveal up to and including the first open
+  checkpoint; clearing it reveals the rest.
+- **Checkpoint answers never leave the server.** The participant submits a value
+  and the server compares it (whitespace/case-insensitively) against the
+  seat-specific primary answer and any authored **alternative answers**.
+- **Hints** are collapsible; opening one is recorded (analytics). A step's
+  optional **solution** (Markdown) can be revealed only after *every* hint on
+  that step has been opened — and it is only sent to the browser at that moment.
+- Hints, solutions, checkpoints and progress reports all go through the **same
+  reachability gate**: a seat cannot act on a step it cannot yet see.
 
-### Sections & navigation
+### Sessions are snapshots
 
-A lab's content is an ordered list of **sections**, each containing an ordered
-list of **steps**. Participants move through **one section per page** — a new
-section is never just more scroll below the previous one; it is a distinct page
-with its own header and a slide/fade transition, plus a section stepper showing
-done / current / locked sections.
+Launching a session **copies the template** (title, content, variables and
+version number) into the session row. Participants are rendered from that copy,
+so:
 
-- **Progress is section-based.** The progress bar and the instructor analytics
-  count *completed sections*, tracked with a monotonic high-water mark so
-  reviewing an earlier section never lowers progress.
-- **Checkpoints gate sections.** A step may carry a checkpoint (typically at the
-  end of a section, occasionally mid-section). A section must have all its
-  checkpoints cleared before the participant can advance to the next one. The
-  server only ever delivers sections the participant has legitimately reached,
-  and checkpoint answers are never sent to the browser.
-- **Hints & solutions.** Both are **step-level** and behave consistently across
-  every step — with or without a checkpoint. Hints render Markdown (bullets,
-  links that open in a new tab) and each open is recorded server-side ("hints
-  taken"). Any step may also carry a distinctly-styled **solution** (Markdown) —
-  shown in its own amber "Solution" panel, visually distinct from the blue hints.
-  The reveal control only appears once *every* hint on the step has been opened
-  (immediately available when a step has no hints), and the solution text is
-  fetched from the server only then — never shipped before it is revealed.
-- **Completion.** When all sections are complete the participant gets a **Finish
-  lab** button leading to a completion screen; finishing marks them **finished**
-  (shown on the instructor monitor) and gracefully logs them out. An **Exit**
-  button leaves at any time, and a stored session that the instructor has since
-  ended/expired/deleted is validated away so it never lingers on the login page.
+- Editing the master template mid-class never shifts step or checkpoint indices
+  under participants.
+- The session monitor shows *"Template v3 is available — this session is
+  running v2"* with a **Push latest version** button. Pushing copies the new
+  version into the session; participants' status poll notices the version
+  change and reloads the manual within ~15 s. Cleared checkpoints are
+  re-evaluated against the new structure (the UI warns that reordering can move
+  people forwards or backwards), and section pointers are clamped to the new
+  length.
+- Exports and analytics of ended sessions keep working even if the template is
+  later archived or permanently deleted.
 
-### Participant registration, resume & logout
+Sessions that pass `expires_at` without being terminated are swept to *ended*
+after a grace window (`EXPIRED_SESSION_GRACE_MINUTES`, default 60) so their room
+codes recycle; the grace keeps "+30 min" working on a session that just ran
+out.
 
-Participants register with a **first and last name**. The server assigns the
-next **ascending number (1–100)** in join order inside a transaction, so
-concurrent joins never collide, and rejects the 101st join with a "session
-full" error. That number is what the templating engine uses as `seat`.
-Registration is the app's **default landing page**; a small link leads to the
-instructor sign-in.
+### Registration, seat numbers & resume
 
-Two mechanisms let a participant who **accidentally closes their browser**
-return to exactly where they were, and an explicit **Exit** button clears the
-session:
+1. **Named registration** — participants enter a room code plus first and last
+   name. The server assigns the next ascending seat number in join order (max
+   100 per session); that number is what formulas see as `seat`.
+2. **Idempotent rejoin** — registering again with the same name (case- and
+   whitespace-insensitive) in the same session returns the *same* number and
+   progress, even from a different device or after clearing storage.
+3. **Resume** — the participant token (never any content) is stored in
+   `localStorage`; the registration page validates it with the lightweight
+   `/status` probe and offers a *Resume* banner while the session is live.
 
-1. **Persisted token** — the participant's access token (only the token, never
-   any lab content) is stored in `localStorage`, so reopening the app restores
-   the session and shows a **Resume** banner.
-2. **Idempotent rejoin** — registering again with the same name in the same
-   session returns the *same* number and progress (even from a different
-   device or after clearing storage), because the seat is keyed on a normalised
-   name.
+### Template lifecycle: versions, archive, delete
+
+- Every save bumps `version` and appends an immutable **audit** entry with a
+  full snapshot (append-only is enforced by database triggers). The editor's
+  *Change history* summarises each version and can **revert** (loads the old
+  snapshot for review; saving creates a new version).
+- **Archive** (the default "delete") hides a template from the list and the
+  session launcher. Archived templates remain readable/editable and can be
+  **restored**. Launching a session from an archived template is refused.
+- **Permanent deletion** is available on archived templates, behind a warning
+  and a typed confirmation, and refused while a session launched from it is
+  still active. Sessions keep their own copy (`template_id` becomes `NULL`);
+  the audit history, including a final snapshot, survives.
+- Templates are a **shared workspace** — any instructor can edit any template.
+  Sessions belong to the instructor who launched them.
 
 ### Template import / export
 
-Templates can be authored entirely in the browser (in-page section editor) or
-imported from a file:
+Templates can be authored entirely in the browser or imported from a file:
 
-- **Export** the current template as **JSON** (lossless canonical form) or
-  **Markdown** (human-friendly).
-- **Import** a `.json` or `.md` file to populate the editor, and **Download
-  sample** grabs a ready-to-edit example.
+- **Export** as **JSON** (canonical form) or **Markdown** (human-friendly).
+- **Import** a `.json` or `.md` file to populate the editor; **Download sample**
+  grabs a ready-to-edit example.
 - The Markdown convention (documented in `client/src/lib/templateFormat.js`)
-  uses YAML-ish frontmatter for `title`/`description`/`variables`, `#` for
-  sections, `## [desk|computer]` for steps, and `> hint:` / `> solution:` /
-  `> checkpoint:` blocks. Round-trips are lossless.
+  uses frontmatter for `title`/`description`/`variables`, `#` for sections,
+  `## [desk|computer]` for steps, and `> hint:` / `> solution:` /
+  `> checkpoint:` / `> placeholder:` directives. Fenced code blocks are copied
+  verbatim (a `#` inside one is not a heading), hints may span multiple quoted
+  lines, `\::` and `\|` escape the separators, and checkpoint answers may list
+  alternatives separated by `|`. **Round-trips are lossless** (covered by
+  `client/tests/templateFormat.test.js`).
 
 ### Theming
 
@@ -301,173 +325,247 @@ and a toggle is available on every screen. Colours follow the Verkada palette
 (white / neutral grays led by Blue 600 `#007faf`; off-black `#030e16` with a
 brighter Blue 400 accent in dark mode), the self-hosted **Poppins** typeface
 (CSP-safe, no external requests), and an original set of geometric line icons
-(`components/Icon.jsx`) that replaced all emoji. The vLabs mark is our own — the
-Verkada logo/symbol is never reproduced.
+(`components/Icon.jsx`). The vLabs mark is our own — the Verkada logo/symbol is
+never reproduced.
 
 ### Security & IP protection
 
 | Requirement | Implementation |
 | --- | --- |
-| **IP protection** | Lab content is delivered as JSON to the DOM only. No PDF/DOCX/file endpoints exist and rendered content is served with `Cache-Control: no-store`, so no lab files are ever written to the device. (An access token is persisted to enable resume — content never is.) |
-| **Session gating** | Access requires a time-limited 6-digit PIN. Every participant request re-validates the live session (`is_active` + `expires_at`), so a token is rejected the instant an instructor terminates or the session expires — no token blocklist needed. |
-| **Anti-scraping / rate limiting** | Layered `express-rate-limit` (join brute-force, checkpoint guessing, content pull, login). Authenticated limits are keyed **per seat/token**, not per IP, so a whole classroom behind one NAT isn't throttled as a single client; the join limiter counts only failed attempts. Progressive content delivery caps what any seat can pull. |
-| **Transport** | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP, `noindex`. |
-| **Credentials** | Instructor passwords hashed with bcrypt; separate JWT secrets for instructor vs participant audiences. |
+| **IP protection** | Lab content is delivered as JSON to the DOM only. No PDF/DOCX/file endpoints exist; rendered content is served with `Cache-Control: no-store`; the lab view is hidden when printing (a deterrent, not a control). Only an access token is persisted for resume — never content. |
+| **Session gating** | Access requires a time-limited 6-digit code. Every participant request re-validates the live session (`is_active` + `expires_at`) and the seat, so a token is rejected the instant an instructor terminates the session or it expires — no token blocklist needed. |
+| **Progressive delivery** | A seat can only pull sections/steps it has legitimately reached, which caps what any single seat (or scraper) can extract. |
+| **Anti-scraping / rate limiting** | Layered `express-rate-limit`. Authenticated limits are keyed on the **verified identity inside the token** (participant/instructor id), not the raw header — so a classroom behind one NAT is not throttled as one client, garbage tokens cannot mint fresh buckets, and re-joining cannot reset a seat's checkpoint-guessing or content limits. Anonymous joins are capped per IP on *failed* attempts (code enumeration) and, more generously, on total attempts (token-minting floods). |
+| **Formula sandbox** | Instructor formulas run in a purpose-built evaluator with a fixed function whitelist, no property access, and length/depth caps. |
+| **Authored content** | Templates are validated and size-capped server-side; Markdown is rendered through `marked` and sanitised with DOMPurify (inline `style` and form elements stripped). |
+| **Transport & headers** | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP with **no `unsafe-inline`**, `frame-ancestors 'none'`, `no-referrer`, `noindex`. `TRUST_PROXY` must match the topology. |
+| **Credentials** | Instructor passwords hashed with bcrypt (constant-time compare with a dummy hash for unknown users); separate HS256 secrets per token audience; instructor tokens carry a `token_version` so **changing the password revokes every older token**. |
+| **Fail-fast configuration** | In production the server refuses to start with weak/placeholder JWT secrets, identical secrets, or when it would create the bootstrap instructor with the default password. |
+| **Operational** | Structured request/audit logging (no bodies or tokens), DB-backed health check, graceful shutdown that closes SQLite cleanly. |
+
+Known trade-off (by design): seat **rejoin is name-only** for classroom
+simplicity, so a participant who knows a classmate's name in a live session
+could take over their seat. If that matters for your environment, run kiosk
+devices and keep room codes private.
 
 ## Data model
 
-SQLite tables (`server/src/db/index.js`):
+SQLite tables (`server/src/db/index.js`), migrated with `PRAGMA user_version`
+(current version **2**):
 
-- **`instructors`** — `id`, `username`, `password_hash`.
-- **`templates`** — `id`, `title`, `description`, `content` (JSON: an array of
-  sections, each with a `steps[]` array whose bodies carry `{{placeholders}}`),
-  `variables` (JSON formulas), `version`.
-- **`sessions`** — `id`, `room_code` (6-digit), `title`, `template_id` (FK),
-  `template_version`, `is_active`, `expires_at`. A partial unique index keeps
-  one active session per room code while freeing terminated codes for reuse.
-- **`participants`** — one registered participant per session: `seat_number`
-  (ascending 1–100), `first_name`, `last_name`, `name_key` (for idempotent
-  resume), `current_section`, `max_section` (monotonic progress high-water
-  mark), `completed_checkpoints` (JSON array of `"section.step"` keys),
-  `section_entered_at`, `joined_at` (total time), `last_seen_at`. Unique on both
-  `(session_id, seat_number)` and `(session_id, name_key)`.
+- **`instructors`** — `id`, `username`, `password_hash`, `token_version`
+  (bumped on password change; embedded in JWTs), `password_changed_at`.
+- **`templates`** — `id`, `title`, `description`, `content` (JSON sections →
+  steps), `variables` (JSON formulas), `version`, `archived_at`, `created_by`,
+  timestamps.
+- **`template_audit`** — append-only history: `template_id`, `template_title`,
+  `action` (`created | updated | archived | restored | deleted`), `version`,
+  `snapshot` (full JSON), `instructor_id`, `instructor_username`, `at`.
+  `UPDATE`/`DELETE` are rejected by triggers.
+- **`sessions`** — `id`, `room_code`, `title`, `template_id` (nullable,
+  `ON DELETE SET NULL`), `instructor_id`, **`template_version`,
+  `template_title`, `content`, `variables`** (the session's own snapshot),
+  `is_active`, `expires_at`, `created_at`, `ended_at`. A partial unique index
+  keeps room codes unique among *active* sessions only.
+- **`participants`** — `id`, `session_id`, `seat_number` (1–100),
+  `first_name`, `last_name`, `name_key`, `current_section`, `max_section`,
+  `completed_checkpoints` (JSON `"section.step"` keys), `hints_taken`,
+  `revealed_solutions`, `finished_at`, `section_entered_at`, `joined_at`,
+  `last_seen_at`. Unique on `(session_id, seat_number)` and
+  `(session_id, name_key)`.
+
+Step storage shape (per section `steps[]`):
+
+```json
+{
+  "type": "desk | computer",
+  "title": "…", "body": "markdown with {{ VARS }}",
+  "hints": [{ "label": "…", "text": "markdown" }],
+  "solution": "markdown (optional)",
+  "checkpoint": { "prompt": "…", "placeholder": "…", "answer": "{{ HOST_IP }}", "answers": ["{{ HOST_IP }}/24"] }
+}
+```
 
 ## API reference
 
-All responses are JSON. Instructor routes require `Authorization: Bearer
-<instructor-token>`; participant routes require a participant token.
+All routes are under `/api`. Errors are `{ error, code?, details? }`.
 
-### Auth
+### Public
+
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/login` | Instructor login → token |
-| `GET`  | `/api/auth/me` | Current instructor |
+| `GET` | `/health` | Liveness; runs a DB query, `503` if it fails |
+| `POST` | `/auth/login` | `{ username, password }` → `{ token, instructor }` (`must_change_password` flag) |
+| `POST` | `/participant/join` | `{ room_code, first_name, last_name }` → `{ token, resumed, seat_number, session }` |
 
-### Templates (instructor)
+### Instructor (Bearer instructor token)
+
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/templates` | List templates |
-| `GET` | `/api/templates/:id` | Get one |
-| `GET` | `/api/templates/:id/audit` | Read-only change history (who/what/when) |
-| `POST` | `/api/templates` | Create |
-| `PUT` | `/api/templates/:id` | Update (bumps version) |
-| `DELETE` | `/api/templates/:id` | Delete (blocked if active sessions) |
-| `POST` | `/api/templates/:id/preview` | Render for a seat (accepts an unsaved `draft`) |
+| `GET` | `/auth/me` | Current instructor |
+| `PUT` | `/auth/password` | `{ current_password, new_password }` → fresh token; revokes older tokens |
+| `GET` | `/templates` | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at` |
+| `GET` | `/templates/functions` | Formula helper names |
+| `POST` | `/templates` | Create (validated; `400` with `details[]`) |
+| `GET` | `/templates/:id` | Full template |
+| `PUT` | `/templates/:id` | Update → new version; running sessions unaffected |
+| `DELETE` | `/templates/:id` | **Archive** (`204`) |
+| `DELETE` | `/templates/:id?permanent=1` | Permanently delete; `409` while sessions are active |
+| `POST` | `/templates/:id/restore` | Un-archive |
+| `GET` | `/templates/:id/audit` | Change history (newest first) |
+| `POST` | `/templates/:id/preview` | `{ seat_id, draft? }` → rendered manual for one seat (solutions inline) |
+| `GET` | `/sessions` | This instructor's sessions with `participant_count`, `template_version`, `update_available` |
+| `POST` | `/sessions` | `{ template_id, title?, duration_minutes? }` → session (snapshot taken; `409` if template archived) |
+| `GET` | `/sessions/:id` | Detail + live analytics (`section_distribution`, `participants[]`, `template_exists`, `template_archived`) |
+| `POST` | `/sessions/:id/terminate` | End now; participant tokens rejected immediately |
+| `POST` | `/sessions/:id/extend` | `{ minutes }` added to the later of now / current expiry |
+| `POST` | `/sessions/:id/push-template` | Copy the template's latest version into the live session |
+| `DELETE` | `/sessions/:id` | Delete session and its participants |
+| `GET` | `/sessions/:id/export` | JSON export (works after template deletion) |
 
-### Sessions (instructor)
+### Participant (Bearer participant token; every call re-validates the session)
+
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/sessions` | Create session → 6-digit code |
-| `GET` | `/api/sessions` | List sessions with live counts |
-| `GET` | `/api/sessions/:id` | Detail + analytics (per-seat progress, hints taken, total time, finished status, section distribution) |
-| `POST` | `/api/sessions/:id/terminate` | End now (instant revocation) |
-| `POST` | `/api/sessions/:id/extend` | **Add** time to the current expiry (e.g. +30 min) |
-| `DELETE` | `/api/sessions/:id` | Delete a session and its participant data |
-| `GET` | `/api/sessions/:id/export` | Export full session data (JSON; the UI also builds CSV) |
+| `GET` | `/participant/content` | Unlocked sections rendered for the seat; `template_version` |
+| `GET` | `/participant/status` | Heartbeat: `expires_at`, `finished`, `template_version` |
+| `POST` | `/participant/checkpoint` | `{ section_index, step_index, answer }` → `{ correct, section_cleared?, unlocked_section? }` |
+| `POST` | `/participant/progress` | `{ section_index }` — section being viewed |
+| `POST` | `/participant/hint` | `{ section_index, step_index, hint_index }` |
+| `POST` | `/participant/solution` | `{ section_index, step_index }` → `{ solution }` once all hints are open |
+| `POST` | `/participant/finish` | Mark the lab complete |
 
-### Participant
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/participant/join` | Register with `room_code` + `first_name` + `last_name` → assigned number + participant token (case-insensitive name; resumes if the name already joined) |
-| `GET` | `/api/participant/content` | Unlocked sections rendered per-seat, plus section progress, live `expires_at`, hint state and any revealed solutions |
-| `POST` | `/api/participant/checkpoint` | Submit unlock string for `section_index`/`step_index` (validated server-side) |
-| `POST` | `/api/participant/progress` | Report active `section_index` (analytics + progress) |
-| `POST` | `/api/participant/hint` | Record a hint as taken (`section_index`/`step_index`/`hint_index`) |
-| `POST` | `/api/participant/solution` | Reveal a step's authored Markdown solution — only after every hint on that step is opened |
-| `POST` | `/api/participant/finish` | Mark the participant finished (only once every section is complete) |
-| `GET` | `/api/participant/status` | Lightweight liveness poll (presence keep-alive + live `expires_at`/`finished`) — the client polls this instead of re-pulling the whole manual |
+Participant error codes: `SESSION_ENDED`, `SESSION_EXPIRED`, `SEAT_REMOVED`.
+Instructor: `TOKEN_REVOKED`.
 
-### Health
-`GET /api/health` — unauthenticated liveness probe.
+Rate limits (per minute unless noted): API 300 per identity/IP; join 20 failed
+per IP / 5 min and 300 total per IP / 5 min; login 10 failed per IP / 15 min;
+per seat: checkpoint 30, content/status/solution 120, other actions 120.
 
 ## Configuration
 
-Copy `.env.example` → `.env` (server reads it via `dotenv`). Everything has a
-safe dev default, so the app boots with no config; **set the secrets before any
-real deployment**. As a guard rail, the server **refuses to start** (`exit 1`)
-when `NODE_ENV=production` and the default JWT secrets are still in use, so a
-misconfigured deploy fails fast instead of running with forgeable tokens.
+Copy `.env.example` → `.env` (the server reads it via `dotenv`). Everything has
+a dev default so the app boots with no config; **production refuses to start**
+when secrets are weak/placeholder, identical, or when it would create the
+bootstrap instructor with the default password.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `4000` | API / server port |
 | `DB_PATH` | `server/data/vlabs.sqlite` | SQLite file location |
-| `JWT_INSTRUCTOR_SECRET` | dev value | Instructor token signing key |
-| `JWT_PARTICIPANT_SECRET` | dev value | Participant token signing key |
+| `JWT_INSTRUCTOR_SECRET` | dev value | Instructor token key (≥ 32 chars in production) |
+| `JWT_PARTICIPANT_SECRET` | dev value | Participant token key (must differ from the above) |
 | `JWT_INSTRUCTOR_TTL` / `JWT_PARTICIPANT_TTL` | `12h` | Token lifetimes |
 | `SEED_INSTRUCTOR_USERNAME` / `SEED_INSTRUCTOR_PASSWORD` | `instructor` / `labmanual123` | Bootstrap instructor (first run only) |
-| `CORS_ORIGINS` | `http://localhost:5173` | Allowed origins (empty in prod same-origin) |
+| `MIN_PASSWORD_LENGTH` | `10` | Policy for the change-password endpoint |
+| `TRUST_PROXY` | unset (`false`) | Express `trust proxy`: `1` behind one proxy, `true`, a hop count, or CIDR list |
+| `CORS_ORIGINS` | `http://localhost:5173` | Allowed origins (empty in prod, same-origin) |
+| `LOG_LEVEL` | `info` (`silent` in tests) | `debug | info | warn | error | silent` |
+| `LOG_FORMAT` | `pretty` (`json` in production) | Log line format |
+| `EXPIRED_SESSION_GRACE_MINUTES` | `60` | Expired sessions auto-end after this, freeing their room code |
 
 ## Testing & CI
 
 ```bash
+npm test                # from the repo root: server + client suites
 cd server && npm test   # unit + HTTP integration tests (node:test, no extra deps)
-npm run lint            # ESLint (from the repo root) across server + client
-npm run format          # Prettier write (repo root)
+cd client && npm test   # template format unit tests (node:test)
+npm run lint            # ESLint across server, client and shared
+npm run format          # Prettier write (repo root); format:check runs in CI
 ```
 
-Three suites run under Node's built-in test runner:
+Suites, all under Node's built-in test runner:
 
-- **`templating.test.js`** — the security-critical templating core: arithmetic
-  precedence, string concatenation, the spec's Seat 7 → `.107` example, formula
-  composition, placeholder injection, checkpoint-answer + step-solution
-  stripping, sandbox rejection of unknown/prototype identifiers, and the
-  authored-structure safety caps.
-- **`api.test.js`** — boots the real Express app on an ephemeral port against an
-  isolated temp DB and drives it with `fetch`: auth gating, progressive content
-  delivery (locked sections/answers never shipped), server-side checkpoint
-  validation, step-solution hint-gating, the lightweight status poll, the
-  live-session kill-switch, and audit-log immutability.
-- **`time.test.js`** — UTC parsing of both SQLite and (zone-less) ISO
-  timestamps.
+- **`server/tests/templating.test.js`** — the security-critical templating
+  core: precedence, concatenation, the Seat 7 → `.107` example, composition,
+  helper functions, sandbox rejections (unknown/prototype identifiers, unknown
+  functions, division by zero, depth/length caps), placeholder injection,
+  answer/solution stripping, multi-answer matching, reachability gating,
+  validator rules (unknown placeholders, duplicate/reserved variables, caps).
+- **`server/tests/api.test.js`** — boots the real Express app on an ephemeral
+  port against an isolated temp DB: auth gating and audience checks, rejoin
+  idempotency, progressive delivery, hint/progress gating, solution gating,
+  checkpoint validation incl. alternatives, validation error details, template
+  archive/restore/permanent delete (sessions detach intact), frozen snapshot +
+  push, the 101st-participant limit, password change revoking older tokens,
+  the kill-switch, audit immutability and the schema version.
+- **`server/tests/time.test.js`** — UTC parsing of SQLite and ISO timestamps.
+- **`client/tests/templateFormat.test.js`** — lossless Markdown/JSON
+  round-trips, code-fence handling, multi-line hints, escapes, alternatives,
+  and the bundled sample.
 
-Linting is a flat-config ESLint (`eslint.config.js`) with Prettier for
-formatting, both driven from the repo-root `package.json`.
-`.github/workflows/ci.yml` runs lint, the server tests, and a client production
-build on every push and pull request.
+`.github/workflows/ci.yml` runs lint + format check, both test suites with
+`npm audit`, a client production build, and builds and smoke-tests the Docker
+image on every push and pull request. Dependabot keeps npm, Actions and the
+base image current.
 
 ## Deployment notes
 
 Per the spec's deployment section:
 
 1. **HTTPS/TLS is mandatory.** Terminate TLS at a reverse proxy (nginx / Caddy /
-   Traefik) in front of the container; the app sets `trust proxy` for correct
-   client IPs.
+   Traefik) in front of the container and set `TRUST_PROXY` to the number of
+   hops so client IPs (and per-IP limits) are correct.
 2. **Dockerized** single-VM deployment via `docker-compose.yml`; persist the
-   SQLite volume.
+   SQLite volume and back it up before upgrades.
 3. **Kiosk-mode iPads.** Provision classroom iPads with an MDM / Apple
    Configurator to lock Safari to Single App Mode pointing at
-   `https://labs.internal`, hiding the URL bar, tabs and sharing. The
-   participant view's content deterrents complement this, while the persisted
-   resume token means a device that reloads or sleeps returns to the same seat
-   without re-registering.
+   `https://labs.internal`, hiding the URL bar, tabs and sharing. Because resume
+   uses `localStorage`, shared devices should be reset between cohorts (or use
+   **Exit** at the end of a lab).
+4. **First run:** set `SEED_INSTRUCTOR_PASSWORD` to a strong value, sign in,
+   then change it from **Account**. The env var is unused after the account
+   exists.
+5. **Logs** are JSON lines on stdout/stderr (`LOG_FORMAT=json`), one per API
+   request plus lifecycle/audit events; ship them with your usual collector.
+
+## Upgrading an existing deployment
+
+- The database migrates automatically on first boot (`user_version` 0/1 → 2).
+  Migration 2 **rebuilds the `sessions` table** to make `template_id` nullable
+  and to add the per-session content snapshot; existing sessions are
+  back-filled from the audit snapshot matching their `template_version` (or
+  the live template if none). **Back up the SQLite volume first.**
+- `docker compose up` now **requires** `JWT_INSTRUCTOR_SECRET`,
+  `JWT_PARTICIPANT_SECRET` and `SEED_INSTRUCTOR_PASSWORD`. Secrets that are
+  short or look like placeholders (`change-me…`, `dev-…`) are rejected in
+  production even if compose passes them through.
+- Instructor tokens issued before the upgrade remain valid until that
+  instructor changes their password.
+- `DELETE /api/templates/:id` now archives; pass `?permanent=1` to delete.
 
 ## Project layout
 
 ```
 vLabs/
-├── Dockerfile                 # multi-stage: build SPA → serve from Node
-├── docker-compose.yml         # single-container deployment
+├── Dockerfile                 # multi-stage: build SPA → serve from Node 22
+├── docker-compose.yml         # single-container deployment (secrets required)
 ├── .env.example
+├── .github/                   # CI workflow + Dependabot
+├── shared/
+│   └── template-schema.js     # canonical template shape, limits, placeholder checks
 ├── server/                    # Express + SQLite API
 │   ├── src/
-│   │   ├── app.js             # express app (helmet, cors, static SPA)
-│   │   ├── index.js           # entrypoint + graceful shutdown
+│   │   ├── app.js             # express app (helmet, cors, logging, static SPA)
+│   │   ├── index.js           # entrypoint: prod guards, sweeps, graceful shutdown
 │   │   ├── config.js
-│   │   ├── db/                # schema + seeder (sample lab)
-│   │   ├── lib/               # templating engine, tokens, time, validation
+│   │   ├── db/                # schema + versioned migrations, seeder (sample lab)
+│   │   ├── lib/               # templating engine, validation, tokens, logger,
+│   │   │                      #   session lifecycle, time
 │   │   ├── middleware/        # auth (session gating), rate limits, errors
 │   │   └── routes/            # auth, templates, sessions, participant
 │   └── tests/                 # templating unit tests + HTTP integration tests
 └── client/                    # React + Vite SPA
+    ├── tests/                 # template format unit tests (node:test)
     └── src/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
-        │                      #   TemplateEditor, SessionMonitor, InstructorLogin
+        │                      #   TemplateEditor, SessionMonitor, InstructorLogin, Account
         ├── components/        # StepCard, HintBox, SolutionBox, Checkpoint, Markdown,
         │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
-        ├── hooks/             # instructor API helper
+        ├── hooks/             # instructor API helper, countdown
         ├── context/           # AuthContext, ThemeContext (light/dark)
-        ├── lib/               # templateFormat (JSON/Markdown import & export)
+        ├── lib/               # templateFormat (JSON/Markdown), files, format, datetime
         ├── styles.css         # design system + light & dark themes
-        └── api.js             # typed fetch client (+ participant resume storage)
+        ├── styles.additions.css
+        └── api.js             # fetch client (+ participant resume storage)
 ```

@@ -1,14 +1,20 @@
 {
   "name": "vlabs",
-  "version": "1.0.0",
-  "description": "Dynamic lab manual — repo-level dev tooling (lint/format) for the server and client workspaces",
+  "version": "1.1.0",
+  "description": "Dynamic lab manual — repo-level dev tooling (lint/format/test) for the server and client workspaces",
   "private": true,
   "type": "module",
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"{server,client}/src/**/*.{js,jsx,css}\" \"server/tests/**/*.js\" \"*.{js,json,md}\"",
-    "format:check": "prettier --check \"{server,client}/src/**/*.{js,jsx,css}\" \"server/tests/**/*.js\""
+    "format": "prettier --write \"{server,client}/src/**/*.{js,jsx,css}\" \"{server,client}/tests/**/*.js\" \"shared/**/*.js\" \"*.{js,json,md}\"",
+    "format:check": "prettier --check \"{server,client}/src/**/*.{js,jsx,css}\" \"{server,client}/tests/**/*.js\" \"shared/**/*.js\"",
+    "test": "npm test --prefix server && npm test --prefix client",
+    "test:server": "npm test --prefix server",
+    "test:client": "npm test --prefix client"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

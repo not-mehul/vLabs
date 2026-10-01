@@ -1,33 +1,73 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireParticipant } from '../middleware/auth.js';
-import { joinLimiter, checkpointLimiter, contentLimiter } from '../middleware/rateLimit.js';
+import {
+  joinFailLimiter,
+  joinFloodLimiter,
+  checkpointLimiter,
+  contentLimiter,
+  actionLimiter,
+} from '../middleware/rateLimit.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { signParticipantToken } from '../lib/tokens.js';
 import { nowIso, parseUtc } from '../lib/time.js';
+import { log } from '../lib/logger.js';
 import {
   resolveVariables,
-  checkpointAnswer,
-  normaliseAnswer,
+  isCorrectAnswer,
   renderSection,
   isSectionCleared,
   computeUnlockedSection,
   computeSectionVisibleThrough,
+  isStepReachable,
   checkpointKey,
   countSteps,
   injectVariables,
+  stepHasCheckpoint,
 } from '../lib/templating.js';
 
 const router = Router();
 
-/** Load the parsed manual (sections + variables) behind a session. */
+const MAX_PARTICIPANTS = 100;
+
+const q = {
+  sessionByCode: db.prepare('SELECT * FROM sessions WHERE room_code = ? AND is_active = 1'),
+  byName: db.prepare('SELECT * FROM participants WHERE session_id = ? AND name_key = ?'),
+  byId: db.prepare('SELECT * FROM participants WHERE id = ?'),
+  seatStats: db.prepare(
+    'SELECT COALESCE(MAX(seat_number), 0) AS maxSeat, COUNT(*) AS count FROM participants WHERE session_id = ?',
+  ),
+  insert: db.prepare(
+    `INSERT INTO participants
+       (session_id, seat_number, first_name, last_name, name_key, section_entered_at, joined_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ),
+  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?'),
+  setCheckpoints: db.prepare(
+    'UPDATE participants SET completed_checkpoints = ?, last_seen_at = ? WHERE id = ?',
+  ),
+  setSection: db.prepare(
+    `UPDATE participants
+        SET current_section = ?, max_section = MAX(max_section, ?),
+            section_entered_at = ?, last_seen_at = ?
+      WHERE id = ?`,
+  ),
+  setHints: db.prepare('UPDATE participants SET hints_taken = ?, last_seen_at = ? WHERE id = ?'),
+  setRevealed: db.prepare(
+    'UPDATE participants SET revealed_solutions = ?, last_seen_at = ? WHERE id = ?',
+  ),
+  finish: db.prepare('UPDATE participants SET finished_at = ?, last_seen_at = ? WHERE id = ?'),
+};
+
+/**
+ * The manual a session renders from is the session's OWN snapshot (taken at
+ * launch or when the instructor pushed a newer version) — never the live
+ * template, so mid-class edits can't shift step indices under participants.
+ */
 function loadManual(session) {
-  const template = db
-    .prepare('SELECT content, variables FROM templates WHERE id = ?')
-    .get(session.template_id);
   return {
-    sections: JSON.parse(template.content),
-    variables: JSON.parse(template.variables),
+    sections: JSON.parse(session.content || '[]'),
+    variables: JSON.parse(session.variables || '[]'),
   };
 }
 
@@ -36,6 +76,45 @@ function noStore(res) {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
 }
+
+const parseIndex = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : NaN;
+};
+
+const completedSetOf = (p) => new Set(JSON.parse(p.completed_checkpoints || '[]'));
+
+/** 400/403 unless (section, step) exists and is reachable for this seat. */
+function requireReachableStep(sections, si, sti, completed) {
+  if (Number.isNaN(si) || !sections[si]) throw httpError(400, 'Invalid section index');
+  if (Number.isNaN(sti) || !sections[si].steps?.[sti]) throw httpError(400, 'Invalid step index');
+  if (si > computeUnlockedSection(sections, completed)) throw httpError(403, 'Section is locked');
+  if (!isStepReachable(sections, si, sti, completed)) throw httpError(403, 'Step is locked');
+  return sections[si].steps[sti];
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Join (anonymous)                                                          */
+/* -------------------------------------------------------------------------- */
+
+// Assign the next seat number atomically inside a transaction so concurrent
+// joins can never collide on a number.
+const registerParticipant = db.transaction((session, firstName, lastName, nameKey) => {
+  const existing = q.byName.get(session.id, nameKey);
+  if (existing) {
+    q.touch.run(nowIso(), existing.id);
+    return { participant: existing, resumed: true };
+  }
+
+  const { maxSeat, count } = q.seatStats.get(session.id);
+  if (count >= MAX_PARTICIPANTS) {
+    throw httpError(409, `This session is full (${MAX_PARTICIPANTS} participants max).`);
+  }
+  const seatNumber = maxSeat + 1;
+  const now = nowIso();
+  const info = q.insert.run(session.id, seatNumber, firstName, lastName, nameKey, now, now, now);
+  return { participant: q.byId.get(info.lastInsertRowid), resumed: false };
+});
 
 /**
  * POST /api/participant/join
@@ -47,47 +126,10 @@ function noStore(res) {
  * back in. Returns a participant token plus lightweight session metadata —
  * never the manual body.
  */
-const MAX_PARTICIPANTS = 100;
-
-// Assign the next seat number atomically inside a transaction so concurrent
-// joins can never collide on a number.
-const registerParticipant = db.transaction((session, firstName, lastName, nameKey) => {
-  const existing = db
-    .prepare('SELECT * FROM participants WHERE session_id = ? AND name_key = ?')
-    .get(session.id, nameKey);
-  if (existing) {
-    db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
-      nowIso(),
-      existing.id,
-    );
-    return { participant: existing, resumed: true };
-  }
-
-  const { maxSeat, count } = db
-    .prepare(
-      'SELECT COALESCE(MAX(seat_number), 0) AS maxSeat, COUNT(*) AS count FROM participants WHERE session_id = ?',
-    )
-    .get(session.id);
-  if (count >= MAX_PARTICIPANTS) {
-    throw httpError(409, `This session is full (${MAX_PARTICIPANTS} participants max).`);
-  }
-  const seatNumber = maxSeat + 1;
-  const info = db
-    .prepare(
-      `INSERT INTO participants
-         (session_id, seat_number, first_name, last_name, name_key, section_entered_at, joined_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(session.id, seatNumber, firstName, lastName, nameKey, nowIso(), nowIso(), nowIso());
-  const participant = db
-    .prepare('SELECT * FROM participants WHERE id = ?')
-    .get(info.lastInsertRowid);
-  return { participant, resumed: false };
-});
-
 router.post(
   '/join',
-  joinLimiter,
+  joinFloodLimiter,
+  joinFailLimiter,
   asyncHandler(async (req, res) => {
     const roomCode = String(req.body?.room_code || '').trim();
     const firstName = String(req.body?.first_name || '').trim().replace(/\s+/g, ' ');
@@ -102,9 +144,7 @@ router.post(
       throw httpError(400, 'Enter your last name');
     }
 
-    const session = db
-      .prepare('SELECT * FROM sessions WHERE room_code = ? AND is_active = 1')
-      .get(roomCode);
+    const session = q.sessionByCode.get(roomCode);
     // Uniform error for "wrong code" vs "expired" to avoid leaking which codes
     // exist (anti-enumeration).
     if (!session || parseUtc(session.expires_at) < Date.now()) {
@@ -112,15 +152,15 @@ router.post(
     }
 
     const nameKey = `${firstName} ${lastName}`.toLowerCase();
-    const { participant, resumed } = registerParticipant(
-      session,
-      firstName,
-      lastName,
-      nameKey,
-    );
+    const { participant, resumed } = registerParticipant(session, firstName, lastName, nameKey);
 
     const { sections } = loadManual(session);
     const token = signParticipantToken(participant, session);
+    log.info(resumed ? 'participant.resumed' : 'participant.joined', {
+      session: session.id,
+      participant: participant.id,
+      seat: participant.seat_number,
+    });
     noStore(res);
     res.json({
       token,
@@ -133,10 +173,17 @@ router.post(
         expires_at: session.expires_at,
         section_count: sections.length,
         step_count: countSteps(sections),
+        template_version: session.template_version,
       },
     });
   }),
 );
+
+/* -------------------------------------------------------------------------- */
+/*  Everything below requires a live seat. Per-seat rate limiters are mounted */
+/*  AFTER the guard so they can key on the verified participant id.           */
+/* -------------------------------------------------------------------------- */
+router.use(requireParticipant);
 
 /**
  * GET /api/participant/content
@@ -149,18 +196,14 @@ router.post(
 router.get(
   '/content',
   contentLimiter,
-  requireParticipant,
   asyncHandler(async (req, res) => {
     const p = req.participant;
     const { sections, variables } = loadManual(req.session);
     const context = resolveVariables(variables, p.seat_number);
-    const completed = new Set(JSON.parse(p.completed_checkpoints));
+    const completed = completedSetOf(p);
     const unlockedSection = computeUnlockedSection(sections, completed);
 
-    db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
-      nowIso(),
-      p.id,
-    );
+    q.touch.run(nowIso(), p.id);
 
     const hintsTaken = new Set(JSON.parse(p.hints_taken || '[]'));
     const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
@@ -217,12 +260,13 @@ router.get(
       last_name: p.last_name,
       total_sections: total,
       unlocked_section: unlockedSection,
-      current_section: p.current_section,
+      current_section: Math.min(p.current_section, Math.max(total - 1, 0)),
       completed_sections: completedSections,
       progress_pct: total > 0 ? Math.round((completedSections / total) * 100) : 0,
       completed_checkpoints: [...completed],
       finished: Boolean(p.finished_at),
       expires_at: req.session.expires_at,
+      template_version: req.session.template_version,
       sections: rendered,
     });
   }),
@@ -231,58 +275,43 @@ router.get(
 /**
  * POST /api/participant/checkpoint
  * Body: { section_index, step_index, answer }
- * Validates the seat-specific unlock string server-side and, on success,
- * records completion (which may clear the section and unlock the next).
+ * Validates the seat-specific unlock string server-side (against the primary
+ * answer and any authored alternatives) and, on success, records completion
+ * (which may clear the section and unlock the next).
  */
 router.post(
   '/checkpoint',
   checkpointLimiter,
-  requireParticipant,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const sectionIndex = parseInt(req.body?.section_index, 10);
-    const stepIndex = parseInt(req.body?.step_index, 10);
+    const si = parseIndex(req.body?.section_index);
+    const sti = parseIndex(req.body?.step_index);
     const answer = req.body?.answer;
+    if (typeof answer !== 'string' || answer.length > 500) {
+      throw httpError(400, 'Answer must be a short string');
+    }
 
     const { sections, variables } = loadManual(req.session);
-    const section = sections[sectionIndex];
-    if (!section || Number.isNaN(sectionIndex)) {
-      throw httpError(400, 'Invalid section index');
-    }
-    const step = section.steps?.[stepIndex];
-    if (!step || Number.isNaN(stepIndex)) throw httpError(400, 'Invalid step index');
-    if (!step.checkpoint || !step.checkpoint.answer) {
-      throw httpError(400, 'This step has no checkpoint');
-    }
-
-    // Can only attempt a checkpoint in a section you can actually reach.
-    const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const unlockedSection = computeUnlockedSection(sections, completed);
-    if (sectionIndex > unlockedSection) throw httpError(403, 'Section is locked');
-    // ...and only up to the first open checkpoint within that section.
-    const visibleThrough = computeSectionVisibleThrough(section, sectionIndex, completed);
-    if (stepIndex > visibleThrough) throw httpError(403, 'Step is locked');
+    const completed = completedSetOf(p);
+    const step = requireReachableStep(sections, si, sti, completed);
+    if (!stepHasCheckpoint(step)) throw httpError(400, 'This step has no checkpoint');
 
     const context = resolveVariables(variables, p.seat_number);
-    const expected = checkpointAnswer(step, context);
-    const correct = normaliseAnswer(answer) === expected;
+    const correct = isCorrectAnswer(step, context, answer);
 
+    noStore(res);
     if (!correct) {
-      noStore(res);
+      log.debug('checkpoint.wrong', { participant: p.id, section: si, step: sti });
       return res.status(200).json({ correct: false });
     }
 
-    completed.add(checkpointKey(sectionIndex, stepIndex));
-    const newUnlocked = computeUnlockedSection(sections, completed);
-    db.prepare(
-      'UPDATE participants SET completed_checkpoints = ?, last_seen_at = ? WHERE id = ?',
-    ).run(JSON.stringify([...completed]), nowIso(), p.id);
-
-    noStore(res);
+    completed.add(checkpointKey(si, sti));
+    q.setCheckpoints.run(JSON.stringify([...completed]), nowIso(), p.id);
+    log.info('checkpoint.cleared', { participant: p.id, session: req.session.id, section: si, step: sti });
     res.json({
       correct: true,
-      section_cleared: isSectionCleared(section, sectionIndex, completed),
-      unlocked_section: newUnlocked,
+      section_cleared: isSectionCleared(sections[si], si, completed),
+      unlocked_section: computeUnlockedSection(sections, completed),
     });
   }),
 );
@@ -295,35 +324,24 @@ router.post(
  */
 router.post(
   '/progress',
-  requireParticipant,
+  actionLimiter,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const sectionIndex = parseInt(req.body?.section_index, 10);
+    const si = parseIndex(req.body?.section_index);
     const { sections } = loadManual(req.session);
-    if (Number.isNaN(sectionIndex) || sectionIndex < 0 || sectionIndex >= sections.length) {
-      throw httpError(400, 'Invalid section index');
-    }
-    const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const unlockedSection = computeUnlockedSection(sections, completed);
-    if (sectionIndex > unlockedSection) throw httpError(403, 'Section is locked');
+    if (Number.isNaN(si) || si >= sections.length) throw httpError(400, 'Invalid section index');
+    const completed = completedSetOf(p);
+    if (si > computeUnlockedSection(sections, completed)) throw httpError(403, 'Section is locked');
 
-    if (sectionIndex !== p.current_section) {
+    if (si !== p.current_section) {
       const now = nowIso();
       // max_section is a monotonic high-water mark so progress never drops when
       // a participant navigates back to review an earlier section.
-      db.prepare(
-        `UPDATE participants
-            SET current_section = ?, max_section = MAX(max_section, ?),
-                section_entered_at = ?, last_seen_at = ?
-          WHERE id = ?`,
-      ).run(sectionIndex, sectionIndex, now, now, p.id);
+      q.setSection.run(si, si, now, now, p.id);
     } else {
-      db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(
-        nowIso(),
-        p.id,
-      );
+      q.touch.run(nowIso(), p.id);
     }
-    res.json({ current_section: sectionIndex });
+    res.json({ current_section: si });
   }),
 );
 
@@ -331,26 +349,26 @@ router.post(
  * POST /api/participant/hint
  * Body: { section_index, step_index, hint_index }
  * Records that a participant opened a hint (drives "hints taken" analytics and
- * gates the reveal-solution feature).
+ * gates the reveal-solution feature). The step must be reachable — the same
+ * gate every other participant action applies.
  */
 router.post(
   '/hint',
-  requireParticipant,
+  actionLimiter,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const si = parseInt(req.body?.section_index, 10);
-    const sti = parseInt(req.body?.step_index, 10);
-    const hi = parseInt(req.body?.hint_index, 10);
+    const si = parseIndex(req.body?.section_index);
+    const sti = parseIndex(req.body?.step_index);
+    const hi = parseIndex(req.body?.hint_index);
     const { sections } = loadManual(req.session);
-    const step = sections[si]?.steps?.[sti];
-    if (!step || Number.isNaN(hi) || !step.hints || hi < 0 || hi >= step.hints.length) {
+    const completed = completedSetOf(p);
+    const step = requireReachableStep(sections, si, sti, completed);
+    if (Number.isNaN(hi) || !step.hints || hi >= step.hints.length) {
       throw httpError(400, 'Invalid hint');
     }
     const taken = new Set(JSON.parse(p.hints_taken || '[]'));
     taken.add(`${si}.${sti}.${hi}`);
-    db.prepare(
-      'UPDATE participants SET hints_taken = ?, last_seen_at = ? WHERE id = ?',
-    ).run(JSON.stringify([...taken]), nowIso(), p.id);
+    q.setHints.run(JSON.stringify([...taken]), nowIso(), p.id);
     res.json({ ok: true, hints_taken: taken.size });
   }),
 );
@@ -364,22 +382,15 @@ router.post(
  */
 router.post(
   '/solution',
-  requireParticipant,
+  contentLimiter,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const si = parseInt(req.body?.section_index, 10);
-    const sti = parseInt(req.body?.step_index, 10);
+    const si = parseIndex(req.body?.section_index);
+    const sti = parseIndex(req.body?.step_index);
     const { sections, variables } = loadManual(req.session);
-    const step = sections[si]?.steps?.[sti];
-    if (!step) throw httpError(400, 'Invalid step');
+    const completed = completedSetOf(p);
+    const step = requireReachableStep(sections, si, sti, completed);
     if (!step.solution) throw httpError(404, 'No solution authored for this step');
-
-    // The step must be reachable before its solution can be revealed.
-    const completed = new Set(JSON.parse(p.completed_checkpoints));
-    const unlockedSection = computeUnlockedSection(sections, completed);
-    if (si > unlockedSection) throw httpError(403, 'Section is locked');
-    const visibleThrough = computeSectionVisibleThrough(sections[si], si, completed);
-    if (sti > visibleThrough) throw httpError(403, 'Step is locked');
 
     const taken = new Set(JSON.parse(p.hints_taken || '[]'));
     const allTaken = (step.hints || []).every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
@@ -387,12 +398,11 @@ router.post(
 
     const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
     revealed.add(`${si}.${sti}`);
-    db.prepare(
-      'UPDATE participants SET revealed_solutions = ?, last_seen_at = ? WHERE id = ?',
-    ).run(JSON.stringify([...revealed]), nowIso(), p.id);
+    q.setRevealed.run(JSON.stringify([...revealed]), nowIso(), p.id);
 
     const context = resolveVariables(variables, p.seat_number);
     const solution = injectVariables(String(step.solution), context);
+    log.info('solution.revealed', { participant: p.id, session: req.session.id, section: si, step: sti });
     noStore(res);
     res.json({ solution });
   }),
@@ -405,11 +415,11 @@ router.post(
  */
 router.post(
   '/finish',
-  requireParticipant,
+  actionLimiter,
   asyncHandler(async (req, res) => {
     const p = req.participant;
     const { sections } = loadManual(req.session);
-    const completed = new Set(JSON.parse(p.completed_checkpoints));
+    const completed = completedSetOf(p);
     const total = sections.length;
     // Require genuine completion: max_section reached the end and the last
     // section is cleared.
@@ -420,11 +430,8 @@ router.post(
     if (!done) throw httpError(400, 'Lab is not complete yet');
 
     if (!p.finished_at) {
-      db.prepare('UPDATE participants SET finished_at = ?, last_seen_at = ? WHERE id = ?').run(
-        nowIso(),
-        nowIso(),
-        p.id,
-      );
+      q.finish.run(nowIso(), nowIso(), p.id);
+      log.info('participant.finished', { participant: p.id, session: req.session.id });
     }
     res.json({ finished: true });
   }),
@@ -433,19 +440,20 @@ router.post(
 /**
  * GET /api/participant/status
  * Lightweight liveness poll. Doubles as the presence heartbeat (updates
- * last_seen_at) and lets the client keep the countdown fresh (instructor "+30")
- * and detect session-end WITHOUT re-pulling the whole rendered manual on every
- * tick. requireParticipant already 403s a terminated/expired session, so a 200
- * here means "still live".
+ * last_seen_at) and lets the client keep the countdown fresh (instructor "+30"),
+ * detect session-end and notice a pushed template version WITHOUT re-pulling
+ * the whole rendered manual on every tick. requireParticipant already 403s a
+ * terminated/expired session, so a 200 here means "still live".
  */
-router.get('/status', contentLimiter, requireParticipant, (req, res) => {
+router.get('/status', contentLimiter, (req, res) => {
   const p = req.participant;
-  db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?').run(nowIso(), p.id);
+  q.touch.run(nowIso(), p.id);
   noStore(res);
   res.json({
     session_active: true,
     expires_at: req.session.expires_at,
     finished: Boolean(p.finished_at),
+    template_version: req.session.template_version,
   });
 });
 

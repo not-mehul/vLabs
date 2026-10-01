@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { downloadFile } from '../lib/templateFormat.js';
+import { downloadFile } from '../lib/files.js';
+import { slug } from '../lib/format.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
-
-const slug = (s) => (s || 'session').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function StatusPill({ status }) {
   return <span className={`pill pill--${status}`}>{status}</span>;
@@ -79,6 +78,7 @@ function CreateSession({ templates, onCreated }) {
             <input
               className="field__input"
               placeholder="e.g. Morning cohort"
+              maxLength={200}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -99,7 +99,11 @@ function CreateSession({ templates, onCreated }) {
           </button>
         </div>
       )}
-      {error && <p className="form__error">{error}</p>}
+      <p className="muted small">
+        The session takes a copy of the template at launch; later edits only reach it when you push
+        them from the monitor.
+      </p>
+      {error && <p className="form__error" role="alert">{error}</p>}
     </form>
   );
 }
@@ -110,11 +114,13 @@ export default function Dashboard() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [justCreated, setJustCreated] = useState(null);
+  const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
       const [s, t] = await Promise.all([
         call((tok) => api.listSessions(tok)),
+        // Archived templates are excluded so they can't be launched.
         call((tok) => api.listTemplates(tok)),
       ]);
       setSessions(s);
@@ -135,11 +141,12 @@ export default function Dashboard() {
   const handleDelete = useCallback(
     async (s) => {
       if (!window.confirm(`Delete session "${s.title}" (${s.room_code}) and its data?`)) return;
+      setError('');
       try {
         await call((t) => api.deleteSession(t, s.id));
         refresh();
-      } catch {
-        /* 401 handled upstream */
+      } catch (err) {
+        setError(err.message);
       }
     },
     [call, refresh],
@@ -147,8 +154,13 @@ export default function Dashboard() {
 
   const handleExport = useCallback(
     async (s) => {
-      const doc = await call((t) => api.exportSession(t, s.id));
-      downloadFile(`${slug(doc.session.title)}.json`, JSON.stringify(doc, null, 2), 'application/json');
+      setError('');
+      try {
+        const doc = await call((t) => api.exportSession(t, s.id));
+        downloadFile(`${slug(doc.session.title, 'session')}.json`, JSON.stringify(doc, null, 2), 'application/json');
+      } catch (err) {
+        setError(err.message);
+      }
     },
     [call],
   );
@@ -169,7 +181,7 @@ export default function Dashboard() {
       />
 
       {justCreated && (
-        <div className="banner banner--success">
+        <div className="banner banner--success" role="status">
           <div>
             <strong>Session live.</strong> Share this room code with participants:
           </div>
@@ -179,6 +191,8 @@ export default function Dashboard() {
           </Link>
         </div>
       )}
+
+      {error && <p className="form__error" role="alert">{error}</p>}
 
       <div className="panel">
         <h2 className="panel__title">All sessions</h2>
@@ -203,7 +217,15 @@ export default function Dashboard() {
                 <tr key={s.id}>
                   <td className="mono">{s.room_code}</td>
                   <td>{s.title}</td>
-                  <td className="muted">{s.template_title}</td>
+                  <td className="muted">
+                    {s.template_title}
+                    <span className="small"> · v{s.template_version}</span>
+                    {s.status === 'active' && s.update_available && (
+                      <span className="tag tag--update" title={`Template v${s.latest_template_version} is available to push`}>
+                        update
+                      </span>
+                    )}
+                  </td>
                   <td>{s.participant_count}</td>
                   <td>
                     <StatusPill status={s.status} />
@@ -213,7 +235,7 @@ export default function Dashboard() {
                       className="btn btn--sm btn--icon btn--ghost"
                       to={`/instructor/sessions/${s.id}`}
                       title="Open monitor"
-                      aria-label="Open monitor"
+                      aria-label={`Open monitor for ${s.title}`}
                     >
                       <Icon name="eye" size={16} />
                     </Link>
@@ -221,7 +243,7 @@ export default function Dashboard() {
                       className="btn btn--sm btn--icon btn--ghost"
                       onClick={() => handleExport(s)}
                       title="Export session data (JSON)"
-                      aria-label="Export session data"
+                      aria-label={`Export ${s.title}`}
                     >
                       <Icon name="download" size={16} />
                     </button>
@@ -230,7 +252,7 @@ export default function Dashboard() {
                         className="btn btn--sm btn--icon btn--danger-ghost"
                         onClick={() => handleDelete(s)}
                         title="Delete session"
-                        aria-label="Delete session"
+                        aria-label={`Delete ${s.title}`}
                       >
                         <Icon name="trash" size={16} />
                       </button>

@@ -12,6 +12,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Templates = lazy(() => import('./pages/Templates.jsx'));
 const TemplateEditor = lazy(() => import('./pages/TemplateEditor.jsx'));
 const SessionMonitor = lazy(() => import('./pages/SessionMonitor.jsx'));
+const Account = lazy(() => import('./pages/Account.jsx'));
 
 /** Gate instructor-only routes behind a token. */
 function RequireInstructor({ children }) {
@@ -27,45 +28,53 @@ export default function App() {
   return (
     <Suspense fallback={<div className="route-loading">Loading…</div>}>
       <Routes>
-      {/* Participant registration is the default landing page. */}
-      <Route path="/" element={<Join />} />
-      <Route path="/join" element={<Navigate to="/" replace />} />
-      <Route path="/lab" element={<Lab />} />
+        {/* Participant registration is the default landing page. */}
+        <Route path="/" element={<Join />} />
+        <Route path="/join" element={<Navigate to="/" replace />} />
+        <Route path="/lab" element={<Lab />} />
 
-      {/* Instructor portal */}
-      <Route path="/instructor/login" element={<InstructorLogin />} />
-      <Route
-        path="/instructor"
-        element={
-          <RequireInstructor>
-            <Dashboard />
-          </RequireInstructor>
-        }
-      />
-      <Route
-        path="/instructor/templates"
-        element={
-          <RequireInstructor>
-            <Templates />
-          </RequireInstructor>
-        }
-      />
-      <Route
-        path="/instructor/templates/:id"
-        element={
-          <RequireInstructor>
-            <TemplateEditor />
-          </RequireInstructor>
-        }
-      />
-      <Route
-        path="/instructor/sessions/:id"
-        element={
-          <RequireInstructor>
-            <SessionMonitor />
-          </RequireInstructor>
-        }
-      />
+        {/* Instructor portal */}
+        <Route path="/instructor/login" element={<InstructorLogin />} />
+        <Route
+          path="/instructor"
+          element={
+            <RequireInstructor>
+              <Dashboard />
+            </RequireInstructor>
+          }
+        />
+        <Route
+          path="/instructor/templates"
+          element={
+            <RequireInstructor>
+              <Templates />
+            </RequireInstructor>
+          }
+        />
+        <Route
+          path="/instructor/templates/:id"
+          element={
+            <RequireInstructor>
+              <TemplateEditor />
+            </RequireInstructor>
+          }
+        />
+        <Route
+          path="/instructor/sessions/:id"
+          element={
+            <RequireInstructor>
+              <SessionMonitor />
+            </RequireInstructor>
+          }
+        />
+        <Route
+          path="/instructor/account"
+          element={
+            <RequireInstructor>
+              <Account />
+            </RequireInstructor>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -1,16 +1,19 @@
 import bcrypt from 'bcryptjs';
 import db from './index.js';
 import config from '../config.js';
+import { log } from '../lib/logger.js';
 
 /**
  * Sample master template. Demonstrates every content feature:
  *   - Desk Action vs Computer Action cards
  *   - mustache-style {{PLACEHOLDER}} variables resolved per seat
- *   - collapsible hints (progressive disclosure)
- *   - a state checkpoint that gates the following step
+ *   - a formula helper (pad) for zero-padded labels
+ *   - collapsible hints (progressive disclosure) and a step-level solution
+ *   - a state checkpoint that gates the following section
  */
 const SAMPLE_VARIABLES = [
   { name: 'PORT_NUM', expression: 'seat' },
+  { name: 'SEAT_TAG', expression: "'S' + pad(seat, 2)" },
   { name: 'GATEWAY_IP', expression: "'192.168.1.' + (100 + seat)" },
   { name: 'HOST_IP', expression: "'10.0.0.' + (100 + seat)" },
   { name: 'SUBNET', expression: "'255.255.255.0'" },
@@ -46,7 +49,7 @@ const SAMPLE_CONTENT = [
         hints: [
           {
             label: 'Which cable is mine?',
-            text: 'Use the cable tagged with your seat number ({{ SEAT_ID }}).',
+            text: 'Use the cable tagged **{{ SEAT_TAG }}** (your seat number, zero-padded).',
           },
         ],
       },
@@ -97,8 +100,10 @@ const SAMPLE_CONTENT = [
         checkpoint: {
           prompt: 'Enter your assigned Host IP address to complete this section',
           placeholder: 'e.g. 10.0.0.1XX',
-          // Answer is computed per seat and never sent to the browser.
+          // Answers are computed per seat and never sent to the browser. The
+          // CIDR form is accepted as an alternative.
           answer: '{{ HOST_IP }}',
+          answers: ['{{ HOST_IP }}/24'],
         },
       },
     ],
@@ -120,32 +125,33 @@ const SAMPLE_CONTENT = [
   },
 ];
 
+const SAMPLE_TITLE = 'Network Bench Setup (Sample)';
+const SAMPLE_DESCRIPTION =
+  'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.';
+
+/** True when no instructor exists yet, i.e. the seeder is about to create one. */
+export function needsBootstrapInstructor() {
+  return db.prepare('SELECT COUNT(*) AS n FROM instructors').get().n === 0;
+}
+
 /**
  * Idempotently ensure a bootstrap instructor and a sample template exist.
  * Safe to call on every start-up.
  */
 export function ensureSeed() {
-  const instructorCount = db
-    .prepare('SELECT COUNT(*) AS n FROM instructors')
-    .get().n;
-
   let instructorId;
-  if (instructorCount === 0) {
+  if (needsBootstrapInstructor()) {
     const hash = bcrypt.hashSync(config.seedInstructor.password, 10);
     const info = db
       .prepare('INSERT INTO instructors (username, password_hash) VALUES (?, ?)')
       .run(config.seedInstructor.username, hash);
     instructorId = info.lastInsertRowid;
-    console.log(
-      `  Seeded bootstrap instructor "${config.seedInstructor.username}".`,
-    );
+    log.info('seed.instructor', { username: config.seedInstructor.username });
   } else {
-    instructorId = db.prepare('SELECT id FROM instructors LIMIT 1').get().id;
+    instructorId = db.prepare('SELECT id FROM instructors ORDER BY id LIMIT 1').get().id;
   }
 
-  const templateCount = db
-    .prepare('SELECT COUNT(*) AS n FROM templates')
-    .get().n;
+  const templateCount = db.prepare('SELECT COUNT(*) AS n FROM templates').get().n;
   if (templateCount === 0) {
     const info = db
       .prepare(
@@ -153,8 +159,8 @@ export function ensureSeed() {
          VALUES (?, ?, ?, ?, 1, ?)`,
       )
       .run(
-        'Network Bench Setup (Sample)',
-        'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
+        SAMPLE_TITLE,
+        SAMPLE_DESCRIPTION,
         JSON.stringify(SAMPLE_CONTENT),
         JSON.stringify(SAMPLE_VARIABLES),
         instructorId,
@@ -163,17 +169,16 @@ export function ensureSeed() {
       .prepare('SELECT username FROM instructors WHERE id = ?')
       .get(instructorId).username;
     const snapshot = JSON.stringify({
-      title: 'Network Bench Setup (Sample)',
-      description:
-        'A three-section introductory networking lab demonstrating desk/computer cards, per-seat variables, hints and a section checkpoint.',
+      title: SAMPLE_TITLE,
+      description: SAMPLE_DESCRIPTION,
       content: SAMPLE_CONTENT,
       variables: SAMPLE_VARIABLES,
     });
     db.prepare(
       `INSERT INTO template_audit (template_id, template_title, action, version, snapshot, instructor_id, instructor_username)
        VALUES (?, ?, 'created', 1, ?, ?, ?)`,
-    ).run(info.lastInsertRowid, 'Network Bench Setup (Sample)', snapshot, instructorId, username);
-    console.log('  Seeded sample template "Network Bench Setup".');
+    ).run(info.lastInsertRowid, SAMPLE_TITLE, snapshot, instructorId, username);
+    log.info('seed.template', { title: SAMPLE_TITLE });
   }
 }
 

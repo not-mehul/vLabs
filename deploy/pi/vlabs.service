@@ -1,0 +1,36 @@
+# Bare-metal alternative to Docker on the Raspberry Pi (lighter on RAM/SD).
+# Install Node 22 (arm64), then as root:
+#   useradd --system --home /opt/vlabs --shell /usr/sbin/nologin vlabs
+#   git clone <repo> /opt/vlabs && cd /opt/vlabs
+#   (cd server && npm ci --omit=dev) && (cd client && npm ci && npm run build)
+#   cp .env.example .env && edit (NODE_ENV=production, PORT=80, SERVE_PLAIN_HTTP=true, secrets…)
+#   chown -R vlabs:vlabs /opt/vlabs
+#   cp deploy/pi/vlabs.service /etc/systemd/system/ && systemctl enable --now vlabs
+# Logs: journalctl -u vlabs -f
+[Unit]
+Description=vLabs dynamic lab manual
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vlabs
+Group=vlabs
+WorkingDirectory=/opt/vlabs
+EnvironmentFile=/opt/vlabs/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node server/src/index.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+# Allow binding :80/:443 without root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/vlabs/server/data
+
+[Install]
+WantedBy=multi-user.target
