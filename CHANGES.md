@@ -231,3 +231,14 @@ later steps. Existing databases keep their old copy of the sample.
 matching, info steps, validation rules), `server/tests/api.test.js` updated
 for the new seed flow plus an end-to-end pattern → capture → later-step test,
 `client/tests/templateFormat.test.js` +2.
+
+### Docs
+
+- `docs/TEMPLATE_GUIDE.md` — the complete authoring reference (model,
+  Markdown syntax, rules, formulas, masks, captures, delivery behaviour,
+  limits, error catalogue, checklist, four validated example templates, JSON
+  format). Linked from the README.
+- Mask fix found while validating the guide's examples: an **escaped**
+  character (`\.`, `\/`) is now a *required* literal; previously escaping
+  only disabled wildcard meaning and the punctuation stayed optional, so
+  `*\/pull\/*` accepted `…/pulls/42`.

@@ -33,6 +33,7 @@ Participant registration (the default landing page) is in
 ## Table of contents
 
 - [Highlights](#highlights)
+- [Authoring templates → docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Quick start (local dev on a Mac)](#quick-start-local-dev-on-a-mac)
@@ -255,9 +256,9 @@ to the first uncompleted checkpoint:
 - **Pattern checkpoints** cover values the author _cannot_ know in advance — a
   device serial, a MAC address, a ticket number. Instead of an answer the
   checkpoint carries a **mask**: `9` digit, `A`/`a` letter (stored upper/lower
-  case), `X`/`x` letter or digit, `?` any character, `*` anything; other
-  letters and digits must match literally, and punctuation or spaces are
-  **optional separators**. So `XXXX.XXXX.XXXX` accepts `abcd1234wxyz` and
+  case), `X`/`x` letter or digit, `?` any character, `*` anything, `\c` a
+  required literal; other letters and digits must match literally, and
+  unescaped punctuation or spaces are **optional separators**. So `XXXX.XXXX.XXXX` accepts `abcd1234wxyz` and
   `ABCD.1234.WXYZ` alike (not `abcd-1234-wxyz`), and canonicalises both to
   `ABCD.1234.WXYZ`. The mask, like an answer, never ships to the browser; the
   participant only sees the prompt and an example placeholder.
@@ -328,7 +329,11 @@ out.
 
 ### Template import / export
 
-Templates can be authored entirely in the browser or imported from a file:
+Templates can be authored entirely in the browser or imported from a file.
+**[docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) is the complete authoring
+reference** — model, Markdown syntax, every validation rule, the formula and
+mask languages, delivery/gating behaviour, and four ready-to-import example
+templates for different kinds of courses.
 
 - **Export** as **JSON** (canonical form) or **Markdown** (human-friendly).
 - **Import** a `.json` or `.md` file to populate the editor; **Download sample**

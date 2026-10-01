@@ -33,3 +33,6 @@ logs/
 # Test / coverage
 coverage/
 .nyc_output/
+
+# Personal working notes for Claude (not part of the public docs)
+CLAUDE.md

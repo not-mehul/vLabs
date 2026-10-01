@@ -446,6 +446,11 @@ test('masks: compile, match, canonicalise and reject', () => {
   assert.equal(matchMask('??-9', 'a#-1'), 'a#-1');
   assert.equal(matchMask('\\A9', 'A5'), 'A5');
   assert.equal(matchMask('\\A9', 'B5'), null);
+  // Escaped punctuation is a REQUIRED separator (unescaped is optional).
+  assert.equal(matchMask('99\\.99', '12.34'), '12.34');
+  assert.equal(matchMask('99\\.99', '1234'), null);
+  assert.equal(matchMask('*\\/pull\\/*', 'https://x/pull/42'), 'https://x/pull/42');
+  assert.equal(matchMask('*\\/pull\\/*', 'https://x/pulls/42'), null);
   assert.equal(matchMask('XX XX', 'abcd'), 'AB CD');
   // Examples are plausible and vary per position.
   assert.equal(maskExample('XXXX.XXXX.XXXX'), 'AB12.CD34.EFAB');

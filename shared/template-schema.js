@@ -309,7 +309,8 @@ export function findUnknownPlaceholders(tpl) {
  *   a   a letter → stored lower-case          X   a letter or digit → upper-case
  *   x   a letter or digit → lower-case        ?   any single visible character, as typed
  *   *   one or more characters of anything, as typed (use sparingly)
- *   \c  the literal character c (to match a literal 9, A, X, ?, * or \)
+ *   \c  the literal character c, REQUIRED — escape a wildcard letter to match it
+ *       literally (\A), or a separator to make it mandatory (99\.99)
  *
  * Any other letter or digit is a required literal (`SN-9999` must start with
  * SN). Punctuation and spaces (`.`, `-`, `:`, `/`, ` ` …) are SEPARATORS: they
@@ -350,7 +351,7 @@ export function compileMask(mask) {
       i += 1;
       if (i >= src.length) throw new Error('Pattern ends with a dangling backslash');
       ch = src[i];
-      tokens.push({ kind: 'literal', ch });
+      tokens.push({ kind: 'literal', ch, escaped: true });
       continue;
     }
     const cls = Object.prototype.hasOwnProperty.call(MASK_CLASSES, ch) ? MASK_CLASSES[ch] : null;
@@ -375,8 +376,10 @@ export function compileMask(mask) {
     } else if (/\s/.test(t.ch)) {
       re += '\\s*';
       example += t.ch;
-    } else if (/[A-Za-z0-9]/.test(t.ch)) {
-      // Literal letters/digits are required (case-insensitively).
+    } else if (t.escaped || /[A-Za-z0-9]/.test(t.ch)) {
+      // Literal letters/digits and anything escaped are required
+      // (case-insensitively). Escaping is how an author makes a separator
+      // mandatory: `99\.99` demands the dot, `99.99` does not.
       re += reEscape(t.ch);
       example += t.ch;
     } else {
