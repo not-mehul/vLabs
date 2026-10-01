@@ -103,7 +103,11 @@ function CreateSession({ templates, onCreated }) {
         The session takes a copy of the template at launch; later edits only reach it when you push
         them from the monitor.
       </p>
-      {error && <p className="form__error" role="alert">{error}</p>}
+      {error && (
+        <p className="form__error" role="alert">
+          {error}
+        </p>
+      )}
     </form>
   );
 }
@@ -157,7 +161,11 @@ export default function Dashboard() {
       setError('');
       try {
         const doc = await call((t) => api.exportSession(t, s.id));
-        downloadFile(`${slug(doc.session.title, 'session')}.json`, JSON.stringify(doc, null, 2), 'application/json');
+        downloadFile(
+          `${slug(doc.session.title, 'session')}.json`,
+          JSON.stringify(doc, null, 2),
+          'application/json',
+        );
       } catch (err) {
         setError(err.message);
       }
@@ -192,7 +200,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {error && <p className="form__error" role="alert">{error}</p>}
+      {error && (
+        <p className="form__error" role="alert">
+          {error}
+        </p>
+      )}
 
       <div className="panel">
         <h2 className="panel__title">All sessions</h2>
@@ -221,7 +233,10 @@ export default function Dashboard() {
                     {s.template_title}
                     <span className="small"> · v{s.template_version}</span>
                     {s.status === 'active' && s.update_available && (
-                      <span className="tag tag--update" title={`Template v${s.latest_template_version} is available to push`}>
+                      <span
+                        className="tag tag--update"
+                        title={`Template v${s.latest_template_version} is available to push`}
+                      >
                         update
                       </span>
                     )}

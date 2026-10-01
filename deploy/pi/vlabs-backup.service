@@ -1,0 +1,10 @@
+# Nightly consistent SQLite backup (driven by vlabs-backup.timer).
+#   sudo systemctl start vlabs-backup       # run one now
+#   sudo systemctl list-timers vlabs-backup
+[Unit]
+Description=vLabs database backup
+After=vlabs.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vlabs/deploy/pi/backup.sh

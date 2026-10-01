@@ -65,8 +65,8 @@ export default function Account() {
         </h2>
         {instructor?.must_change_password && (
           <div className="banner banner--warn" role="status">
-            This account still uses the default bootstrap password from the repository.
-            Set a new one now.
+            This account still uses the default bootstrap password from the repository. Set a new
+            one now.
           </div>
         )}
         <form className="form account-form" onSubmit={handleSubmit}>
@@ -92,7 +92,9 @@ export default function Account() {
               onChange={(e) => setNext(e.target.value)}
               required
             />
-            <span className="muted small">At least {MIN_LENGTH} characters. A short sentence works well.</span>
+            <span className="muted small">
+              At least {MIN_LENGTH} characters. A short sentence works well.
+            </span>
           </label>
           <label className="field">
             <span className="field__label">Confirm new password</span>
@@ -106,7 +108,11 @@ export default function Account() {
             />
           </label>
 
-          {error && <p className="form__error" role="alert">{error}</p>}
+          {error && (
+            <p className="form__error" role="alert">
+              {error}
+            </p>
+          )}
           {done && (
             <div className="banner banner--success" role="status">
               Password updated. Other signed-in browsers will need to sign in again.

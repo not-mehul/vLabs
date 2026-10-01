@@ -65,9 +65,9 @@ export default [
     },
   },
 
-  // ---- Config files (root + workspace) run under Node -------------------
+  // ---- Config files + repo scripts run under Node -----------------------
   {
-    files: ['**/*.config.js', 'eslint.config.js'],
+    files: ['**/*.config.js', 'eslint.config.js', 'scripts/**/*.js'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',

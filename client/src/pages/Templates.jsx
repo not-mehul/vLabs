@@ -45,7 +45,11 @@ export default function Templates() {
     const live = t.active_session_count
       ? `\n\n${t.active_session_count} live session(s) keep running on their own copy of the content.`
       : '';
-    if (!window.confirm(`Archive "${t.title}"?\n\nIt will be hidden from this list and from the session launcher. Nothing is deleted — you can restore it later.${live}`)) {
+    if (
+      !window.confirm(
+        `Archive "${t.title}"?\n\nIt will be hidden from this list and from the session launcher. Nothing is deleted — you can restore it later.${live}`,
+      )
+    ) {
       return;
     }
     run((tok) => api.deleteTemplate(tok, t.id), `Archived "${t.title}".`);
@@ -59,7 +63,11 @@ export default function Templates() {
     const sessions = t.session_count
       ? `${t.session_count} past session(s) were launched from it; they keep their own copy of the content and their analytics, but will no longer link back to this template.`
       : 'No sessions were launched from it.';
-    if (!window.confirm(`Permanently delete "${t.title}"?\n\nThis cannot be undone. ${sessions}\n\nThe change history is kept.`)) {
+    if (
+      !window.confirm(
+        `Permanently delete "${t.title}"?\n\nThis cannot be undone. ${sessions}\n\nThe change history is kept.`,
+      )
+    ) {
       return;
     }
     const typed = window.prompt(`Type DELETE to permanently remove "${t.title}":`);
@@ -75,7 +83,9 @@ export default function Templates() {
       <div className="page-head page-head--row">
         <div>
           <h1>Templates</h1>
-          <p className="muted">Master lab manuals with per-seat variables. Shared by all instructors.</p>
+          <p className="muted">
+            Master lab manuals with per-seat variables. Shared by all instructors.
+          </p>
         </div>
         <div className="page-head__actions">
           {archivedCount > 0 && (
@@ -84,21 +94,34 @@ export default function Templates() {
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
             </button>
           )}
-          <button className="btn btn--primary" onClick={() => navigate('/instructor/templates/new')}>
+          <button
+            className="btn btn--primary"
+            onClick={() => navigate('/instructor/templates/new')}
+          >
             <Icon name="plus" size={16} /> New template
           </button>
         </div>
       </div>
 
-      {error && <p className="form__error" role="alert">{error}</p>}
-      {notice && <div className="banner banner--success" role="status">{notice}</div>}
+      {error && (
+        <p className="form__error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <div className="banner banner--success" role="status">
+          {notice}
+        </div>
+      )}
 
       <div className="panel">
         {loading ? (
           <p className="muted">Loading…</p>
         ) : visible.length === 0 ? (
           <p className="muted">
-            {templates.length === 0 ? 'No templates yet. Create your first one.' : 'No active templates.'}
+            {templates.length === 0
+              ? 'No templates yet. Create your first one.'
+              : 'No active templates.'}
           </p>
         ) : (
           <table className="table">

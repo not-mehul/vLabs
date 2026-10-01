@@ -24,7 +24,7 @@ const isProd = config.env === 'production';
 
 // Weak / placeholder JWT secrets would let anyone forge instructor or
 // participant tokens. Judged by strength, not by comparing against one dev
-// string, so compose-file placeholders like "change-me-instructor" also fail.
+// string, so .env placeholders like "change-me-instructor" also fail.
 if (isProd && config.weakSecrets) {
   fatal([
     'refusing to start in production with weak or placeholder JWT secrets.',
@@ -74,9 +74,12 @@ sweepExpiredSessions();
 
 const app = createApp();
 
-const server = app.listen(config.port, () => {
-  console.log(`\n  vLabs API listening on http://localhost:${config.port}`);
+const server = app.listen(config.port, config.host, () => {
+  console.log(`\n  vLabs API listening on http://${config.host}:${config.port}`);
   console.log(`  Environment: ${config.env}`);
+  if (config.env !== 'production') {
+    console.log('  Dev mode: open the Vite URL (http://localhost:5173), not this one.');
+  }
   if (config.weakSecrets) {
     // Non-production only (production hard-fails above).
     console.warn(
@@ -94,8 +97,8 @@ const server = app.listen(config.port, () => {
   log.info('server.started', { port: config.port, env: config.env });
 });
 
-// Keep-alive sockets can otherwise hold the process open past the container's
-// stop grace period; close idle ones immediately and give in-flight requests a
+// Keep-alive sockets can otherwise hold the process open past systemd's
+// TimeoutStopSec; close idle ones immediately and give in-flight requests a
 // bounded window before forcing exit.
 server.keepAliveTimeout = 5_000;
 server.headersTimeout = 10_000;
@@ -112,7 +115,7 @@ const sweepTimer = setInterval(() => {
 sweepTimer.unref();
 
 /* ---------------------------------------------------------------------- */
-/*  Graceful shutdown for container environments.                         */
+/*  Graceful shutdown (systemd stop / Ctrl-C).                             */
 /* ---------------------------------------------------------------------- */
 let shuttingDown = false;
 function shutdown(signal) {
@@ -148,5 +151,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 process.on('unhandledRejection', (reason) => {
-  log.error('unhandledRejection', { err: reason instanceof Error ? reason : new Error(String(reason)) });
+  log.error('unhandledRejection', {
+    err: reason instanceof Error ? reason : new Error(String(reason)),
+  });
 });

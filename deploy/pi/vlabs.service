@@ -1,36 +1,56 @@
-# Bare-metal alternative to Docker on the Raspberry Pi (lighter on RAM/SD).
-# Install Node 22 (arm64), then as root:
-#   useradd --system --home /opt/vlabs --shell /usr/sbin/nologin vlabs
-#   git clone <repo> /opt/vlabs && cd /opt/vlabs
-#   (cd server && npm ci --omit=dev) && (cd client && npm ci && npm run build)
-#   cp .env.example .env && edit (NODE_ENV=production, PORT=80, SERVE_PLAIN_HTTP=true, secrets…)
-#   chown -R vlabs:vlabs /opt/vlabs
-#   cp deploy/pi/vlabs.service /etc/systemd/system/ && systemctl enable --now vlabs
-# Logs: journalctl -u vlabs -f
+# vLabs backend — bare-metal Raspberry Pi (installed by deploy/pi/install.sh).
+#
+# Node listens on 127.0.0.1:4000 only; Caddy (deploy/pi/Caddyfile) terminates
+# HTTPS on :443 and proxies to it. Configuration comes from
+# /etc/vlabs/vlabs.env (root:vlabs 0640). Code lives read-only in /opt/vlabs,
+# state (SQLite + backups) in /var/lib/vlabs.
+#
+#   sudo systemctl status vlabs        sudo journalctl -u vlabs -f
+#   sudo systemctl restart vlabs       sudo /opt/vlabs/deploy/pi/update.sh
 [Unit]
-Description=vLabs dynamic lab manual
+Description=vLabs dynamic lab manual (API + SPA)
+Documentation=https://github.com/not-mehul/vLabs
 After=network-online.target time-sync.target
 Wants=network-online.target
+# Pull Caddy up alongside so https:// works after a reboot even if someone
+# disabled it by hand; failure of one does not take the other down.
+Wants=caddy.service
 
 [Service]
 Type=simple
 User=vlabs
 Group=vlabs
 WorkingDirectory=/opt/vlabs
-EnvironmentFile=/opt/vlabs/.env
+EnvironmentFile=/etc/vlabs/vlabs.env
+# Belt and braces: never run the production guard rails in dev mode by mistake.
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node server/src/index.js
+ExecStart=/usr/bin/node /opt/vlabs/server/src/index.js
 Restart=always
 RestartSec=3
+# index.js closes idle sockets and checkpoints SQLite on SIGTERM (8 s budget).
+KillSignal=SIGTERM
 TimeoutStopSec=15
-# Allow binding :80/:443 without root.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-# Hardening
+
+# Creates /var/lib/vlabs owned by vlabs:vlabs and makes it writable below.
+StateDirectory=vlabs
+StateDirectoryMode=0750
+
+# Hardening (everything else on the filesystem is read-only to the service).
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/vlabs/server/data
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+# Node has no need to bind :80/:443 — Caddy does that.
+CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target

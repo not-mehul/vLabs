@@ -22,8 +22,7 @@ import { PLACEHOLDER_RE, IDENT_RE } from '../../../shared/template-schema.js';
 // Safe arithmetic / string expression evaluator
 // ---------------------------------------------------------------------------
 
-const TOKEN_RE =
-  /\s*([0-9]*\.?[0-9]+|'[^']*'|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[+\-*/%(),])/y;
+const TOKEN_RE = /\s*([0-9]*\.?[0-9]+|'[^']*'|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[+\-*/%(),])/y;
 
 /** Hard cap on formula length: keeps a pathological expression from doing work. */
 const MAX_EXPRESSION_LENGTH = 500;
@@ -167,9 +166,7 @@ function evaluateExpression(expr, scope) {
       if (op === '+') {
         // String concatenation when either operand is a string, else numeric.
         left =
-          typeof left === 'string' || typeof right === 'string'
-            ? `${left}${right}`
-            : left + right;
+          typeof left === 'string' || typeof right === 'string' ? `${left}${right}` : left + right;
       } else {
         left = toNum(left) - toNum(right);
       }
@@ -359,10 +356,7 @@ export function renderStep(step, context, index) {
   if (stepHasCheckpoint(step)) {
     // Ship the prompt and its shape, but never the answer(s).
     rendered.checkpoint = {
-      prompt: injectVariables(
-        step.checkpoint.prompt || 'Enter the value to continue',
-        context,
-      ),
+      prompt: injectVariables(step.checkpoint.prompt || 'Enter the value to continue', context),
       placeholder: injectVariables(step.checkpoint.placeholder || '', context),
     };
   }

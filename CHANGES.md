@@ -1,34 +1,38 @@
-# vLabs — code review change set
+# vLabs — change log
 
-Everything in this archive mirrors the repository layout: copy the tree over
-the repo root (or unzip into it). Files not present here are unchanged.
+Newest entry at the bottom (1.2.0). The first section is the original code
+review change set, kept for the record.
+
+## 1.1.0 — code review change set
 
 **No new npm dependencies were added anywhere**, so `package-lock.json` files
 are untouched. Node **22** is now assumed everywhere (CI, Docker, `engines`).
 
 ## Decisions taken (from your answers)
 
-| Question | Decision | Where |
-| --- | --- | --- |
-| Template edited during a live session | **Frozen at launch.** Session monitor shows "v*N* available" with a **Push latest version** button (with a warning about reordering). Participants pick up a push within ~15 s via the status poll. | `sessions` snapshot columns, `POST /sessions/:id/push-template`, `SessionMonitor.jsx`, `Lab.jsx` |
-| Deleting a template with ended sessions | **Archive (hide) by default; restore possible; permanent delete allowed with a warning + typed confirmation**, refused while sessions are active. Sessions keep their own copy; audit survives. | `templates.archived_at`, `DELETE /templates/:id[?permanent=1]`, `POST /templates/:id/restore`, `Templates.jsx` |
-| Seat rejoin | **Name-only, unchanged.** Documented as a known trade-off in the README. | — |
-| Default seed password in production | Refuse to **create** the bootstrap account with the default; existing deployments unaffected. New **Account → Change password** page; changing it revokes older tokens. | `index.js`, `PUT /auth/password`, `Account.jsx` |
-| Expired-but-never-terminated sessions | Swept to *ended* 60 min after expiry (configurable) so codes recycle. | `lib/sessionLifecycle.js` |
-| Content deterrents | Print-hiding CSS only; README wording corrected. | `styles.additions.css` |
+| Question                                | Decision                                                                                                                                                                                            | Where                                                                                                          |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Template edited during a live session   | **Frozen at launch.** Session monitor shows "v*N* available" with a **Push latest version** button (with a warning about reordering). Participants pick up a push within ~15 s via the status poll. | `sessions` snapshot columns, `POST /sessions/:id/push-template`, `SessionMonitor.jsx`, `Lab.jsx`               |
+| Deleting a template with ended sessions | **Archive (hide) by default; restore possible; permanent delete allowed with a warning + typed confirmation**, refused while sessions are active. Sessions keep their own copy; audit survives.     | `templates.archived_at`, `DELETE /templates/:id[?permanent=1]`, `POST /templates/:id/restore`, `Templates.jsx` |
+| Seat rejoin                             | **Name-only, unchanged.** Documented as a known trade-off in the README.                                                                                                                            | —                                                                                                              |
+| Default seed password in production     | Refuse to **create** the bootstrap account with the default; existing deployments unaffected. New **Account → Change password** page; changing it revokes older tokens.                             | `index.js`, `PUT /auth/password`, `Account.jsx`                                                                |
+| Expired-but-never-terminated sessions   | Swept to _ended_ 60 min after expiry (configurable) so codes recycle.                                                                                                                               | `lib/sessionLifecycle.js`                                                                                      |
+| Content deterrents                      | Print-hiding CSS only; README wording corrected.                                                                                                                                                    | `styles.additions.css`                                                                                         |
 
 ## What changed, by finding
 
 ### High priority
+
 1. **Compose placeholder secrets bypassed the prod guard** → `config.isWeakSecret` judges length (< 32) and placeholder markers; identical secrets also fatal. `docker-compose.yml` uses `${VAR:?required}` so it cannot start without real values.
 2. **Default seed password** → fatal in production when the bootstrap account would be created; password-change endpoint + UI; `token_version` on instructors for revocation; portal banner until changed.
-3. **Rate limiters keyed on the unverified bearer string** → keyed on the *verified* identity (`identifyToken`); per-seat limiters mounted after `requireParticipant`; new per-IP join flood cap (300 / 5 min) alongside the failed-join cap (20 / 5 min); IPv6 /64 bucketing.
+3. **Rate limiters keyed on the unverified bearer string** → keyed on the _verified_ identity (`identifyToken`); per-seat limiters mounted after `requireParticipant`; new per-IP join flood cap (300 / 5 min) alongside the failed-join cap (20 / 5 min); IPv6 /64 bucketing.
 4. **Hard-coded `trust proxy: 1`** → `TRUST_PROXY` env (default off), warning in production when unset, documented.
 5. **Template DELETE cascaded to sessions** → `sessions.template_id` nullable with `ON DELETE SET NULL` (table rebuild migration), archive-by-default.
 6. **Sessions rendered from the live template** → per-session snapshot (`template_title/content/variables/template_version`), explicit push.
 7. **`Lab.jsx` refetch loop on resume** → `useState(() => location.state || participantSession.get())`.
 
 ### Medium
+
 - **Unknown placeholders** rejected at save time (server) with precise locations, and flagged live in the editor (client) via the shared `findUnknownPlaceholders`.
 - **`/hint` reachability gate** — all participant actions now go through one `requireReachableStep`.
 - **Markdown import/export** — fence-aware parser; multi-line hints; `\::` / `\|` escapes; `> placeholder:` directive; alternative answers; lossless round-trip with tests.
@@ -49,6 +53,7 @@ are untouched. Node **22** is now assumed everywhere (CI, Docker, `engines`).
 - **README** rewritten (API, data model, config, upgrade notes, corrected deterrent wording, formula helpers).
 
 ### Not changed on purpose
+
 - Seat rejoin stays name-only (your call).
 - `client/src/styles.css` is untouched; new rules live in `styles.additions.css` (imported from `main.jsx`).
 - `client/src/components/Icon.jsx`, `StepCard.jsx`, `HintBox.jsx`, `SolutionBox.jsx`, `ThemeToggle.jsx`, `ThemeContext.jsx`, `InstructorLogin.jsx`, `hooks/useInstructorApi.js`, `lib/datetime.js`, `server/src/lib/time.js`, `server/tests/time.test.js`, `server/package.json`, `.gitignore`, `.dockerignore` — unchanged.
@@ -90,3 +95,76 @@ Added for the Raspberry Pi pilot and the later hosted deployment (see `DEPLOYMEN
 - `deploy/pi/vlabs.service` — bare-metal systemd alternative.
 - `.github/workflows/release.yml` — multi-arch (amd64 + arm64) image to GHCR so the Pi and the VPS run the same artefact.
 - `Dockerfile` now copies `server/scripts/`; root `docker-compose.yml` and `.env.example` pass `SERVE_PLAIN_HTTP` through.
+
+## 1.2.0 — two run modes: Mac dev, Pi bare-metal (2026-10-01)
+
+### Repair first
+
+Commit `375f11c` ("Major code updates") replaced the tree with the review
+archive above, which deliberately omitted files it listed as _unchanged_. 26
+files the code still imports were therefore missing from the repository:
+`server/package.json`, all three `package-lock.json`s, `.gitignore`,
+`client/src/styles.css`, `Icon.jsx`, `StepCard.jsx`, `HintBox.jsx`,
+`SolutionBox.jsx`, `ThemeToggle.jsx`, `ThemeContext.jsx`, `InstructorLogin.jsx`,
+`useInstructorApi.js`, `datetime.js`, `server/src/lib/time.js`,
+`server/tests/time.test.js` and the README screenshots. All restored verbatim
+from `3167992`. (`.dockerignore` and `.prettierrc.json` were not restored —
+Docker is gone and `.prettierrc` supersedes the JSON variant.)
+
+### Removed
+
+Docker is no longer a supported path: `Dockerfile`, `docker-compose.yml`,
+`deploy/docker-compose.prod.yml`, `deploy/docker-compose.dns01.yml`,
+`deploy/caddy/*`, `deploy/.env.example`, `deploy/backup.sh`,
+`.github/workflows/release.yml` (GHCR images) and the Docker job in `ci.yml`.
+Migrating an existing Docker database: copy `vlabs.sqlite` out of the
+`vlabs-data` volume to `/var/lib/vlabs/vlabs.sqlite` before the first start.
+
+### Mac — development
+
+- Root `package.json`: `npm run setup` (installs root/server/client),
+  `npm run dev`, `npm run build`, `npm start`; version 1.2.0; `engines` ≥ 22
+  everywhere.
+- `scripts/dev.js` — dependency-free launcher running `node --watch` (API) and
+  Vite side by side with prefixed output; Ctrl-C stops both, one dying stops
+  the other.
+- `server/src/config.js` now loads **`<repo>/.env`** explicitly (not the
+  cwd's), so the same file works from the root, from `server/`, and is
+  irrelevant under systemd (real env wins). New `HOST` (default `127.0.0.1`).
+- `server/src/index.js` listens on `config.host`; prints a dev hint to open
+  the Vite URL.
+- `client/vite.config.js` proxies to `127.0.0.1:4000` (not `localhost`, which
+  Node 22 may resolve to `::1`).
+- `.env.example` rewritten for the two modes; `eslint.config.js` lints
+  `scripts/`.
+
+### Raspberry Pi — bare metal + systemd + Caddy (internal CA)
+
+`deploy/pi/`:
+
+- `install.sh` — idempotent one-shot: Node 22, Caddy, Avahi; `vlabs` system
+  user; `/etc/vlabs/vlabs.env` with generated secrets and first-login
+  password; `npm ci` + `vite build` as the admin user; renders and validates
+  the Caddyfile; installs/enables the units; health-waits; publishes the root
+  cert. Prompts or env vars (`VLABS_HOSTNAME`, `VLABS_EXTRA_ADDRESSES`, …).
+- `vlabs.service` — Node on `127.0.0.1:4000`, `EnvironmentFile=/etc/vlabs/vlabs.env`,
+  `StateDirectory=vlabs`, `ProtectSystem=strict`, empty capability set,
+  `TimeoutStopSec=15` (matches the 8 s graceful shutdown), `Wants=caddy.service`.
+- `Caddyfile.template` — `https://<name>.local[, https://<ip>…]` with
+  `tls internal`, health-checked `reverse_proxy 127.0.0.1:4000`, rotated
+  access log; an explicit `http://` site that serves `/vlabs-root.crt` and
+  308-redirects everything else to HTTPS.
+- `export-root-cert.sh` — copies Caddy's root to `/srv/vlabs-public` and the
+  cwd, prints the fingerprint and per-platform install steps.
+- `update.sh [ref]` — backup → fast-forward pull → install → build → refresh
+  units → restart → health check, with automatic code rollback on failure.
+- `backup.sh` + `vlabs-backup.service` / `.timer` — nightly 02:30 consistent
+  snapshot (persistent timer), optional `BACKUP_DIR` off-device copy.
+- `vlabs-cli.sh` — runs `server/scripts/{instructors,backup}.js` as the
+  service user with the production env (so it hits the real DB).
+
+CI gained a `production-smoke` job (prod deps, `NODE_ENV=production`, real
+secrets, `/api/health` + served SPA) and a `systemd-analyze verify` of the
+units. Docs: README quick start / hosting / configuration / deployment
+sections and DEPLOYMENT.md Part 1 rewritten; Part 2 adjusted to reuse the
+same scripts on a VPS with a public Caddy site block.

@@ -132,8 +132,12 @@ router.post(
   joinFailLimiter,
   asyncHandler(async (req, res) => {
     const roomCode = String(req.body?.room_code || '').trim();
-    const firstName = String(req.body?.first_name || '').trim().replace(/\s+/g, ' ');
-    const lastName = String(req.body?.last_name || '').trim().replace(/\s+/g, ' ');
+    const firstName = String(req.body?.first_name || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const lastName = String(req.body?.last_name || '')
+      .trim()
+      .replace(/\s+/g, ' ');
     if (!/^\d{6}$/.test(roomCode)) {
       throw httpError(400, 'Enter a valid 6-digit room code');
     }
@@ -307,7 +311,12 @@ router.post(
 
     completed.add(checkpointKey(si, sti));
     q.setCheckpoints.run(JSON.stringify([...completed]), nowIso(), p.id);
-    log.info('checkpoint.cleared', { participant: p.id, session: req.session.id, section: si, step: sti });
+    log.info('checkpoint.cleared', {
+      participant: p.id,
+      session: req.session.id,
+      section: si,
+      step: sti,
+    });
     res.json({
       correct: true,
       section_cleared: isSectionCleared(sections[si], si, completed),
@@ -402,7 +411,12 @@ router.post(
 
     const context = resolveVariables(variables, p.seat_number);
     const solution = injectVariables(String(step.solution), context);
-    log.info('solution.revealed', { participant: p.id, session: req.session.id, section: si, step: sti });
+    log.info('solution.revealed', {
+      participant: p.id,
+      session: req.session.id,
+      section: si,
+      step: sti,
+    });
     noStore(res);
     res.json({ solution });
   }),

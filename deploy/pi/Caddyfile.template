@@ -1,0 +1,52 @@
+# Caddy in front of vLabs on the Pi — HTTPS on the LAN with Caddy's built-in CA.
+#
+# deploy/pi/install.sh renders this into /etc/caddy/Caddyfile, replacing
+# __HTTPS_SITES__ / __HTTP_SITES__ with the names you chose, e.g.
+#   https://vlabs.local, https://192.168.1.50
+# Edit /etc/caddy/Caddyfile directly afterwards and `sudo systemctl reload caddy`.
+#
+# Devices must trust the Caddy root certificate ONCE (otherwise they see a
+# certificate warning): run deploy/pi/export-root-cert.sh, which also publishes
+# it at http://<name>/vlabs-root.crt for participants to download and install.
+
+{
+	# Internal CA only; never try to reach Let's Encrypt from the LAN.
+	local_certs
+	skip_install_trust
+}
+
+__HTTPS_SITES__ {
+	tls internal
+	encode zstd gzip
+
+	# Node binds loopback only (HOST=127.0.0.1 in /etc/vlabs/vlabs.env) and
+	# trusts exactly one proxy hop (TRUST_PROXY=1) for X-Forwarded-For.
+	reverse_proxy 127.0.0.1:4000 {
+		# Health probe so a crashed/restarting Node yields a clean 502 quickly.
+		health_uri /api/health
+		health_interval 10s
+		health_timeout 3s
+	}
+
+	log {
+		output file /var/log/caddy/vlabs-access.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}
+
+# Plain-HTTP side door: serves the root certificate for first-time device
+# setup and bounces everything else to HTTPS. (Declaring the http:// site
+# explicitly replaces Caddy's automatic redirect, which cannot carve out a path.)
+__HTTP_SITES__ {
+	handle /vlabs-root.crt {
+		root * /srv/vlabs-public
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=vlabs-root.crt"
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} 308
+	}
+}

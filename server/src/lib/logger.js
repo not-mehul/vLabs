@@ -18,7 +18,11 @@ function write(level, msg, fields) {
   if (LEVELS[level] < threshold) return;
   const record = { time: new Date().toISOString(), level, msg, ...(fields || {}) };
   if (record.err instanceof Error) {
-    record.err = { message: record.err.message, stack: record.err.stack, status: record.err.status };
+    record.err = {
+      message: record.err.message,
+      stack: record.err.stack,
+      status: record.err.status,
+    };
   }
   const out = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
   if (pretty) {

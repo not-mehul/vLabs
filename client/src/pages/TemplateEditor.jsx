@@ -55,15 +55,15 @@ function VariableEditor({ variables, onChange, functions }) {
         </button>
       </div>
       <p className="muted small">
-        Formulas run per seat. <code>seat</code> is the participant's number. Use
-        arithmetic and string concatenation, e.g.{' '}
-        <code>'192.168.1.' + (100 + seat)</code>. Reference these as{' '}
-        <code>{'{{ NAME }}'}</code> in step bodies. <code>{'{{ SEAT_ID }}'}</code>{' '}
-        is always available. Later formulas can reference earlier ones.
+        Formulas run per seat. <code>seat</code> is the participant's number. Use arithmetic and
+        string concatenation, e.g. <code>'192.168.1.' + (100 + seat)</code>. Reference these as{' '}
+        <code>{'{{ NAME }}'}</code> in step bodies. <code>{'{{ SEAT_ID }}'}</code> is always
+        available. Later formulas can reference earlier ones.
       </p>
       {functions.length > 0 && (
         <p className="muted small">
-          Helpers: {functions.map((f, i) => (
+          Helpers:{' '}
+          {functions.map((f, i) => (
             <span key={f}>
               <code>{f}()</code>
               {i < functions.length - 1 ? ', ' : ''}
@@ -186,9 +186,32 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
           </button>
         </div>
         <div className="step-editor__move">
-          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move step up"><Icon name="arrowUp" size={14} /></button>
-          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move step down"><Icon name="arrowDown" size={14} /></button>
-          <button type="button" className="btn btn--xs btn--danger-ghost" disabled={total === 1} onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete</button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            disabled={index === 0}
+            onClick={() => onMove(index, -1)}
+            aria-label="Move step up"
+          >
+            <Icon name="arrowUp" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            disabled={index === total - 1}
+            onClick={() => onMove(index, 1)}
+            aria-label="Move step down"
+          >
+            <Icon name="arrowDown" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--danger-ghost"
+            disabled={total === 1}
+            onClick={() => onRemove(index)}
+          >
+            <Icon name="trash" size={13} /> Delete
+          </button>
         </div>
       </div>
 
@@ -242,16 +265,31 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
           <div className="checkpoint-editor__fields">
             <label className="field">
               <span className="field__label">Prompt</span>
-              <input className="field__input" placeholder="Prompt shown to participant" value={step.checkpoint.prompt} onChange={(e) => setCp({ prompt: e.target.value })} />
+              <input
+                className="field__input"
+                placeholder="Prompt shown to participant"
+                value={step.checkpoint.prompt}
+                onChange={(e) => setCp({ prompt: e.target.value })}
+              />
             </label>
             <div className="field-row">
               <label className="field">
                 <span className="field__label">Input placeholder</span>
-                <input className="field__input" placeholder="optional" value={step.checkpoint.placeholder} onChange={(e) => setCp({ placeholder: e.target.value })} />
+                <input
+                  className="field__input"
+                  placeholder="optional"
+                  value={step.checkpoint.placeholder}
+                  onChange={(e) => setCp({ placeholder: e.target.value })}
+                />
               </label>
               <label className="field">
                 <span className="field__label">Expected answer</span>
-                <input className="field__input mono" placeholder="may use {{ VARIABLES }}" value={step.checkpoint.answer} onChange={(e) => setCp({ answer: e.target.value })} />
+                <input
+                  className="field__input mono"
+                  placeholder="may use {{ VARIABLES }}"
+                  value={step.checkpoint.answer}
+                  onChange={(e) => setCp({ answer: e.target.value })}
+                />
               </label>
             </div>
             <label className="field">
@@ -263,12 +301,18 @@ function StepEditor({ step, index, total, onChange, onMove, onRemove }) {
                 value={altText}
                 onChange={(e) => setCp({ answers: e.target.value.split('\n') })}
                 onBlur={(e) =>
-                  setCp({ answers: e.target.value.split('\n').map((a) => a.trim()).filter(Boolean) })
+                  setCp({
+                    answers: e.target.value
+                      .split('\n')
+                      .map((a) => a.trim())
+                      .filter(Boolean),
+                  })
                 }
               />
             </label>
             <p className="muted small">
-              Answers are validated server-side (whitespace and case are forgiven) and never sent to the browser.
+              Answers are validated server-side (whitespace and case are forgiven) and never sent to
+              the browser.
             </p>
           </div>
         )}
@@ -290,7 +334,9 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
     setSteps(next);
   };
   const removeStep = (i) =>
-    setSteps(section.steps.length > 1 ? section.steps.filter((_, idx) => idx !== i) : section.steps);
+    setSteps(
+      section.steps.length > 1 ? section.steps.filter((_, idx) => idx !== i) : section.steps,
+    );
 
   return (
     <div className="section-editor">
@@ -304,9 +350,32 @@ function SectionEditor({ section, index, total, onChange, onMove, onRemove }) {
           onChange={(e) => onChange({ ...section, title: e.target.value })}
         />
         <div className="step-editor__move">
-          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="Move section up"><Icon name="arrowUp" size={14} /></button>
-          <button type="button" className="btn btn--xs btn--icon btn--ghost" disabled={index === total - 1} onClick={() => onMove(index, 1)} aria-label="Move section down"><Icon name="arrowDown" size={14} /></button>
-          <button type="button" className="btn btn--xs btn--danger-ghost" disabled={total === 1} onClick={() => onRemove(index)}><Icon name="trash" size={13} /> Delete section</button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            disabled={index === 0}
+            onClick={() => onMove(index, -1)}
+            aria-label="Move section up"
+          >
+            <Icon name="arrowUp" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            disabled={index === total - 1}
+            onClick={() => onMove(index, 1)}
+            aria-label="Move section down"
+          >
+            <Icon name="arrowDown" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--danger-ghost"
+            disabled={total === 1}
+            onClick={() => onRemove(index)}
+          >
+            <Icon name="trash" size={13} /> Delete section
+          </button>
         </div>
       </div>
 
@@ -363,7 +432,14 @@ function Preview({ id, draft }) {
       <div className="preview__controls">
         <label className="field field--narrow">
           <span className="field__label">Preview seat #</span>
-          <input className="field__input" type="number" min="1" max="9999" value={seat} onChange={(e) => setSeat(e.target.value)} />
+          <input
+            className="field__input"
+            type="number"
+            min="1"
+            max="9999"
+            value={seat}
+            onChange={(e) => setSeat(e.target.value)}
+          />
         </label>
         <button type="button" className="btn btn--sm btn--primary" onClick={run} disabled={busy}>
           <Icon name="eye" size={15} /> {busy ? 'Rendering…' : 'Render preview'}
@@ -378,7 +454,9 @@ function Preview({ id, draft }) {
             <span className="editor-label">Resolved variables for seat #{result.seat_id}</span>
             <div className="preview__vars">
               {Object.entries(result.context).map(([k, v]) => (
-                <span className="tag" key={k}><code>{k}</code> = <code>{String(v)}</code></span>
+                <span className="tag" key={k}>
+                  <code>{k}</code> = <code>{String(v)}</code>
+                </span>
               ))}
             </div>
           </div>
@@ -391,7 +469,12 @@ function Preview({ id, draft }) {
               {sec.steps.map((step) => (
                 <StepCard
                   key={step.index}
-                  step={{ ...step, checkpoint: step.checkpoint ? { ...step.checkpoint, completed: false } : undefined }}
+                  step={{
+                    ...step,
+                    checkpoint: step.checkpoint
+                      ? { ...step.checkpoint, completed: false }
+                      : undefined,
+                  }}
                   sectionIndex={sec.index}
                   total={sec.total_steps}
                   onCheckpoint={() => Promise.resolve(false)}
@@ -417,7 +500,9 @@ function ImportExport({ tpl, onImport }) {
     if (!file) return;
     try {
       const text = await readTextFile(file);
-      const parsed = /\.json$/i.test(file.name) ? parseJsonTemplate(text) : parseMarkdownTemplate(text);
+      const parsed = /\.json$/i.test(file.name)
+        ? parseJsonTemplate(text)
+        : parseMarkdownTemplate(text);
       onImport(parsed);
       setMsg(`Imported "${file.name}"`);
     } catch (err) {
@@ -428,19 +513,57 @@ function ImportExport({ tpl, onImport }) {
 
   return (
     <div className="io-bar">
-      <input ref={fileRef} type="file" accept=".md,.markdown,.json,text/markdown,application/json" hidden onChange={handleFile} />
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}><Icon name="upload" size={16} /> Import file</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title, 'lab')}.md`, templateToMarkdown(tpl), 'text/markdown')}><Icon name="download" size={16} /> Export .md</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile(`${slug(tpl.title, 'lab')}.json`, templateToJson(tpl), 'application/json')}><Icon name="download" size={16} /> Export .json</button>
-      <button type="button" className="btn btn--sm btn--ghost" onClick={() => downloadFile('sample-lab.md', SAMPLE_MARKDOWN, 'text/markdown')}>Download sample</button>
-      {msg && <span className="io-bar__msg" role="status">{msg}</span>}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".md,.markdown,.json,text/markdown,application/json"
+        hidden
+        onChange={handleFile}
+      />
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        onClick={() => fileRef.current?.click()}
+      >
+        <Icon name="upload" size={16} /> Import file
+      </button>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        onClick={() =>
+          downloadFile(`${slug(tpl.title, 'lab')}.md`, templateToMarkdown(tpl), 'text/markdown')
+        }
+      >
+        <Icon name="download" size={16} /> Export .md
+      </button>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        onClick={() =>
+          downloadFile(`${slug(tpl.title, 'lab')}.json`, templateToJson(tpl), 'application/json')
+        }
+      >
+        <Icon name="download" size={16} /> Export .json
+      </button>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        onClick={() => downloadFile('sample-lab.md', SAMPLE_MARKDOWN, 'text/markdown')}
+      >
+        Download sample
+      </button>
+      {msg && (
+        <span className="io-bar__msg" role="status">
+          {msg}
+        </span>
+      )}
     </div>
   );
 }
 
 /* --------------------------- Change history ----------------------------- */
 
-const stepsOf = (content) => (content || []).reduce((n, s) => n + ((s.steps || []).length), 0);
+const stepsOf = (content) => (content || []).reduce((n, s) => n + (s.steps || []).length, 0);
 
 /** Human-readable summary of what changed between two snapshots. */
 function describeChanges(prev, curr) {
@@ -449,7 +572,9 @@ function describeChanges(prev, curr) {
   if (prev.title !== curr.title) changes.push(`Title changed to “${curr.title}”`);
   if (prev.description !== curr.description) changes.push('Description edited');
   if (JSON.stringify(prev.variables) !== JSON.stringify(curr.variables)) {
-    changes.push(`Variables updated (${(prev.variables || []).length} → ${(curr.variables || []).length})`);
+    changes.push(
+      `Variables updated (${(prev.variables || []).length} → ${(curr.variables || []).length})`,
+    );
   }
   const ps = prev.content || [];
   const cs = curr.content || [];
@@ -458,16 +583,23 @@ function describeChanges(prev, curr) {
   const n = Math.min(ps.length, cs.length);
   for (let i = 0; i < n; i += 1) {
     if (ps[i].title !== cs[i].title) changes.push(`Section ${i + 1} renamed to “${cs[i].title}”`);
-    else if (JSON.stringify(ps[i]) !== JSON.stringify(cs[i])) changes.push(`Section ${i + 1} edited`);
+    else if (JSON.stringify(ps[i]) !== JSON.stringify(cs[i]))
+      changes.push(`Section ${i + 1} edited`);
   }
   return changes.length ? changes : ['No content changes'];
 }
 
-const LIFECYCLE_LABEL = { archived: 'Template archived', restored: 'Template restored', deleted: 'Template deleted' };
+const LIFECYCLE_LABEL = {
+  archived: 'Template archived',
+  restored: 'Template restored',
+  deleted: 'Template deleted',
+};
 
 function ChangeHistory({ audit, onRevert }) {
   // Only content versions ("created"/"updated") participate in diffing.
-  const versions = audit.filter((a) => a.snapshot && (a.action === 'created' || a.action === 'updated'));
+  const versions = audit.filter(
+    (a) => a.snapshot && (a.action === 'created' || a.action === 'updated'),
+  );
   return (
     <ul className="audit__list">
       {audit.map((a) => {
@@ -487,7 +619,10 @@ function ChangeHistory({ audit, onRevert }) {
               <span className="audit__who">{a.instructor_username}</span>
               <span className="audit__when muted">{formatDateTime(a.at)}</span>
               {onRevert && a.snapshot && a.action !== 'deleted' && (
-                <button className="btn btn--xs btn--ghost audit__revert" onClick={() => onRevert(a)}>
+                <button
+                  className="btn btn--xs btn--ghost audit__revert"
+                  onClick={() => onRevert(a)}
+                >
                   <Icon name="undo" size={13} /> Revert
                 </button>
               )}
@@ -572,7 +707,9 @@ export default function TemplateEditor() {
     patch({ content: next });
   };
   const removeSection = (i) =>
-    patch({ content: tpl.content.length > 1 ? tpl.content.filter((_, idx) => idx !== i) : tpl.content });
+    patch({
+      content: tpl.content.length > 1 ? tpl.content.filter((_, idx) => idx !== i) : tpl.content,
+    });
 
   // Live authoring check: the same rule the server enforces, surfaced while
   // typing so a typo like {{ HOST_IPP }} is caught before Save.
@@ -596,7 +733,9 @@ export default function TemplateEditor() {
       setTpl(coerce(saved));
       setMeta({ archived_at: saved.archived_at, version: saved.version });
       setRevertNote('');
-      call((t) => api.getTemplateAudit(t, saved.id)).then(setAudit).catch(() => {});
+      call((t) => api.getTemplateAudit(t, saved.id))
+        .then(setAudit)
+        .catch(() => {});
     } catch (err) {
       setError(err.details ? 'Please fix the following before saving:' : err.message);
       setErrorDetails(err.details || []);
@@ -616,14 +755,26 @@ export default function TemplateEditor() {
     }
   }
 
-  if (loading) return <PortalShell><p className="muted">Loading template…</p></PortalShell>;
-  if (!tpl) return <PortalShell><p className="form__error">{error || 'Template not found.'}</p></PortalShell>;
+  if (loading)
+    return (
+      <PortalShell>
+        <p className="muted">Loading template…</p>
+      </PortalShell>
+    );
+  if (!tpl)
+    return (
+      <PortalShell>
+        <p className="form__error">{error || 'Template not found.'}</p>
+      </PortalShell>
+    );
 
   return (
     <PortalShell>
       <div className="page-head page-head--row">
         <div>
-          <button className="linkback" onClick={() => navigate('/instructor/templates')}><Icon name="chevronLeft" size={15} /> Templates</button>
+          <button className="linkback" onClick={() => navigate('/instructor/templates')}>
+            <Icon name="chevronLeft" size={15} /> Templates
+          </button>
           <h1>
             {isNew ? 'New template' : 'Edit template'}
             {meta.version != null && <span className="muted small"> · v{meta.version}</span>}
@@ -644,8 +795,8 @@ export default function TemplateEditor() {
       {meta.archived_at && (
         <div className="banner banner--warn" role="status">
           <span>
-            <strong>This template is archived.</strong> It is hidden from the session launcher; you can
-            still edit it.
+            <strong>This template is archived.</strong> It is hidden from the session launcher; you
+            can still edit it.
           </span>
           <button className="btn btn--sm btn--ghost" onClick={handleRestore}>
             <Icon name="undo" size={14} /> Restore
@@ -661,10 +812,22 @@ export default function TemplateEditor() {
       )}
 
       <div className="tabs" role="tablist" aria-label="Editor sections">
-        <button type="button" role="tab" aria-selected={tab === 'content'} className={`tab ${tab === 'content' ? 'tab--active' : ''}`} onClick={() => setTab('content')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'content'}
+          className={`tab ${tab === 'content' ? 'tab--active' : ''}`}
+          onClick={() => setTab('content')}
+        >
           <Icon name="layers" size={15} /> Content
         </button>
-        <button type="button" role="tab" aria-selected={tab === 'settings'} className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} onClick={() => setTab('settings')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'settings'}
+          className={`tab ${tab === 'settings' ? 'tab--active' : ''}`}
+          onClick={() => setTab('settings')}
+        >
           <Icon name="settings" size={15} /> Settings
         </button>
       </div>
@@ -704,11 +867,23 @@ export default function TemplateEditor() {
             <section className="editor-section">
               <label className="field">
                 <span className="field__label">Title</span>
-                <input className="field__input" value={tpl.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Network Bench Setup" maxLength={LIMITS.title} />
+                <input
+                  className="field__input"
+                  value={tpl.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                  placeholder="e.g. Network Bench Setup"
+                  maxLength={LIMITS.title}
+                />
               </label>
               <label className="field">
                 <span className="field__label">Description</span>
-                <input className="field__input" value={tpl.description} onChange={(e) => patch({ description: e.target.value })} placeholder="Short summary shown in the template list" maxLength={LIMITS.description} />
+                <input
+                  className="field__input"
+                  value={tpl.description}
+                  onChange={(e) => patch({ description: e.target.value })}
+                  placeholder="Short summary shown in the template list"
+                  maxLength={LIMITS.description}
+                />
               </label>
             </section>
 
@@ -718,7 +893,9 @@ export default function TemplateEditor() {
                 type="button"
                 className="btn btn--sm btn--ghost"
                 disabled={tpl.content.length >= LIMITS.sections}
-                onClick={() => patch({ content: [...tpl.content, blankSection(tpl.content.length + 1)] })}
+                onClick={() =>
+                  patch({ content: [...tpl.content, blankSection(tpl.content.length + 1)] })
+                }
               >
                 <Icon name="plus" size={15} /> Add section
               </button>
@@ -746,8 +923,16 @@ export default function TemplateEditor() {
       ) : (
         <div className="editor-col">
           <section className="editor-section">
-            <div className="editor-section__head"><h3>Import &amp; export</h3></div>
-            <ImportExport tpl={tpl} onImport={(parsed) => { setTpl(coerce(parsed)); setTab('content'); }} />
+            <div className="editor-section__head">
+              <h3>Import &amp; export</h3>
+            </div>
+            <ImportExport
+              tpl={tpl}
+              onImport={(parsed) => {
+                setTpl(coerce(parsed));
+                setTab('content');
+              }}
+            />
           </section>
 
           <VariableEditor
@@ -759,7 +944,9 @@ export default function TemplateEditor() {
           {!isNew && (
             <section className="editor-section">
               <div className="editor-section__head">
-                <h3><Icon name="history" size={16} /> Change history</h3>
+                <h3>
+                  <Icon name="history" size={16} /> Change history
+                </h3>
                 <span className="muted small">Read-only audit log</span>
               </div>
               {audit.length ? (

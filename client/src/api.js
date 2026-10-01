@@ -131,15 +131,12 @@ export const api = {
 
   listSessions: (token) => request('/sessions', { token }),
   getSession: (token, id) => request(`/sessions/${id}`, { token }),
-  createSession: (token, payload) =>
-    request('/sessions', { method: 'POST', body: payload, token }),
-  terminateSession: (token, id) =>
-    request(`/sessions/${id}/terminate`, { method: 'POST', token }),
+  createSession: (token, payload) => request('/sessions', { method: 'POST', body: payload, token }),
+  terminateSession: (token, id) => request(`/sessions/${id}/terminate`, { method: 'POST', token }),
   extendSession: (token, id, minutes) =>
     request(`/sessions/${id}/extend`, { method: 'POST', body: { minutes }, token }),
   pushTemplate: (token, id) => request(`/sessions/${id}/push-template`, { method: 'POST', token }),
-  deleteSession: (token, id) =>
-    request(`/sessions/${id}`, { method: 'DELETE', token }),
+  deleteSession: (token, id) => request(`/sessions/${id}`, { method: 'DELETE', token }),
   exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),
 
   /* ------------------------------ Participant --------------------------- */

@@ -1,8 +1,15 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// The single `.env` lives at the REPO ROOT (next to .env.example) regardless
+// of the working directory the server is started from (`npm run dev` from the
+// root, `node --watch` inside server/, or systemd with WorkingDirectory=…).
+// Real environment variables always win over the file (dotenv never
+// overrides), which is what systemd's EnvironmentFile and CI rely on.
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 
 /**
  * Centralised runtime configuration.
@@ -13,7 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *
  * Secret strength is judged by LENGTH and a placeholder denylist rather than
  * by comparing against the one dev string: the old string-equality check was
- * bypassed by docker-compose's own `change-me-*` fallbacks.
+ * bypassed by copy-pasted `change-me-*` placeholders.
  */
 
 const DEV_INSTRUCTOR_SECRET = 'dev-instructor-secret-change-me';
@@ -22,7 +29,15 @@ const DEV_SEED_PASSWORD = 'labmanual123';
 const MIN_SECRET_LENGTH = 32;
 
 /** Substrings that mark a secret as an unreplaced placeholder. */
-const PLACEHOLDER_MARKERS = ['change-me', 'changeme', 'replace-me', 'placeholder', 'secret-here', 'example', 'dev-'];
+const PLACEHOLDER_MARKERS = [
+  'change-me',
+  'changeme',
+  'replace-me',
+  'placeholder',
+  'secret-here',
+  'example',
+  'dev-',
+];
 
 /** True when a JWT secret is too short or looks like a placeholder. */
 export function isWeakSecret(secret) {
@@ -56,10 +71,14 @@ const config = {
   env,
   port: parseInt(process.env.PORT || '4000', 10),
 
+  // Interface to bind. Defaults to loopback: in development the browser talks
+  // to the Vite dev server (which proxies /api), and on the Pi Caddy sits in
+  // front and is the only thing that should reach Node directly. Set
+  // HOST=0.0.0.0 only when you deliberately expose Node itself to the LAN.
+  host: process.env.HOST || '127.0.0.1',
+
   // Absolute path to the SQLite database file.
-  dbPath:
-    process.env.DB_PATH ||
-    path.resolve(__dirname, '..', 'data', 'vlabs.sqlite'),
+  dbPath: process.env.DB_PATH || path.resolve(__dirname, '..', 'data', 'vlabs.sqlite'),
 
   // Express `trust proxy`. MUST match the real topology: when the app is
   // exposed directly, trusting X-Forwarded-For lets clients spoof their IP and
@@ -107,7 +126,9 @@ const config = {
   // directive on http:// pages too, which makes every /api call get rewritten
   // to https:// and fail on a LAN IP. Never enable this on an internet-facing
   // deployment — TLS is mandatory there.
-  plainHttp: ['1', 'true', 'yes'].includes(String(process.env.SERVE_PLAIN_HTTP || '').toLowerCase()),
+  plainHttp: ['1', 'true', 'yes'].includes(
+    String(process.env.SERVE_PLAIN_HTTP || '').toLowerCase(),
+  ),
 
   // Sessions still marked active this long after `expires_at` are swept to
   // "ended" so their room codes recycle. The grace window preserves the
@@ -115,7 +136,8 @@ const config = {
   expiredSessionGraceMinutes: parseInt(process.env.EXPIRED_SESSION_GRACE_MINUTES || '60', 10),
 };
 
-config.weakSecrets = isWeakSecret(config.jwt.instructorSecret) || isWeakSecret(config.jwt.participantSecret);
+config.weakSecrets =
+  isWeakSecret(config.jwt.instructorSecret) || isWeakSecret(config.jwt.participantSecret);
 config.sameSecrets = config.jwt.instructorSecret === config.jwt.participantSecret;
 config.seedPasswordIsDefault = config.seedInstructor.password === DEV_SEED_PASSWORD;
 

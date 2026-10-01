@@ -83,7 +83,8 @@ export function identifyToken(token) {
   } catch {
     role = null;
   }
-  const attempts = role === 'instructor' ? ['instructor', 'participant'] : ['participant', 'instructor'];
+  const attempts =
+    role === 'instructor' ? ['instructor', 'participant'] : ['participant', 'instructor'];
   for (const kind of attempts) {
     try {
       if (kind === 'participant') {

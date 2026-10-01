@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly vLabs database backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+# If the Pi was off at 02:30 (common for a classroom box), run on next boot.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

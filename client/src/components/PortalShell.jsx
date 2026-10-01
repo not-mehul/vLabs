@@ -18,7 +18,9 @@ export default function PortalShell({ children }) {
 
   return (
     <div className="portal">
-      <a className="skip-link" href="#portal-main">Skip to content</a>
+      <a className="skip-link" href="#portal-main">
+        Skip to content
+      </a>
       <header className="portal__nav">
         <Link to="/instructor" className="brand brand--sm">
           <span className="brand__mark" aria-hidden="true" />
@@ -51,15 +53,17 @@ export default function PortalShell({ children }) {
       {instructor?.must_change_password && !onAccountPage && (
         <div className="banner banner--warn portal__banner" role="status">
           <span>
-            <strong>You are using the default bootstrap password.</strong> Change it before
-            running this in front of a class.
+            <strong>You are using the default bootstrap password.</strong> Change it before running
+            this in front of a class.
           </span>
           <Link className="btn btn--sm btn--primary" to="/instructor/account">
             Change password
           </Link>
         </div>
       )}
-      <main id="portal-main" className="portal__main">{children}</main>
+      <main id="portal-main" className="portal__main">
+        {children}
+      </main>
     </div>
   );
 }

@@ -109,8 +109,7 @@ function participantView(p, sections) {
     total_seconds: finished
       ? secondsBetween(p.joined_at, p.finished_at)
       : secondsBetween(p.joined_at, nowIso()),
-    progress_pct:
-      sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
+    progress_pct: sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsSinceSeen,
@@ -150,11 +149,14 @@ router.post(
       Math.max(parseInt(req.body?.duration_minutes ?? 120, 10) || 120, 5),
       24 * 60,
     );
-    const title = String(req.body?.title || '').trim().slice(0, 200);
+    const title = String(req.body?.title || '')
+      .trim()
+      .slice(0, 200);
 
     const template = Number.isInteger(templateId) ? q.template.get(templateId) : null;
     if (!template) throw httpError(400, 'template_id does not reference a template');
-    if (template.archived_at) throw httpError(409, 'This template is archived — restore it to launch a session');
+    if (template.archived_at)
+      throw httpError(409, 'This template is archived — restore it to launch a session');
 
     const roomCode = generateRoomCode();
     const info = q.insert.run(
@@ -170,7 +172,11 @@ router.post(
     );
 
     const row = q.detail.get(info.lastInsertRowid, req.instructor.id);
-    log.info('session.created', { session: row.id, template: template.id, instructor: req.instructor.id });
+    log.info('session.created', {
+      session: row.id,
+      template: template.id,
+      instructor: req.instructor.id,
+    });
     res.status(201).json(summarise(row));
   }),
 );
@@ -253,7 +259,11 @@ router.post('/:id/push-template', (req, res) => {
   if (!row.is_active) throw httpError(409, 'Cannot update an ended session');
   if (!row.template_id) throw httpError(409, 'The master template was deleted; nothing to push');
   const result = snapshotTemplateIntoSession(row.id, row.template_id);
-  log.info('session.template.pushed', { session: row.id, version: result.version, instructor: req.instructor.id });
+  log.info('session.template.pushed', {
+    session: row.id,
+    version: result.version,
+    instructor: req.instructor.id,
+  });
   res.json({ id: row.id, template_version: result.version, section_count: result.section_count });
 });
 

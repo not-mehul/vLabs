@@ -37,11 +37,13 @@ const common = {
   legacyHeaders: false,
   // We intentionally key on identity or the (trust-proxy-normalised) req.ip.
   // Disable the library's key/IP heuristics that assume the default keying.
+  // (Only names known to express-rate-limit 7.x: an unknown name is logged as
+  // an ERR_ERL_UNKNOWN_VALIDATION error on every boot. When upgrading to 8.x
+  // add `keyGeneratorIpFallback: false` here — ipKey already buckets IPv6.)
   validate: {
     ip: false,
     trustProxy: false,
     xForwardedForHeader: false,
-    keyGeneratorIpFallback: false,
   },
 };
 

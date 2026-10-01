@@ -135,7 +135,9 @@ export function templateToMarkdown(input) {
       }
       for (const h of step.hints) {
         lines.push('');
-        const [first, ...rest] = String(h.text ?? '').replace(/\s+$/, '').split('\n');
+        const [first, ...rest] = String(h.text ?? '')
+          .replace(/\s+$/, '')
+          .split('\n');
         lines.push(`> hint: ${escSep(h.label || 'Hint')} :: ${escSep(first)}`.trimEnd());
         for (const l of rest) lines.push(`> ${l}`.replace(/\s+$/, ''));
       }
@@ -154,7 +156,12 @@ export function templateToMarkdown(input) {
       lines.push('');
     }
   }
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+  return (
+    lines
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim() + '\n'
+  );
 }
 
 /* ------------------------------- Import --------------------------------- */

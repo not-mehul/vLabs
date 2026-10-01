@@ -8,8 +8,8 @@
  *
  * When no password is given a random one is generated and printed ONCE.
  * Resetting a password bumps token_version, which signs that instructor out
- * of every browser. Run inside the container with:
- *   docker compose exec vlabs node server/scripts/instructors.js list
+ * of every browser. On the Pi:
+ *   sudo -u vlabs /usr/bin/node /opt/vlabs/server/scripts/instructors.js list
  */
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';

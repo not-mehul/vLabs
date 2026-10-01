@@ -207,7 +207,11 @@ router.put(
       version: row.version,
       snapshot: snapshotOf(row),
     });
-    log.info('template.updated', { template: row.id, version: row.version, instructor: req.instructor.id });
+    log.info('template.updated', {
+      template: row.id,
+      version: row.version,
+      instructor: req.instructor.id,
+    });
     res.json(rowToTemplate(row));
   }),
 );
@@ -239,7 +243,10 @@ router.delete('/:id', (req, res) => {
   }
 
   if ((counts.active || 0) > 0) {
-    throw httpError(409, 'Cannot permanently delete a template with active sessions — end them first');
+    throw httpError(
+      409,
+      'Cannot permanently delete a template with active sessions — end them first',
+    );
   }
   q.remove.run(existing.id);
   // Audit survives the deletion (no cascading FK on the audit table).

@@ -7,8 +7,7 @@
  *
  * Writes <dir>/vlabs-YYYYMMDD-HHMMSS.sqlite and prunes old copies beyond
  * BACKUP_KEEP (default 14). Default destination: <DB dir>/backups.
- * Run inside the container with:
- *   docker compose exec vlabs node server/scripts/backup.js
+ * On the Pi use deploy/pi/backup.sh, which runs this as the vlabs user.
  */
 import fs from 'node:fs';
 import path from 'node:path';

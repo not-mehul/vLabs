@@ -1,6 +1,6 @@
 {
   "name": "vlabs-client",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "SPA frontend for the vLabs dynamic lab manual",
   "private": true,
   "type": "module",

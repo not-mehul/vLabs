@@ -175,7 +175,9 @@ export default function Lab() {
       <div className="ended-screen">
         <ThemeToggle className="theme-toggle--corner" />
         <div className="ended-card" role="alert">
-          <span className="ended-card__icon"><Icon name="lock" size={40} /></span>
+          <span className="ended-card__icon">
+            <Icon name="lock" size={40} />
+          </span>
           <h1>Session closed</h1>
           <p>{ended.reason}</p>
           <button className="btn btn--primary" onClick={() => navigate('/', { replace: true })}>
@@ -211,8 +213,8 @@ export default function Lab() {
           </span>
           <h1>Lab complete</h1>
           <p>
-            Nice work, {displayName || `#${seatNumber}`}. You finished all {total}{' '}
-            section{total === 1 ? '' : 's'}.
+            Nice work, {displayName || `#${seatNumber}`}. You finished all {total} section
+            {total === 1 ? '' : 's'}.
           </p>
           <div className="ended-actions">
             <button className="btn btn--ghost" onClick={() => setReviewing(true)}>
@@ -250,7 +252,12 @@ export default function Lab() {
               <Icon name="clock" size={16} /> {remaining || '—'}
             </span>
             <ThemeToggle />
-            <button className="theme-toggle" onClick={logout} aria-label="Exit session" title="Exit session">
+            <button
+              className="theme-toggle"
+              onClick={logout}
+              aria-label="Exit session"
+              title="Exit session"
+            >
               <Icon name="logout" size={18} />
             </button>
           </div>
@@ -318,7 +325,10 @@ export default function Lab() {
         {!data && !error && <p className="lab__loading">Loading your lab…</p>}
 
         {section && (
-          <div key={`${view}-${data?.template_version ?? 0}`} className={`section-view section-view--${dir}`}>
+          <div
+            key={`${view}-${data?.template_version ?? 0}`}
+            className={`section-view section-view--${dir}`}
+          >
             <div className="section-head">
               <span className="section-head__eyebrow">
                 Section {view + 1} of {total}
@@ -354,7 +364,11 @@ export default function Lab() {
                   <Icon name="check-circle" size={16} /> Finish lab
                 </button>
               ) : (
-                <button className="btn btn--primary" disabled={!canNext} onClick={() => goTo(view + 1)}>
+                <button
+                  className="btn btn--primary"
+                  disabled={!canNext}
+                  onClick={() => goTo(view + 1)}
+                >
                   Next <Icon name="chevronRight" size={16} />
                 </button>
               )}
@@ -364,8 +378,7 @@ export default function Lab() {
       </main>
 
       <footer className="lab__footprint">
-        Lab content is rendered in memory for your seat only — no files are saved
-        to this device.
+        Lab content is rendered in memory for your seat only — no files are saved to this device.
       </footer>
     </div>
   );

@@ -150,7 +150,10 @@ function tableExists(name) {
 }
 
 function columns(table) {
-  return db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  return db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .map((c) => c.name);
 }
 
 function addColumnIfMissing(table, column, definition) {
@@ -319,7 +322,9 @@ function rebuildSessionsTable() {
 
       const violations = db.pragma('foreign_key_check');
       if (violations.length) {
-        throw new Error(`foreign_key_check failed after sessions rebuild: ${JSON.stringify(violations)}`);
+        throw new Error(
+          `foreign_key_check failed after sessions rebuild: ${JSON.stringify(violations)}`,
+        );
       }
     });
     run();

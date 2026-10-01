@@ -45,7 +45,9 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
 
   return (
     <form className="checkpoint" onSubmit={handleSubmit}>
-      <div className="checkpoint__lock" aria-hidden="true"><Icon name="lock" size={18} /></div>
+      <div className="checkpoint__lock" aria-hidden="true">
+        <Icon name="lock" size={18} />
+      </div>
       <div className="checkpoint__main">
         <label className="checkpoint__prompt" htmlFor={inputId}>
           {prompt}
@@ -68,7 +70,11 @@ export default function Checkpoint({ prompt, placeholder, completed, onSubmit })
               if (status === 'wrong') setStatus('idle');
             }}
           />
-          <button type="submit" className="btn btn--primary" disabled={status === 'checking' || !value.trim()}>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={status === 'checking' || !value.trim()}
+          >
             {status === 'checking' ? 'Checking…' : 'Unlock'}
           </button>
         </div>

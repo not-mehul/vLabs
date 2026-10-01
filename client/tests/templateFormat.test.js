@@ -53,7 +53,16 @@ const FULL = normaliseTemplate({
     },
     {
       title: 'Section 2',
-      steps: [{ type: 'desk', title: 'Wrap', body: 'Bye {{ TAG }}', hints: [], solution: '', checkpoint: null }],
+      steps: [
+        {
+          type: 'desk',
+          title: 'Wrap',
+          body: 'Bye {{ TAG }}',
+          hints: [],
+          solution: '',
+          checkpoint: null,
+        },
+      ],
     },
   ],
 });
@@ -122,7 +131,9 @@ test('steps before any section heading get an implicit section', () => {
 });
 
 test('frontmatter variables are parsed', () => {
-  const t = parseMarkdownTemplate('---\ntitle: T\nvariables:\n  A = seat\n  B = A + 1\n---\n# S\n## Step\nb\n');
+  const t = parseMarkdownTemplate(
+    '---\ntitle: T\nvariables:\n  A = seat\n  B = A + 1\n---\n# S\n## Step\nb\n',
+  );
   assert.equal(t.title, 'T');
   assert.deepEqual(t.variables, [
     { name: 'A', expression: 'seat' },

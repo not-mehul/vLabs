@@ -41,7 +41,9 @@ export default function SessionMonitor() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null, { hours: true });
+  const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null, {
+    hours: true,
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -92,7 +94,8 @@ export default function SessionMonitor() {
     });
 
   async function remove() {
-    if (!window.confirm('Delete this session and all its participant data? This cannot be undone.')) return;
+    if (!window.confirm('Delete this session and all its participant data? This cannot be undone.'))
+      return;
     setBusy(true);
     try {
       await call((t) => api.deleteSession(t, id));
@@ -152,7 +155,10 @@ export default function SessionMonitor() {
             )}{' '}
             · v{data.template_version} · {data.section_count} sections
             {!data.template_exists && (
-              <span className="tag tag--archived" title="The master template was deleted; this session runs on its own copy.">
+              <span
+                className="tag tag--archived"
+                title="The master template was deleted; this session runs on its own copy."
+              >
                 template deleted
               </span>
             )}
@@ -211,10 +217,18 @@ export default function SessionMonitor() {
               </button>
             </>
           )}
-          <button className="btn btn--ghost btn--sm" onClick={() => exportData('csv')} disabled={busy}>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => exportData('csv')}
+            disabled={busy}
+          >
             <Icon name="download" size={16} /> CSV
           </button>
-          <button className="btn btn--ghost btn--sm" onClick={() => exportData('json')} disabled={busy}>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => exportData('json')}
+            disabled={busy}
+          >
             <Icon name="download" size={16} /> JSON
           </button>
           {!active && (
@@ -225,8 +239,16 @@ export default function SessionMonitor() {
         </div>
       </div>
 
-      {error && <p className="form__error" role="alert">{error}</p>}
-      {notice && <div className="banner banner--success" role="status">{notice}</div>}
+      {error && (
+        <p className="form__error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <div className="banner banner--success" role="status">
+          {notice}
+        </div>
+      )}
 
       <div className="panel">
         <h2 className="panel__title">Section distribution</h2>
@@ -242,10 +264,16 @@ export default function SessionMonitor() {
                   {s.title}
                   <span className="dist__meta">{s.step_count} steps</span>
                   {s.has_checkpoint && (
-                    <span className="dist__lock" title="Has a checkpoint"><Icon name="lock" size={14} /></span>
+                    <span className="dist__lock" title="Has a checkpoint">
+                      <Icon name="lock" size={14} />
+                    </span>
                   )}
                 </span>
-                <div className="dist__bar" role="img" aria-label={`${s.seats_here} seats on section ${s.index + 1}`}>
+                <div
+                  className="dist__bar"
+                  role="img"
+                  aria-label={`${s.seats_here} seats on section ${s.index + 1}`}
+                >
                   <div className="dist__bar-fill" style={{ width: `${pct}%` }} />
                 </div>
                 <span className="dist__count">{s.seats_here}</span>
@@ -275,7 +303,10 @@ export default function SessionMonitor() {
             </thead>
             <tbody>
               {data.participants.map((p) => (
-                <tr key={p.id} className={p.finished ? 'row--done' : stuckClass(p.seconds_on_current_section)}>
+                <tr
+                  key={p.id}
+                  className={p.finished ? 'row--done' : stuckClass(p.seconds_on_current_section)}
+                >
                   <td className="mono seat-num">{p.seat_number}</td>
                   <td className="table__primary">{p.name}</td>
                   <td>
@@ -298,15 +329,23 @@ export default function SessionMonitor() {
                     {p.hints_taken}
                     {p.solutions_revealed > 0 ? ` · ${p.solutions_revealed} sol` : ''}
                   </td>
-                  <td className={p.seconds_on_current_section >= 15 * 60 && !p.finished ? 'text-warn' : ''}>
+                  <td
+                    className={
+                      p.seconds_on_current_section >= 15 * 60 && !p.finished ? 'text-warn' : ''
+                    }
+                  >
                     {p.finished ? '—' : fmtDuration(p.seconds_on_current_section)}
                   </td>
                   <td className="muted">{fmtDuration(p.total_seconds)}</td>
                   <td>
                     {p.finished ? (
-                      <span className="pill pill--active"><Icon name="check" size={14} /> Finished</span>
+                      <span className="pill pill--active">
+                        <Icon name="check" size={14} /> Finished
+                      </span>
                     ) : p.seconds_since_seen < 90 ? (
-                      <span className="status-live"><span className="dot dot--live" /> active</span>
+                      <span className="status-live">
+                        <span className="dot dot--live" /> active
+                      </span>
                     ) : (
                       <span className="muted">{fmtDuration(p.seconds_since_seen)} ago</span>
                     )}

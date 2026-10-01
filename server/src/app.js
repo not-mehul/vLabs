@@ -81,7 +81,7 @@ export function createApp() {
 
   app.use(requestLogger());
 
-  // Health check (unauthenticated, unlimited) for container orchestration.
+  // Health check (unauthenticated, unlimited) for systemd/Caddy/monitoring.
   // Touches the database so a wedged/locked SQLite file is reported as down.
   app.get('/api/health', (req, res) => {
     try {

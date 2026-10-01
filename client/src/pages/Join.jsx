@@ -84,12 +84,18 @@ export default function Join() {
             className="resume-banner"
             onClick={() => navigate('/lab', { replace: true, state: stored })}
           >
-            <span className="resume-banner__icon"><Icon name="refresh" size={18} /></span>
+            <span className="resume-banner__icon">
+              <Icon name="refresh" size={18} />
+            </span>
             <span className="resume-banner__text">
               <strong>Welcome back, {stored.name}</strong>
-              <span>Resume “{stored.session?.title}” as #{stored.seatNumber}</span>
+              <span>
+                Resume “{stored.session?.title}” as #{stored.seatNumber}
+              </span>
             </span>
-            <span className="resume-banner__cta"><Icon name="chevronRight" size={18} /></span>
+            <span className="resume-banner__cta">
+              <Icon name="chevronRight" size={18} />
+            </span>
           </button>
         )}
 
@@ -109,9 +115,7 @@ export default function Join() {
               maxLength={6}
               placeholder="123456"
               value={roomCode}
-              onChange={(e) =>
-                setRoomCode(e.target.value.replace(/\D/g, '').slice(0, 6))
-              }
+              onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               autoFocus
             />
           </label>
@@ -141,7 +145,11 @@ export default function Join() {
             </label>
           </div>
 
-          {error && <p className="form__error" role="alert">{error}</p>}
+          {error && (
+            <p className="form__error" role="alert">
+              {error}
+            </p>
+          )}
 
           <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
             {busy ? 'Registering…' : 'Register & enter lab'}

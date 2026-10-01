@@ -42,7 +42,10 @@ router.post(
     const instructor = q.byUsername.get(String(username).trim());
 
     // Constant-ish work regardless of whether the user exists.
-    const ok = await bcrypt.compare(String(password), instructor ? instructor.password_hash : DUMMY_HASH);
+    const ok = await bcrypt.compare(
+      String(password),
+      instructor ? instructor.password_hash : DUMMY_HASH,
+    );
 
     if (!instructor || !ok) {
       log.warn('auth.login.failed', { username: String(username).slice(0, 64), ip: req.ip });

@@ -16,7 +16,9 @@ export default defineConfig({
     fs: { allow: [path.resolve(__dirname, '..')] },
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:4000',
+        // 127.0.0.1 rather than "localhost": the backend binds IPv4 loopback
+        // only in dev, and Node 22 may resolve localhost to ::1 first.
+        target: process.env.VITE_API_TARGET || 'http://127.0.0.1:4000',
         changeOrigin: true,
       },
     },

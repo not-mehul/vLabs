@@ -378,7 +378,9 @@ test('archived templates can be restored', async () => {
   assert.equal(restored.status, 200);
   assert.equal(restored.data.archived_at, null);
 
-  const audit = await call(`/api/templates/${archivedTemplateId}/audit`, { token: instructorToken });
+  const audit = await call(`/api/templates/${archivedTemplateId}/audit`, {
+    token: instructorToken,
+  });
   assert.deepEqual(
     audit.data.map((a) => a.action),
     ['restored', 'archived', 'created'],
@@ -423,7 +425,9 @@ test('permanent deletion is refused with active sessions and otherwise detaches 
   assert.equal(exported.status, 200);
   assert.equal(exported.data.session.template_title, 'To archive');
 
-  const audit = await call(`/api/templates/${archivedTemplateId}/audit`, { token: instructorToken });
+  const audit = await call(`/api/templates/${archivedTemplateId}/audit`, {
+    token: instructorToken,
+  });
   assert.equal(audit.data[0].action, 'deleted', 'audit history survives deletion');
   assert.ok(audit.data[0].snapshot, 'deletion keeps a final snapshot');
 });
@@ -469,7 +473,11 @@ test('editing a template does not change a live session until the instructor pus
   const after = await call('/api/participant/content', { token: participantToken });
   assert.equal(after.data.template_version, 2);
   assert.equal(after.data.sections[0].title, 'Section 1 · RENAMED');
-  assert.equal(after.data.unlocked_section, 2, 'progress keys still apply to an unchanged structure');
+  assert.equal(
+    after.data.unlocked_section,
+    2,
+    'progress keys still apply to an unchanged structure',
+  );
 });
 
 test('a session refuses the 101st participant', async () => {
@@ -566,10 +574,7 @@ test('template audit log is append-only (immutability triggers)', () => {
     () => db.prepare("UPDATE template_audit SET action = 'x' WHERE id = 1").run(),
     /append-only/,
   );
-  assert.throws(
-    () => db.prepare('DELETE FROM template_audit WHERE id = 1').run(),
-    /append-only/,
-  );
+  assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
 test('database schema version is recorded', () => {

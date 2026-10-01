@@ -109,12 +109,10 @@ export function normaliseStep(st) {
     type: s.type === 'computer' ? 'computer' : 'desk',
     title: str(s.title, LIMITS.stepTitle),
     body: str(s.body, LIMITS.body),
-    hints: (Array.isArray(s.hints) ? s.hints : [])
-      .slice(0, LIMITS.hintsPerStep)
-      .map((h) => ({
-        label: str(h && h.label, LIMITS.hintLabel),
-        text: str(h && h.text, LIMITS.hintText),
-      })),
+    hints: (Array.isArray(s.hints) ? s.hints : []).slice(0, LIMITS.hintsPerStep).map((h) => ({
+      label: str(h && h.label, LIMITS.hintLabel),
+      text: str(h && h.text, LIMITS.hintText),
+    })),
     solution: str(s.solution, LIMITS.solution),
     checkpoint: normaliseCheckpoint(s.checkpoint),
   };

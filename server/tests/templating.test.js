@@ -31,10 +31,7 @@ test('evaluateExpression handles arithmetic precedence', () => {
 });
 
 test('evaluateExpression concatenates strings with numbers', () => {
-  assert.equal(
-    evaluateExpression("'192.168.1.' + (100 + seat)", { seat: 7 }),
-    '192.168.1.107',
-  );
+  assert.equal(evaluateExpression("'192.168.1.' + (100 + seat)", { seat: 7 }), '192.168.1.107');
   assert.equal(evaluateExpression("'Port ' + seat", { seat: 12 }), 'Port 12');
 });
 
@@ -72,7 +69,10 @@ test('evaluateExpression helper functions', () => {
   assert.equal(evaluateExpression('str(1) + str(2)', {}), '12');
   assert.equal(evaluateExpression('1 + 2', {}), 3);
   // Third-octet style: seats 1..254 -> 10.(seat/100).(seat%100)
-  assert.equal(evaluateExpression("'10.' + floor(seat / 100) + '.' + mod(seat, 100)", { seat: 137 }), '10.1.37');
+  assert.equal(
+    evaluateExpression("'10.' + floor(seat / 100) + '.' + mod(seat, 100)", { seat: 137 }),
+    '10.1.37',
+  );
 });
 
 test('evaluateExpression guards against abuse', () => {
@@ -80,7 +80,10 @@ test('evaluateExpression guards against abuse', () => {
   assert.throws(() => evaluateExpression('1 % 0', {}), /Modulo by zero/);
   assert.throws(() => evaluateExpression('pad(1)', {}), /expects/);
   assert.throws(() => evaluateExpression('pad(1, 2, "ab")', {}), /one character/);
-  assert.throws(() => evaluateExpression('('.repeat(40) + '1' + ')'.repeat(40), {}), /nested too deeply/);
+  assert.throws(
+    () => evaluateExpression('('.repeat(40) + '1' + ')'.repeat(40), {}),
+    /nested too deeply/,
+  );
   assert.throws(() => evaluateExpression('1 + '.repeat(300) + '1', {}), /too long/);
 });
 
@@ -121,10 +124,7 @@ test('resolveVariables rejects names that clash with helper functions', () => {
 
 test('injectVariables replaces placeholders and flags missing ones', () => {
   const ctx = { PORT_NUM: 7, GATEWAY_IP: '192.168.1.107' };
-  const out = injectVariables(
-    'Connect to Port {{ PORT_NUM }} then ping {{GATEWAY_IP}}',
-    ctx,
-  );
+  const out = injectVariables('Connect to Port {{ PORT_NUM }} then ping {{GATEWAY_IP}}', ctx);
   assert.equal(out, 'Connect to Port 7 then ping 192.168.1.107');
   assert.match(injectVariables('{{ NOPE }}', ctx), /missing:NOPE/);
 });
@@ -275,7 +275,14 @@ test('validateTemplatePayload rejects unknown placeholders anywhere in the templ
 test('validateTemplatePayload rejects duplicate, reserved and empty variables', () => {
   const base = { title: 'V', content: [{ title: 'S', steps: [{ title: 't', body: 'b' }] }] };
   assert.throws(
-    () => validateTemplatePayload({ ...base, variables: [{ name: 'A', expression: '1' }, { name: 'A', expression: '2' }] }),
+    () =>
+      validateTemplatePayload({
+        ...base,
+        variables: [
+          { name: 'A', expression: '1' },
+          { name: 'A', expression: '2' },
+        ],
+      }),
     /more than once/,
   );
   assert.throws(
@@ -295,13 +302,27 @@ test('validateTemplatePayload rejects duplicate, reserved and empty variables', 
 test('shared normaliser produces the canonical shape and finds unknown placeholders', () => {
   const t = normaliseTemplate({
     title: 'x',
-    content: [{ steps: [{ body: 'hi {{ A }} {{ B }}', checkpoint: { answer: 'a', answers: ['b', 'b', 'a'] } }] }],
+    content: [
+      {
+        steps: [
+          { body: 'hi {{ A }} {{ B }}', checkpoint: { answer: 'a', answers: ['b', 'b', 'a'] } },
+        ],
+      },
+    ],
     variables: [{ name: 'A', expression: '1' }],
   });
-  assert.deepEqual(t.content[0].steps[0].checkpoint, { prompt: '', placeholder: '', answer: 'a', answers: ['b'] });
+  assert.deepEqual(t.content[0].steps[0].checkpoint, {
+    prompt: '',
+    placeholder: '',
+    answer: 'a',
+    answers: ['b'],
+  });
   assert.equal(t.content[0].steps[0].type, 'desk');
   assert.deepEqual(t.content[0].steps[0].hints, []);
-  assert.deepEqual(findUnknownPlaceholders(t).map((u) => u.name), ['B']);
+  assert.deepEqual(
+    findUnknownPlaceholders(t).map((u) => u.name),
+    ['B'],
+  );
   assert.equal(normaliseTemplate(null).content.length, 0);
 });
 
@@ -311,9 +332,7 @@ test('renderManual renders sections and steps with resolved context', () => {
   const content = [
     {
       title: 'Cabling',
-      steps: [
-        { type: 'desk', title: 'Cable', body: 'Patch into Port {{ PORT_NUM }}' },
-      ],
+      steps: [{ type: 'desk', title: 'Cable', body: 'Patch into Port {{ PORT_NUM }}' }],
     },
     {
       title: 'Verify',

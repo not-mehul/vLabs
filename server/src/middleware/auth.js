@@ -28,7 +28,9 @@ export function requireInstructor(req, res, next) {
   }
   // Password changes bump token_version; older tokens are rejected.
   if ((claims.tv ?? 0) !== (instructor.token_version ?? 0)) {
-    return res.status(401).json({ error: 'Session expired — please sign in again', code: 'TOKEN_REVOKED' });
+    return res
+      .status(401)
+      .json({ error: 'Session expired — please sign in again', code: 'TOKEN_REVOKED' });
   }
   req.instructor = { id: instructor.id, username: instructor.username };
   next();
