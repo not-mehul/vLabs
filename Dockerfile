@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — build the React SPA
 # ---------------------------------------------------------------------------
-FROM node:22-slim AS client-build
+FROM node:26-slim AS client-build
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
@@ -13,7 +13,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 — install backend production dependencies
 # ---------------------------------------------------------------------------
-FROM node:22-slim AS server-deps
+FROM node:26-slim AS server-deps
 WORKDIR /app/server
 # better-sqlite3 ships prebuilt binaries; python/build tools are a safety net.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,7 +24,7 @@ RUN npm ci --omit=dev
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime image (backend serves the built SPA)
 # ---------------------------------------------------------------------------
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
