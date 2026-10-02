@@ -335,6 +335,15 @@ Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
 - New **Attempts CSV** button (`<session>-attempts.csv`): one row per
   checkpoint submission, correct and incorrect, in time order.
 
+### Pi: bare-IP access + install guard
+
+- `deploy/pi/render-caddy.sh` renders the Caddyfile for `<hostname>.local`,
+  every IPv4 the Pi currently holds and any extras, and reloads Caddy; the
+  installer uses it, so `https://<pi-ip>` works on devices without mDNS.
+- `install.sh`/`update.sh` refuse to (re)start the unit unless
+  `server/node_modules/express` is readable by the `vlabs` user (the
+  `ERR_MODULE_NOT_FOUND` restart loop), printing the fix.
+
 ### Favicon + home-screen polish
 
 - Original app mark (the header's gradient tile + chevron) as

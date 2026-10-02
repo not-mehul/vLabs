@@ -51,7 +51,7 @@ ADMIN_USER="${SUDO_USER:-root}"
 # ---------------------------------------------------------------------------
 bold "1/8  Questions"
 ask VLABS_HOSTNAME "Hostname participants will type (https://<name>.local)" "vlabs"
-ask VLABS_EXTRA_ADDRESSES "Extra names or IPs for the certificate (space separated, optional)" ""
+ask VLABS_EXTRA_ADDRESSES "Extra names or IPs for the certificate (the Pi's own IPs are added automatically; space separated, optional)" ""
 ask VLABS_SET_HOSTNAME "Set this Pi's hostname to '$VLABS_HOSTNAME' so .local resolves? (yes/no)" "yes"
 ask VLABS_SKIP_BUILD "Skip npm install + client build? (yes/no)" "no"
 
@@ -154,18 +154,23 @@ if [[ "$VLABS_SKIP_BUILD" != "yes" ]]; then
   "
 fi
 [[ -f "$REPO_DIR/client/dist/index.html" ]] || die "client/dist missing — build failed or VLABS_SKIP_BUILD=yes on a fresh install"
+# The service runs as 'vlabs' and must be able to read the installed packages;
+# a missing or unreadable node_modules shows up as ERR_MODULE_NOT_FOUND for
+# 'express' in a restart loop, so refuse to install the unit in that state.
+chmod -R o+rX "$REPO_DIR"
+if ! runuser -u "$SERVICE_USER" -- test -r "$REPO_DIR/server/node_modules/express/package.json"; then
+  die "server dependencies are missing or unreadable by the '$SERVICE_USER' user. Fix with:
+    cd $REPO_DIR/server && npm ci --omit=dev
+    cd $REPO_DIR/client && npm ci && npm run build
+    sudo chmod -R o+rX $REPO_DIR && sudo $REPO_DIR/deploy/pi/install.sh"
+fi
 
 # ---------------------------------------------------------------------------
 bold "6/8  Caddy → /etc/caddy/Caddyfile"
-https_sites="https://$VLABS_HOSTNAME.local"; http_sites="http://$VLABS_HOSTNAME.local"
-for a in $VLABS_EXTRA_ADDRESSES; do
-  https_sites+=", https://$a"; http_sites+=", http://$a"
-done
-sed -e "s|__HTTPS_SITES__|$https_sites|" -e "s|__HTTP_SITES__|$http_sites|" \
-  "$REPO_DIR/deploy/pi/Caddyfile.template" > /etc/caddy/Caddyfile
-caddy fmt --overwrite /etc/caddy/Caddyfile
-caddy validate --config /etc/caddy/Caddyfile >/dev/null
-echo "  sites: $https_sites"
+# The .local name, every IPv4 the Pi currently holds (so typing the bare IP
+# works on devices without mDNS), and any extra names given. Re-run
+# deploy/pi/render-caddy.sh if the IP changes — or give the Pi a DHCP reservation.
+"$REPO_DIR/deploy/pi/render-caddy.sh" "$VLABS_HOSTNAME" $VLABS_EXTRA_ADDRESSES
 
 # ---------------------------------------------------------------------------
 bold "7/8  systemd units"
@@ -193,7 +198,7 @@ ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 cat <<EOF
 
 Done.
-  Participants  : https://$VLABS_HOSTNAME.local  ${ip:+(or https://$ip if you listed it)}
+  Participants  : https://$VLABS_HOSTNAME.local  ${ip:+or https://$ip}
   Root cert     : http://$VLABS_HOSTNAME.local/vlabs-root.crt  (install once per device)
   Instructor    : username 'instructor', password in $ENV_FILE
   Logs          : sudo journalctl -u vlabs -f      sudo journalctl -u caddy -f

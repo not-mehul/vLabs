@@ -46,6 +46,8 @@ bold "3/5  Install + build"
 as_admin "(cd server && npm ci --omit=dev --no-audit --no-fund)"
 as_admin "(cd client && npm ci --no-audit --no-fund && npm run build)"
 chmod -R o+rX "$REPO_DIR"
+runuser -u vlabs -- test -r "$REPO_DIR/server/node_modules/express/package.json" \
+  || { echo "server dependencies missing/unreadable after install — aborting before restart" >&2; exit 1; }
 
 bold "4/5  Refresh systemd units (in case they changed)"
 install -m 0644 deploy/pi/vlabs.service /etc/systemd/system/vlabs.service
