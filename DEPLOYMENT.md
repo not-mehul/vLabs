@@ -179,6 +179,17 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
   (`SystemMaxUse=200M` in `/etc/systemd/journald.conf`) or use `log2ram` to
   spare the SD card.
 
+### 1.7b Removing vLabs
+
+`sudo /opt/vlabs/deploy/pi/uninstall.sh` reverses the installer: disables and
+deletes the units, resets Caddy to its stock config (and removes the internal
+CA so a reinstall mints a fresh root certificate), removes `/etc/vlabs`,
+`/var/lib/vlabs`, `/srv/vlabs-public`, the `vlabs` user and the checkout. A
+final database snapshot is kept at `/root/vlabs-final-<timestamp>.sqlite`
+unless you pass `--no-backup`. Node and Caddy stay installed (a reinstall
+reuses them) unless you add `--purge`. `--yes` skips the prompts. Reinstall
+afterwards with the two commands from §1.3.
+
 ### 1.8 Troubleshooting
 
 | Symptom                                                                        | Likely cause → fix                                                                                                                                                                         |

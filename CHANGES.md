@@ -344,6 +344,11 @@ Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
   `server/node_modules/express` is readable by the `vlabs` user (the
   `ERR_MODULE_NOT_FOUND` restart loop), printing the fix.
 
+- `deploy/pi/uninstall.sh` fully reverses the installer (keeps a final DB
+  snapshot in `/root`; `--purge` also removes Caddy + Node). Installer now
+  re-owns `/var/log/caddy` and `/var/lib/caddy` explicitly (a rerun after a
+  teardown left them root-owned and Caddy could not open its access log).
+
 ### Favicon + home-screen polish
 
 - Original app mark (the header's gradient tile + chevron) as

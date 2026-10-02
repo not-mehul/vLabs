@@ -88,8 +88,13 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
 fi
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DATA_DIR" "$DATA_DIR/backups"
 install -d -m 0755 "$PUBLIC_DIR"
-# The access log in the Caddyfile is written by the caddy user.
-install -d -m 0755 -o caddy -g caddy /var/log/caddy
+# The access log in the Caddyfile is written by the caddy user. `install -d`
+# does not re-own a directory that already exists (e.g. from an earlier
+# install), so chown explicitly — Caddy refuses to start otherwise.
+install -d -m 0755 /var/log/caddy
+chown -R caddy:caddy /var/log/caddy
+# Same for Caddy's data dir (internal CA), in case a teardown left it root-owned.
+install -d /var/lib/caddy && chown -R caddy:caddy /var/lib/caddy
 install -d -m 0750 -o root -g "$SERVICE_USER" "$ENV_DIR"
 # The checkout belongs to the admin (git pull / npm without root); the service
 # only needs to read it.
