@@ -10,6 +10,7 @@ import {
   isCorrectAnswer,
   matchCheckpoint,
   stepHasCheckpoint,
+  injectImages,
   renderManual,
   isSectionCleared,
   computeUnlockedSection,
@@ -26,7 +27,12 @@ import {
   compileMask,
   matchMask,
   maskExample,
+  findImageRefs,
+  findMissingImages,
+  normaliseImageName,
+  imageRefName,
 } from '../../shared/template-schema.js';
+import { sniffImage } from '../src/lib/imageSniff.js';
 
 /* ------------------------------ Evaluator -------------------------------- */
 
@@ -600,4 +606,97 @@ test('validateTemplatePayload: pattern + capture rules and order-aware placehold
       .length,
     0,
   );
+});
+
+/* -------------------------------- Images --------------------------------- */
+
+test('image names and references: base name, URL detection, dynamic names', () => {
+  assert.equal(normaliseImageName('images/Rack Diagram (v2).PNG'), 'Rack-Diagram-v2.PNG');
+  assert.equal(normaliseImageName('..\\..\\etc\\passwd'), 'passwd');
+  assert.equal(imageRefName('rack.png'), 'rack.png');
+  assert.equal(imageRefName('images/rack.png'), 'rack.png');
+  assert.equal(imageRefName('https://x/rack.png'), null);
+  assert.equal(imageRefName('/api/images/abc/rack.png'), null);
+  assert.equal(imageRefName('data:image/png;base64,AAAA'), null);
+  const tpl = {
+    content: [
+      {
+        title: 'S',
+        steps: [
+          {
+            type: 'desk',
+            title: 't',
+            body: 'See ![rack](images/rack.png) and ![](bench-{{ SEAT_ID }}.png "Bench")',
+            hints: [{ label: 'l', text: '![h](Hint.PNG)' }],
+            solution: '![s](https://ext/x.png)',
+            checkpoint: null,
+          },
+        ],
+      },
+    ],
+  };
+  const refs = findImageRefs(tpl);
+  assert.deepEqual(
+    refs.map((r) => [r.name, r.dynamic]),
+    [
+      ['rack.png', false],
+      ['bench-{{ SEAT_ID }}.png', true],
+      ['Hint.PNG', false],
+    ],
+  );
+  // Case-insensitive library match; dynamic names are never "missing".
+  assert.deepEqual(
+    findMissingImages(tpl, ['RACK.PNG']).map((m) => m.name),
+    ['Hint.PNG'],
+  );
+});
+
+test('injectImages rewrites library references after placeholders resolve', () => {
+  const images = new Map([
+    ['rack.png', '/api/images/id1/rack.png'],
+    ['bench-7.png', '/api/images/id2/bench-7.png'],
+  ]);
+  assert.equal(
+    injectImages('![rack](images/Rack.png "Rack") ![x](https://e/x.png) ![m](missing.png)', images),
+    '![rack](/api/images/id1/rack.png "Rack") ![x](https://e/x.png) ![m](missing.png)',
+  );
+  // Via resolveVariables → injectVariables with the IMAGES symbol attached.
+  const ctx = resolveVariables([], 7, { images });
+  assert.equal(
+    injectVariables('![b](bench-{{ SEAT_ID }}.png)', ctx),
+    '![b](/api/images/id2/bench-7.png)',
+  );
+  assert.equal(Object.keys(ctx).includes('images'), false, 'map is not an enumerable key');
+  assert.equal(JSON.stringify(ctx).includes('api/images'), false);
+});
+
+test('validateTemplatePayload refuses missing library images only when a library is given', () => {
+  const payload = {
+    title: 'Lab',
+    content: [
+      {
+        title: 'S',
+        steps: [{ type: 'desk', title: 't', body: '![r](rack.png) ![d](bench-{{ SEAT_ID }}.png)' }],
+      },
+    ],
+  };
+  assert.ok(validateTemplatePayload(payload), 'no library → not checked');
+  assert.ok(validateTemplatePayload(payload, { imageNames: ['rack.png'] }));
+  assert.throws(
+    () => validateTemplatePayload(payload, { imageNames: [] }),
+    /Image "rack\.png" referenced in Section 1 · step 1 body is not in the image library/,
+  );
+});
+
+test('sniffImage recognises real image bytes and rejects everything else', () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  assert.deepEqual(sniffImage(png), { mime: 'image/png', width: 1, height: 1 });
+  const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  assert.deepEqual(sniffImage(gif), { mime: 'image/gif', width: 1, height: 1 });
+  assert.equal(sniffImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')), null);
+  assert.equal(sniffImage(Buffer.from('<html><script>alert(1)</script></html>')), null);
+  assert.equal(sniffImage(Buffer.alloc(4)), null);
 });

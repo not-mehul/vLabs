@@ -249,7 +249,7 @@ export default function Lab() {
               role="timer"
               aria-label="Time remaining"
             >
-              <Icon name="clock" size={16} /> {remaining || '—'}
+              <Icon name="clock" size={16} /> <span>{remaining || '—'}</span>
             </span>
             <ThemeToggle />
             <button

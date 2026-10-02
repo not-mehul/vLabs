@@ -10,6 +10,18 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     node.setAttribute('target', '_blank');
     node.setAttribute('rel', 'noopener noreferrer nofollow');
   }
+  // Library images (served from /api/images/…) and inline data: URIs are the
+  // only sources the CSP allows; everything else would be blocked anyway, so
+  // drop it here to avoid broken-image icons. Lazy-load the rest.
+  if (node.tagName === 'IMG') {
+    const src = node.getAttribute('src') || '';
+    if (!src.startsWith('/api/images/') && !src.startsWith('data:image/')) {
+      node.removeAttribute('src');
+      node.setAttribute('alt', `${node.getAttribute('alt') || 'image'} (unavailable)`);
+    }
+    node.setAttribute('loading', 'lazy');
+    node.setAttribute('decoding', 'async');
+  }
 });
 
 const SANITIZE_OPTIONS = {

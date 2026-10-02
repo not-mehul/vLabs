@@ -138,6 +138,43 @@ export const api = {
   pushTemplate: (token, id) => request(`/sessions/${id}/push-template`, { method: 'POST', token }),
   deleteSession: (token, id) => request(`/sessions/${id}`, { method: 'DELETE', token }),
   exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),
+  getParticipant: (token, sessionId, participantId) =>
+    request(`/sessions/${sessionId}/participants/${participantId}`, { token }),
+
+  /* -------------------------------- Images ------------------------------ */
+
+  listImages: (token) => request('/images', { token }),
+  /** Upload a File/Blob as the raw body; the server sniffs the real type. */
+  uploadImage: async (token, file, { name, replace = false } = {}) => {
+    const qs = new URLSearchParams({ name: name || file.name });
+    if (replace) qs.set('replace', '1');
+    let res;
+    try {
+      res = await fetch(`/api/images?${qs}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': file.type || 'application/octet-stream',
+        },
+        body: file,
+      });
+    } catch {
+      throw new ApiError('Network error — is the server reachable?', 0);
+    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = new ApiError(
+        (data && data.error) || `Upload failed (${res.status})`,
+        res.status,
+        data && data.code,
+      );
+      err.existing = data && data.existing;
+      throw err;
+    }
+    return data;
+  },
+  imageReferences: (token, id) => request(`/images/${id}/references`, { token }),
+  deleteImage: (token, id) => request(`/images/${id}`, { method: 'DELETE', token }),
 
   /* ------------------------------ Participant --------------------------- */
 

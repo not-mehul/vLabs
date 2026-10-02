@@ -6,7 +6,7 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.3.0**.
+Applies to vLabs **1.4.0**.
 
 ---
 
@@ -24,6 +24,8 @@ Applies to vLabs **1.3.0**.
 10. [Captured values](#10-captured-values)
 11. [How participants experience the lab](#11-how-participants-experience-the-lab)
 12. [Writing good step bodies (Markdown that renders)](#12-writing-good-step-bodies)
+    - [Links](#links)
+    - [Images](#images)
 13. [Limits](#13-limits)
 14. [Validation errors and what they mean](#14-validation-errors-and-what-they-mean)
 15. [Live classes: versions, pushing, reordering](#15-live-classes-versions-pushing-reordering)
@@ -158,6 +160,8 @@ Write **{{ SERIAL }}** on the label and attach it.
 | Pattern checkpoint | `> checkpoint: Prompt` **then** `> pattern: MASK` | No `::` part. `> pattern:` switches the checkpoint to pattern mode even if an answer was given (the answer is dropped). |
 | Capture | `> capture: NAME` | On either kind of checkpoint. Must follow the `> checkpoint:` line. |
 | Input placeholder | `> placeholder: text` | Grey example text in the answer box. Must follow the `> checkpoint:` line (ignored otherwise). |
+| Link | `[text](https://…)` | Opens in a new tab. Placeholders allowed in the URL. See §12. |
+| Image | `![alt](file-name.png "title")` | File name of a library image (upload in Settings → Images). See §12. |
 | Literal `::` | `\::` | In hint labels/text, prompts and answers. |
 | Literal `\|` | `\|` | In answers. |
 
@@ -514,7 +518,10 @@ Understanding delivery helps you place checkpoints well.
 - Within the furthest unlocked section, steps are revealed **up to and
   including the first step whose checkpoint is still open**. Clearing it
   reveals the rest of the section (up to the next open checkpoint).
-- Clearing the last checkpoint of the last section enables **Finish**.
+- A participant counts as **complete** the moment every section is cleared
+  (and the last section has been opened) — their clock stops and the monitor
+  shows *Complete* even if they keep reviewing. **Finish** then shows the
+  completion screen; it is not required.
 - Participants can always navigate **back** to earlier sections to review;
   the stepper shows locked sections greyed out.
 - Hints, solutions, checkpoints and progress reports all go through the same
@@ -560,17 +567,94 @@ Bodies are rendered with GitHub-flavoured Markdown and sanitised.
 
 - Tables, bold, italics, inline code, numbered and bulleted lists, block
   quotes (`>` lines — but see §3.3 about placing them after hints) all work.
-- Links open in a new tab. Raw HTML, `style` attributes, forms and buttons
-  are stripped.
-- Images: the page's security policy only allows images served by the app
-  itself or embedded as `data:` URIs. There is no upload feature, so prefer
-  describing what to look for; if you must embed a small diagram use a data
-  URI and remember the 20 000-character body limit.
+- Raw HTML, `style` attributes, forms and buttons are stripped. Links and
+  images have their own rules — see below.
 - Keep bodies short and imperative. One action per step, the thing to verify
   stated explicitly ("the link light turns solid green"). Put the "why" in an
   `info` step or a hint.
 - Speak to the participant by name sparingly: `{{ FIRST_NAME }}` in a
   welcome and a wrap-up is warm; in every step it is noise.
+
+### Links
+
+Standard Markdown links work in bodies, hints and solutions:
+
+```markdown
+Open the [claim console](https://console.example/claim) and sign in.
+Download the [bench checklist](https://intranet.example/labs/checklist.pdf).
+Reference: <https://docs.example/switch-cli>
+```
+
+- `[text](url)` renders a link; a bare `<https://…>` is auto-linked. Plain
+  `https://…` text without brackets is **not** turned into a link.
+- Every link opens in a **new tab** (`target="_blank"`, `rel="noopener"`),
+  so the participant never loses their place in the lab. There is no way to
+  open a link in the same tab.
+- Placeholders work inside URLs: `[your device](https://console.example/devices/{{ SERIAL }})`
+  or `[bench {{ SEAT_ID }} camera](http://10.0.0.{{ SEAT_ID }}/)`. Write the
+  placeholder where the value goes; it is substituted before rendering. If a
+  value could contain spaces or `&`, build it with `slug()` first.
+- Reachability is the participant's network, not the Pi's: on an isolated
+  classroom LAN, internet URLs will not load. Prefer LAN addresses or say
+  "ask the instructor for the handout".
+- Links in `info` steps are the natural home for background reading;
+  links in a task step should be the thing to click to do the task.
+- `mailto:` and `tel:` links render but are rarely useful on shared kiosks.
+  `javascript:` URLs are removed by the sanitiser.
+
+### Images
+
+Images come from the instance's **image library** (Settings → Images in the
+editor, or drag files onto that panel). Reference a library image by its
+**file name** with standard Markdown image syntax:
+
+```markdown
+![Patch panel, front view](patch-panel-front.png)
+
+Connect the cable as shown:
+
+![Cable routing](images/cable-route.jpg "Route under the desk lip")
+```
+
+- Supported: **PNG, JPEG, GIF, WebP**, up to **3 MB** each. Not supported:
+  SVG (script risk), PDF, video. The server checks the real bytes, not the
+  extension.
+- The reference is the **file name only**. A folder prefix such as
+  `images/` is ignored (so a `.md` written alongside an `images/` folder
+  imports unchanged), matching is **case-insensitive**, and spaces or other
+  odd characters in a name are turned into `-` on upload (`Rack Diagram
+  (v2).PNG` → `Rack-Diagram-v2.PNG`). The editor's **Markdown** button on
+  each library image copies a ready-made snippet.
+- The alt text in `[…]` is read by screen readers and shown if the image
+  can't load — make it describe the picture ("Rear of switch with console
+  port circled"), not "image".
+- An optional `"title"` after the name becomes the hover tooltip.
+- **Saving is refused while a referenced image is missing** from the library
+  (`Image "x.png" referenced in Section 2 · step 1 body is not in the image
+  library`). After a `.md` import the editor lists the missing names and
+  offers **Upload missing**; drop the files in and save.
+- The library is **shared across all templates** on an instance. Prefix names
+  by course (`net-lab-rack.png`, `cam-unbox-label.jpg`) to avoid collisions.
+  Uploading a file under an existing name asks before **replacing** it — a
+  replacement updates every template that uses that name.
+- An image can be deleted only when no template and no active session still
+  references it.
+- **Per-seat images:** a placeholder in the name picks a different file per
+  participant, e.g. `![Your bench](bench-{{ SEAT_ID }}.png)` with
+  `bench-1.png … bench-24.png` in the library, or `![Pod map](pod-{{ POD }}.png)`.
+  Dynamic names cannot be checked at save time, so make sure every possible
+  value has a file; a missing one shows as "(unavailable)".
+- Images are sized to the card width and keep their aspect ratio; portrait
+  photos will be tall — crop before uploading. Keep files small (a 1200 px
+  wide JPEG is plenty; the Pi serves 100 seats).
+- Images are served from the app (`/api/images/<random-id>/<name>`) under an
+  unguessable id, so they load on an offline LAN and the file name never
+  appears in a URL. External `https://…` images are **not** rendered (the
+  page's security policy blocks them; they show as "(unavailable)"), and a
+  `data:` URI inline is allowed but counts against the 20 000-character body
+  limit — use the library instead.
+- Moving a template to another instance: export the `.md` (or JSON), copy the
+  image files, upload them there under the same names.
 
 ---
 
@@ -590,6 +674,7 @@ Bodies are rendered with GitHub-flavoured Markdown and sanitised.
 | Solution | 4000 chars |
 | Checkpoint prompt / placeholder / answer | 300 / 120 / 200 chars |
 | Mask | 120 chars, ≤ 3 `*` |
+| Image file | 3 MB; PNG/JPEG/GIF/WebP; name ≤ 80 chars |
 | Capture name | 40 chars |
 | Expression | 500 chars, nesting 32 |
 | Whole template (JSON) | 900 kB |
@@ -624,6 +709,7 @@ problems at once. Locations read `Section N · step M <field>`.
 | `… checkpoint: "X" is not a valid variable name` | Capture names follow variable rules. |
 | `… checkpoint: variable name "X" is reserved` | Built-in or helper name. |
 | `… checkpoint: "X" is already a declared variable` / `already captured by Section …` | Pick another name. |
+| `Image "x.png" referenced in … is not in the image library — upload it first` | Upload the file (same name, folders ignored) in Settings → Images, or fix the reference. |
 | `Too many variables / sections / steps / hints / alternative answers` | Over a structural limit (§13). |
 | `Template is too large` | Over 900 kB — usually an embedded image. |
 
@@ -667,6 +753,10 @@ Before you save or hand a template to someone else:
       body states the real notation.
 - [ ] Steps with a solution have at least one hint (or you accept instant
       reveal).
+- [ ] Every `![…](name)` image is in the library (the editor's Images panel
+      shows no "missing" banner); dynamic names have a file for every value.
+- [ ] Links point at addresses participants can actually reach from the
+      classroom network.
 - [ ] `info` steps carry no directives (they would be dropped anyway).
 - [ ] Preview as seat 1, 7 and 100; check padding, wrapping of long values
       and that nothing says `⟨missing:…⟩`.

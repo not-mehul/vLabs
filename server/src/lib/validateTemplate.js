@@ -3,6 +3,7 @@ import {
   IDENT_RE,
   normaliseTemplate,
   findUnknownPlaceholders,
+  findMissingImages,
   compileMask,
 } from '../../../shared/template-schema.js';
 import { resolveVariables, RESERVED_NAMES, FUNCTION_NAMES } from './templating.js';
@@ -26,7 +27,13 @@ const SAMPLE_WHO = { firstName: 'Sample', lastName: 'Participant' };
  * `answers` is only present when non-empty) or throws a 400 Error listing
  * every problem found.
  */
-export function validateTemplatePayload(payload) {
+/**
+ * @param {object} payload
+ * @param {object} [opts]
+ * @param {Iterable<string>} [opts.imageNames] names in the image library; when
+ *        given, every static `![…](name.png)` reference must be one of them.
+ */
+export function validateTemplatePayload(payload, opts = {}) {
   const errors = [];
 
   // Size guard first: the JSON body limit in app.js is the hard ceiling, this
@@ -141,6 +148,15 @@ export function validateTemplatePayload(payload) {
         ? `{{ ${name} }} is used in ${where} before the checkpoint that captures it (captured values are available from the following step onward)`
         : `Unknown placeholder {{ ${name} }} in ${where}`,
     );
+  }
+
+  // ---- Image references ----------------------------------------------------
+  if (opts.imageNames) {
+    for (const { name, where } of findMissingImages({ content }, opts.imageNames)) {
+      errors.push(
+        `Image "${name}" referenced in ${where} is not in the image library — upload it first`,
+      );
+    }
   }
 
   if (errors.length) return fail(errors);

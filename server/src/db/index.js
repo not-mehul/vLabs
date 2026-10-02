@@ -130,14 +130,39 @@ CREATE TABLE IF NOT EXISTS participants (
   completed_checkpoints  TEXT NOT NULL DEFAULT '[]',
   -- JSON object of values captured at pattern checkpoints: { NAME: "canonical" }.
   captured_values        TEXT NOT NULL DEFAULT '{}',
+  -- JSON array of checkpoint attempts, newest last, capped:
+  --   { k: "section.step", a: "what they typed", ok: 0|1, at: iso }
+  checkpoint_log         TEXT NOT NULL DEFAULT '[]',
+  -- JSON object of seconds spent per section index (closed visits only; the
+  -- open visit is section_entered_at → now): { "0": 412, "1": 90 }
+  section_times          TEXT NOT NULL DEFAULT '{}',
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
+  -- Set by the server the moment every section is cleared (the clock stops);
+  -- finished_at is when the participant pressed Finish (may be later/never).
+  completed_at           TEXT,
   finished_at            TEXT,
   section_entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (session_id, seat_number),
   UNIQUE (session_id, name_key)
+);
+
+-- Instance-wide image library for template bodies. Markdown references an
+-- image by NAME (![caption](rack.png)); the server rewrites it to
+-- /api/images/<id>/<name> at render time, so the random id — not the name —
+-- is what participants' browsers fetch. Replacing an image issues a new id.
+CREATE TABLE IF NOT EXISTS images (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  mime        TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  width       INTEGER,
+  height      INTEGER,
+  data        BLOB NOT NULL,
+  created_by  INTEGER REFERENCES instructors(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
 
@@ -232,6 +257,20 @@ const MIGRATIONS = [
     name: 'participant captured_values (pattern checkpoints)',
     up() {
       addColumnIfMissing('participants', 'captured_values', "TEXT NOT NULL DEFAULT '{}'");
+    },
+  },
+  {
+    version: 4,
+    name: 'image library; participant checkpoint_log, section_times, completed_at',
+    up() {
+      // The images table itself is created by the SCHEMA re-exec in migrate().
+      addColumnIfMissing('participants', 'checkpoint_log', "TEXT NOT NULL DEFAULT '[]'");
+      addColumnIfMissing('participants', 'section_times', "TEXT NOT NULL DEFAULT '{}'");
+      addColumnIfMissing('participants', 'completed_at', 'TEXT');
+      // Participants who already pressed Finish were, by definition, complete.
+      db.exec(
+        'UPDATE participants SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL',
+      );
     },
   },
 ];

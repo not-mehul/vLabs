@@ -75,6 +75,9 @@ export const LIMITS = Object.freeze({
   answer: 200,
   pattern: 120,
   captureName: 40,
+  /** Image library: file name length, bytes per image, images per upload batch. */
+  imageName: 80,
+  imageBytes: 3 * 1024 * 1024,
   /** Serialised JSON size of a whole template (bytes). */
   serialisedBytes: 900_000,
 });
@@ -422,6 +425,83 @@ export function maskExample(mask) {
   } catch {
     return '';
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Images                                                                    */
+/* -------------------------------------------------------------------------- */
+/**
+ * Markdown image syntax: ![alt](src "optional title"). Authors reference
+ * library images by file name (`rack.png`, or `images/rack.png` — only the
+ * base name counts). Anything with a scheme (`https:`, `data:`) or a leading
+ * slash is left alone and is NOT a library reference.
+ */
+export const IMAGE_MD_RE = /!\[([^\]]*)\]\(\s*<?((?:\{\{[^}]*\}\}|[^)\s>])+)>?(\s+"[^"]*")?\s*\)/g;
+
+/** Allowed image types (sniffed on upload, not trusted from the client). */
+export const IMAGE_MIMES = Object.freeze({
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+});
+
+/** Normalise an authored image file name: base name, safe characters, bounded. */
+export function normaliseImageName(raw) {
+  const base = String(raw ?? '')
+    .trim()
+    .split(/[\\/]/)
+    .pop();
+  const clean = base
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+\./g, '.')
+    .replace(/\.-+/g, '.')
+    .replace(/^[-.]+|-+$/g, '');
+  return clean.slice(0, LIMITS.imageName);
+}
+
+/** Library name referenced by a Markdown image src, or null when it is a URL. */
+export function imageRefName(src) {
+  const s = String(src ?? '').trim();
+  if (!s || /^[a-z][a-z0-9+.-]*:/i.test(s) || s.startsWith('/') || s.startsWith('#')) return null;
+  return normaliseImageName(decodeURIComponent(s));
+}
+
+/**
+ * Every library image referenced anywhere in a template, with locations.
+ * References that contain a placeholder (per-seat image names such as
+ * `bench-{{ SEAT_ID }}.png`) are reported with `dynamic: true` and cannot be
+ * checked against the library at save time.
+ *
+ * @returns {Array<{name:string, where:string, dynamic:boolean}>}
+ */
+export function findImageRefs(tpl) {
+  const out = [];
+  for (const field of templateTextFields(tpl)) {
+    if (field.defines || typeof field.text !== 'string') continue;
+    for (const m of field.text.matchAll(IMAGE_MD_RE)) {
+      const dynamic = /\{\{/.test(m[2]);
+      const name = dynamic ? m[2] : imageRefName(m[2]);
+      if (!name) continue;
+      out.push({ name, where: field.where, dynamic });
+    }
+  }
+  return out;
+}
+
+/** Distinct referenced image names missing from `available` (names, any case). */
+export function findMissingImages(tpl, available) {
+  const have = new Set([...(available || [])].map((n) => String(n).toLowerCase()));
+  const seen = new Set();
+  const out = [];
+  for (const ref of findImageRefs(tpl)) {
+    if (ref.dynamic) continue;
+    const key = ref.name.toLowerCase();
+    if (have.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
 }
 
 /** Total number of steps across all sections. */

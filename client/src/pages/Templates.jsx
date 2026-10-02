@@ -124,91 +124,93 @@ export default function Templates() {
               : 'No active templates.'}
           </p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Sections</th>
-                <th>Steps</th>
-                <th>Version</th>
-                <th>Sessions</th>
-                <th>Updated</th>
-                <th>Last edited by</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((t) => {
-                const archived = Boolean(t.archived_at);
-                return (
-                  <tr key={t.id} className={archived ? 'row--archived' : ''}>
-                    <td>
-                      <div className="table__primary">
-                        {t.title}
-                        {archived && <span className="tag tag--archived">Archived</span>}
-                      </div>
-                      {t.description && <div className="muted small">{t.description}</div>}
-                    </td>
-                    <td>{t.section_count}</td>
-                    <td>{t.step_count}</td>
-                    <td>v{t.version}</td>
-                    <td className="muted">
-                      {t.session_count}
-                      {t.active_session_count > 0 && (
-                        <span className="status-live"> · {t.active_session_count} live</span>
-                      )}
-                    </td>
-                    <td className="muted">{formatDateTime(t.updated_at)}</td>
-                    <td className="muted">{t.updated_by || '—'}</td>
-                    <td className="table__actions">
-                      <button
-                        className="btn btn--sm btn--icon btn--ghost"
-                        onClick={() => navigate(`/instructor/templates/${t.id}`)}
-                        title="Edit template"
-                        aria-label={`Edit ${t.title}`}
-                      >
-                        <Icon name="edit" size={16} />
-                      </button>
-                      {archived ? (
-                        <>
-                          <button
-                            className="btn btn--sm btn--icon btn--ghost"
-                            onClick={() => handleRestore(t)}
-                            title="Restore template"
-                            aria-label={`Restore ${t.title}`}
-                          >
-                            <Icon name="undo" size={16} />
-                          </button>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th className="col--sm">Sections</th>
+                  <th className="col--sm">Steps</th>
+                  <th className="col--md">Version</th>
+                  <th>Sessions</th>
+                  <th className="col--lg">Updated</th>
+                  <th className="col--lg">Last edited by</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((t) => {
+                  const archived = Boolean(t.archived_at);
+                  return (
+                    <tr key={t.id} className={archived ? 'row--archived' : ''}>
+                      <td>
+                        <div className="table__primary">
+                          {t.title}
+                          {archived && <span className="tag tag--archived">Archived</span>}
+                        </div>
+                        {t.description && <div className="muted small">{t.description}</div>}
+                      </td>
+                      <td className="col--sm">{t.section_count}</td>
+                      <td className="col--sm">{t.step_count}</td>
+                      <td className="col--md">v{t.version}</td>
+                      <td className="muted">
+                        {t.session_count}
+                        {t.active_session_count > 0 && (
+                          <span className="status-live"> · {t.active_session_count} live</span>
+                        )}
+                      </td>
+                      <td className="muted col--lg">{formatDateTime(t.updated_at)}</td>
+                      <td className="muted col--lg">{t.updated_by || '—'}</td>
+                      <td className="table__actions">
+                        <button
+                          className="btn btn--sm btn--icon btn--ghost"
+                          onClick={() => navigate(`/instructor/templates/${t.id}`)}
+                          title="Edit template"
+                          aria-label={`Edit ${t.title}`}
+                        >
+                          <Icon name="edit" size={16} />
+                        </button>
+                        {archived ? (
+                          <>
+                            <button
+                              className="btn btn--sm btn--icon btn--ghost"
+                              onClick={() => handleRestore(t)}
+                              title="Restore template"
+                              aria-label={`Restore ${t.title}`}
+                            >
+                              <Icon name="undo" size={16} />
+                            </button>
+                            <button
+                              className="btn btn--sm btn--icon btn--danger-ghost"
+                              onClick={() => handleDeleteForever(t)}
+                              disabled={t.active_session_count > 0}
+                              title={
+                                t.active_session_count > 0
+                                  ? 'End its live sessions before deleting permanently'
+                                  : 'Delete permanently'
+                              }
+                              aria-label={`Delete ${t.title} permanently`}
+                            >
+                              <Icon name="trash" size={16} />
+                            </button>
+                          </>
+                        ) : (
                           <button
                             className="btn btn--sm btn--icon btn--danger-ghost"
-                            onClick={() => handleDeleteForever(t)}
-                            disabled={t.active_session_count > 0}
-                            title={
-                              t.active_session_count > 0
-                                ? 'End its live sessions before deleting permanently'
-                                : 'Delete permanently'
-                            }
-                            aria-label={`Delete ${t.title} permanently`}
+                            onClick={() => handleArchive(t)}
+                            title="Archive template"
+                            aria-label={`Archive ${t.title}`}
                           >
                             <Icon name="trash" size={16} />
                           </button>
-                        </>
-                      ) : (
-                        <button
-                          className="btn btn--sm btn--icon btn--danger-ghost"
-                          onClick={() => handleArchive(t)}
-                          title="Archive template"
-                          aria-label={`Archive ${t.title}`}
-                        >
-                          <Icon name="trash" size={16} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <p className="muted small">

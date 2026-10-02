@@ -21,9 +21,18 @@ import {
   IDENT_RE,
   BUILTIN_PLACEHOLDERS,
   BUILTIN_IDENTIFIERS,
+  IMAGE_MD_RE,
   compileMask,
   matchMask,
+  imageRefName,
 } from '../../../shared/template-schema.js';
+
+/**
+ * Context key under which the image name → URL map rides along with the
+ * resolved variables. A Symbol so it is invisible to JSON.stringify /
+ * Object.entries (the instructor preview lists the context's entries).
+ */
+export const IMAGES = Symbol('images');
 
 // ---------------------------------------------------------------------------
 // Safe arithmetic / string expression evaluator
@@ -308,6 +317,8 @@ export const RESERVED_NAMES = Object.freeze([...BUILTIN_PLACEHOLDERS, ...BUILTIN
  *                                 (name → canonical value); exposed as placeholders
  *                                 only, never to formulas (they do not exist yet
  *                                 when the template is validated).
+ * @param {Map}    [who.images]    lower-cased image name → URL (see lib/images.js);
+ *                                 attached under the IMAGES symbol for injectVariables.
  * @returns {Object} Map of placeholder name -> resolved value.
  */
 export function resolveVariables(variables, seatId, who = {}) {
@@ -359,6 +370,10 @@ export function resolveVariables(variables, seatId, who = {}) {
     context[name] = value;
   }
 
+  if (who.images) {
+    Object.defineProperty(context, IMAGES, { value: who.images, enumerable: false });
+  }
+
   return context;
 }
 
@@ -374,11 +389,33 @@ export function resolveVariables(variables, seatId, who = {}) {
  */
 export function injectVariables(text, context) {
   if (typeof text !== 'string') return text;
-  return text.replace(PLACEHOLDER_RE, (_match, name) =>
+  const out = text.replace(PLACEHOLDER_RE, (_match, name) =>
     Object.prototype.hasOwnProperty.call(context, name)
       ? String(context[name])
       : `⟨missing:${name}⟩`,
   );
+  return context && context[IMAGES] ? injectImages(out, context[IMAGES]) : out;
+}
+
+/**
+ * Rewrite Markdown image references that name a library image
+ * (`![alt](rack.png)`) to the image's served URL. Runs AFTER placeholder
+ * substitution, so per-seat names like `bench-{{ SEAT_ID }}.png` work. URLs
+ * (`https:`, `data:`, `/…`) are left untouched; an unknown name is left as
+ * written (it renders as a broken image — validation refuses to save such a
+ * template, so this only happens for dynamic names that don't resolve).
+ *
+ * @param {string} text
+ * @param {Map<string,string>} images lower-cased name → URL
+ */
+export function injectImages(text, images) {
+  if (typeof text !== 'string' || !images || images.size === 0) return text;
+  return text.replace(IMAGE_MD_RE, (match, alt, src, title = '') => {
+    const name = imageRefName(src);
+    if (!name) return match;
+    const url = images.get(name.toLowerCase());
+    return url ? `![${alt}](${url}${title})` : match;
+  });
 }
 
 // ---------------------------------------------------------------------------

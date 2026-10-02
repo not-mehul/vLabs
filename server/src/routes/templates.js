@@ -5,6 +5,7 @@ import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
 import { renderManual, countSteps, injectVariables, FUNCTION_NAMES } from '../lib/templating.js';
 import { maskExample } from '../../../shared/template-schema.js';
+import { imageNames, imageUrlMap } from '../lib/images.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 
@@ -161,7 +162,7 @@ router.get('/:id', (req, res) => {
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const clean = validateTemplatePayload(req.body);
+    const clean = validateTemplatePayload(req.body, { imageNames: imageNames() });
     const info = q.insert.run(
       clean.title,
       clean.description,
@@ -191,7 +192,7 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const existing = loadOr404(req);
-    const clean = validateTemplatePayload(req.body);
+    const clean = validateTemplatePayload(req.body, { imageNames: imageNames() });
     q.update.run(
       clean.title,
       clean.description,
@@ -300,7 +301,7 @@ router.post(
     let variables;
 
     if (req.body?.draft) {
-      const clean = validateTemplatePayload(req.body.draft);
+      const clean = validateTemplatePayload(req.body.draft, { imageNames: imageNames() });
       content = clean.content;
       variables = clean.variables;
     } else {
@@ -317,6 +318,7 @@ router.post(
       firstName: name(req.body?.first_name, 'Sample'),
       lastName: name(req.body?.last_name, 'Participant'),
       captured: {},
+      images: imageUrlMap(),
     };
     for (const section of content) {
       for (const step of section.steps || []) {

@@ -239,6 +239,105 @@ for the new seed flow plus an end-to-end pattern → capture → later-step test
   limits, error catalogue, checklist, four validated example templates, JSON
   format). Linked from the README.
 - Mask fix found while validating the guide's examples: an **escaped**
-  character (`\.`, `\/`) is now a *required* literal; previously escaping
+  character (`\.`, `\/`) is now a _required_ literal; previously escaping
   only disabled wildcard meaning and the punctuation stayed optional, so
   `*\/pull\/*` accepted `…/pulls/42`.
+
+## 1.4.0 — images, instructor monitor overhaul, completion fix (2026-10-02)
+
+### Image library
+
+- New instance-wide library: `POST /api/images?name=…` (raw body, type
+  sniffed from magic bytes — PNG/JPEG/GIF/WebP ≤ 3 MB; HTML/SVG rejected),
+  `GET /api/images` (list), `GET /api/images/:id/references`,
+  `DELETE /api/images/:id` (409 while a template or active session uses it).
+  Served publicly at `GET /api/images/<random id>/<name>`, cacheable;
+  replacing a name issues a new id. Blobs live in SQLite (`images` table) so
+  backups carry them.
+- Markdown references images **by file name**: `![alt](rack.png)` (folders
+  ignored, case-insensitive). `injectImages` rewrites references to URLs at
+  render time, after placeholders — so `![b](bench-{{ SEAT_ID }}.png)` picks a
+  per-seat file. The name → URL map rides on the context under a Symbol.
+- Validation refuses to save a template that references an image missing
+  from the library (location reported). Editor: **Settings → Images** panel
+  (upload/drag-drop, thumbnails, copy-snippet, delete with reference check),
+  a missing-images banner after `.md` import with **Upload missing**, and
+  import lands on Settings when images are needed.
+- Client sanitiser drops `<img>` sources other than `/api/images/…` and
+  `data:image/…` (shown as "(unavailable)" instead of a broken icon).
+
+### Instructor monitor
+
+- **Where everyone is**: one card per section (seats here / seats past, step
+  and checkpoint counts) plus a Complete card, replacing the bar list.
+- Participant table reduced to **# · Participant · Section (with title) ·
+  Progress · Time on section · Status**; rows still colour slow (8 min) /
+  stuck (15 min) / complete; click (or Enter) opens a **slide-over** with
+  totals, time per section (bars), every checkpoint with the accepted answer
+  and all wrong attempts as typed, hints opened, solutions revealed and
+  captured values. Live-refreshes every 5 s; Esc / scrim closes.
+- New `GET /api/sessions/:id/participants/:pid`; session detail gains
+  `complete_count`, per-section `checkpoint_count` / `seats_past`; export gains
+  `complete`, `completed_at`, `wrong_attempts`, `section_seconds`.
+
+### Tracking + completion fix
+
+- `participants.checkpoint_log` records every attempt (`{k, a, ok, at}`,
+  capped at 200; re-submitting a cleared checkpoint is idempotent and not
+  logged). `section_times` accumulates seconds per section when the
+  participant moves; the open visit is added live.
+- **Bug fixed:** a participant who cleared everything but kept reviewing was
+  shown as still on the last section. `completed_at` is now set server-side
+  the moment the manual is cleared (last checkpoint, or opening a
+  checkpoint-free final section); status becomes _Complete_, the clock
+  freezes (total time = joined → completed, later visits not accumulated),
+  "time on section" shows —. `finished_at` still records pressing Finish.
+  `/content` and `/status` expose `completed` alongside `finished`.
+- Migration 4 (additive): `images` table; `participants.checkpoint_log`,
+  `section_times`, `completed_at` (back-filled from `finished_at`).
+
+### UI consistency + laptop / iPad pass
+
+Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
+768–834 portrait) and made the stylesheet responsive and touch-friendly:
+
+- Breakpoints 1024 / 900 / 820 / 640 / 480 replace the single 800 px rule:
+  editor preview stacks below 1024; secondary table columns hide in priority
+  order (`col--lg` / `col--md` / `col--sm`) and every table sits in a
+  horizontally scrolling `.table-wrap`; primary nav drops to its own row on
+  tablets; monitor stats become a 2×2 grid with actions below; drawer goes
+  full-width with safe-area padding; checkpoint input + Unlock, section nav,
+  hint/variable rows and the create-session row stack on narrow widths.
+- `@media (pointer: coarse)`: 44 px buttons (40/36 for sm/xs), 44 px icon
+  buttons, taller chips/tabs/hint toggles/stepper nodes, 16 px inputs and
+  textareas (no iOS focus zoom), hover styles neutralised.
+- Base: `-webkit-text-size-adjust`, `touch-action: manipulation`, tap
+  highlight off, `overscroll-behavior`, safe-area insets on headers/content,
+  `prefers-reduced-motion`, consistent `min-height` on buttons/inputs, a
+  real chevron on `<select>`, shared `--panel-pad` so panels/cards/editor
+  sections/stat rows line up, fluid `clamp()` headings, banner colours bound
+  to the theme's brand variable (they were hard-coded to light-mode blue).
+- Drawer locks background scroll (`body.has-drawer`); section cards use a
+  quieter accent for "seats here".
+
+### Exports
+
+- JSON export now includes a `sections[]` / `checkpoints[]` index, and per
+  participant `section_times[]` (seconds per section with titles),
+  `checkpoints[]` (cleared, accepted answer as typed, attempt count, every
+  wrong attempt with timestamp), `hints_opened[]`, `solutions_revealed_list[]`,
+  plus a flat chronological `attempts[]` log across the class.
+- Participant CSV (`<session>-participants.csv`) adds `status`, one
+  `time_s<N>_<title>` column per section, and per checkpoint
+  `cp_<s.i>_cleared / _answer / _attempts / _wrong`, plus readable
+  `hints_opened` and `solutions_revealed_list` columns — built from the
+  export's own index so every row has the same shape.
+- New **Attempts CSV** button (`<session>-attempts.csv`): one row per
+  checkpoint submission, correct and incorrect, in time order.
+
+### Docs
+
+`docs/TEMPLATE_GUIDE.md`: new **Links** and **Images** sections (syntax,
+rules, per-seat images, portability), completion semantics, limits, error
+catalogue and checklist updated. README: highlights, API, data model,
+upgrade notes.

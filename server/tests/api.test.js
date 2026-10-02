@@ -332,6 +332,131 @@ test('checkpoint validates server-side (incl. alternatives) and unlocks the next
   assert.match(wrapUp, /ABCD\.1234\.WXYZ/);
 });
 
+test('opening the checkpoint-free last section completes the manual; detail shows attempts + timings', async () => {
+  // Section 3 (Wrap Up) has no checkpoint: entering it is what completes the lab.
+  const before = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
+  const rowBefore = before.data.participants[0];
+  assert.equal(rowBefore.complete, false);
+  assert.equal(rowBefore.status, 'active');
+
+  const progress = await call('/api/participant/progress', {
+    method: 'POST',
+    body: { section_index: 2 },
+    token: participantToken,
+  });
+  assert.equal(progress.status, 200);
+  assert.equal(progress.data.completed, true);
+
+  const detail = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
+  const row = detail.data.participants[0];
+  assert.equal(row.complete, true, 'complete without pressing Finish');
+  assert.equal(row.status, 'finished');
+  assert.ok(row.completed_at, 'completed_at recorded');
+  assert.equal(row.finished, false, 'Finish not pressed');
+  assert.equal(row.progress_pct, 100);
+  assert.equal(row.seconds_on_current_section, 0, 'clock stopped');
+  assert.equal(detail.data.complete_count, 1);
+  // Section flow counts the complete seat under "complete", not "here".
+  assert.equal(detail.data.section_distribution[2].seats_here, 0);
+  assert.equal(detail.data.section_distribution[0].seats_past, 1);
+
+  // Reviewing an earlier section afterwards keeps them complete and frozen.
+  await call('/api/participant/progress', {
+    method: 'POST',
+    body: { section_index: 0 },
+    token: participantToken,
+  });
+  const again = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
+  assert.equal(again.data.participants[0].complete, true);
+  assert.equal(again.data.participants[0].total_seconds, row.total_seconds);
+
+  // Per-participant detail: wrong attempts were logged with what was typed.
+  const pd = await call(`/api/sessions/${sessionId}/participants/${row.id}`, {
+    token: instructorToken,
+  });
+  assert.equal(pd.status, 200);
+  assert.equal(pd.data.checkpoints.length, 2);
+  const serial = pd.data.checkpoints.find((c) => c.key === '0.3');
+  assert.equal(serial.mode, 'pattern');
+  assert.equal(serial.cleared, true);
+  assert.equal(serial.accepted_answer, 'abcd1234wxyz', 'shown as typed');
+  assert.deepEqual(
+    serial.wrong_attempts.map((a) => a.answer),
+    ['ABCD.1234'],
+  );
+  const ip = pd.data.checkpoints.find((c) => c.key === '1.1');
+  assert.equal(ip.accepted_answer, '10.0.0.101/24');
+  assert.deepEqual(
+    ip.wrong_attempts.map((a) => a.answer),
+    ['1.2.3.4'],
+  );
+  assert.equal(pd.data.wrong_attempts, 2);
+  assert.equal(pd.data.hints.length, 1);
+  assert.equal(pd.data.hints[0].label, 'How do I read my IP?');
+  assert.equal(pd.data.solutions.length, 1);
+  assert.equal(pd.data.section_times.length, 3);
+  assert.ok(pd.data.section_times.every((t) => typeof t.seconds === 'number'));
+  assert.equal(pd.data.captured.SERIAL, 'ABCD.1234.WXYZ');
+  // Unknown participant / wrong session → 404.
+  const nope = await call(`/api/sessions/${sessionId}/participants/999999`, {
+    token: instructorToken,
+  });
+  assert.equal(nope.status, 404);
+
+  // Export carries the full detail: section index, checkpoint index, per
+  // participant times/answers/attempts/hints, and a flat chronological log.
+  const exported = await call(`/api/sessions/${sessionId}/export`, { token: instructorToken });
+  const doc = exported.data;
+  assert.deepEqual(
+    doc.sections.map((x) => x.number),
+    [1, 2, 3],
+  );
+  assert.deepEqual(
+    doc.checkpoints.map((c) => [c.key, c.mode, c.capture]),
+    [
+      ['0.3', 'pattern', 'SERIAL'],
+      ['1.1', 'exact', null],
+    ],
+  );
+  const ex = doc.participants[0];
+  assert.equal(ex.complete, true);
+  assert.equal(ex.wrong_attempts, 2);
+  assert.equal(ex.section_seconds.length, 3);
+  assert.deepEqual(
+    ex.section_times.map((t) => [t.number, t.title, typeof t.seconds]),
+    [
+      [1, 'Section 1 · Bench Preparation', 'number'],
+      [2, 'Section 2 · Network Configuration', 'number'],
+      [3, 'Section 3 · Wrap Up', 'number'],
+    ],
+  );
+  const exSerial = ex.checkpoints.find((c) => c.key === '0.3');
+  assert.equal(exSerial.cleared, true);
+  assert.equal(exSerial.accepted_answer, 'abcd1234wxyz');
+  assert.deepEqual(
+    exSerial.wrong_attempts.map((a) => a.answer),
+    ['ABCD.1234'],
+  );
+  assert.ok(exSerial.wrong_attempts[0].at, 'attempt timestamps');
+  assert.equal(ex.hints_opened.length, 1);
+  assert.equal(ex.hints_opened[0].label, 'How do I read my IP?');
+  assert.equal(ex.solutions_revealed_list.length, 1);
+  // Flat log: 2 wrong + 2 correct, chronological, correct flag set.
+  assert.equal(doc.attempts.length, 4);
+  assert.deepEqual(
+    doc.attempts.map((a) => [a.checkpoint, a.correct]),
+    [
+      ['0.3', false],
+      ['0.3', true],
+      ['1.1', false],
+      ['1.1', true],
+    ],
+  );
+  for (let i = 1; i < doc.attempts.length; i += 1) {
+    assert.ok(doc.attempts[i - 1].at <= doc.attempts[i].at, 'sorted by time');
+  }
+});
+
 test('status poll reports liveness + template version without shipping the manual', async () => {
   const { status, data } = await call('/api/participant/status', {
     token: participantToken,
@@ -347,6 +472,123 @@ test('status poll reports liveness + template version without shipping the manua
 /* ------------------------------------------------------------------------ */
 /*  Templates: validation, archive, restore, permanent delete                */
 /* ------------------------------------------------------------------------ */
+
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+async function upload(
+  name,
+  bytes,
+  { token = instructorToken, replace = false, type = 'image/png' } = {},
+) {
+  const res = await fetch(
+    `${base}/api/images?name=${encodeURIComponent(name)}${replace ? '&replace=1' : ''}`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': type },
+      body: bytes,
+    },
+  );
+  const text = await res.text();
+  return { status: res.status, data: text ? JSON.parse(text) : null };
+}
+
+test('image library: upload is sniffed, served publicly by id, replace/delete rules, render rewrite', async () => {
+  // Instructor-only upload.
+  const anon = await upload('rack.png', PNG_1X1, { token: participantToken });
+  assert.equal(anon.status, 401);
+  // Not an image (even if labelled as one) → 415.
+  const html = await upload('evil.png', Buffer.from('<html><script>1</script></html>'));
+  assert.equal(html.status, 415);
+  // Happy path.
+  const up = await upload('images/Rack Diagram.png', PNG_1X1);
+  assert.equal(up.status, 201);
+  assert.equal(up.data.name, 'Rack-Diagram.png', 'base name, sanitised');
+  assert.equal(up.data.mime, 'image/png');
+  assert.equal(up.data.width, 1);
+  assert.match(up.data.url, /^\/api\/images\/[A-Za-z0-9_-]{22}\/Rack-Diagram\.png$/);
+  // Same name again → 409 with the existing record; replace=1 issues a new id.
+  const dup = await upload('rack-diagram.png', PNG_1X1);
+  assert.equal(dup.status, 409);
+  assert.equal(dup.data.code, 'IMAGE_EXISTS');
+  const rep = await upload('rack-diagram.png', PNG_1X1, { replace: true });
+  assert.equal(rep.status, 200);
+  assert.equal(rep.data.replaced, true);
+  assert.notEqual(rep.data.id, up.data.id);
+  assert.equal(rep.data.name, 'Rack-Diagram.png', 'original casing kept on replace');
+  // Served without a token; old id is gone.
+  const served = await fetch(`${base}${rep.data.url}`);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get('content-type'), 'image/png');
+  assert.equal((await served.arrayBuffer()).byteLength, PNG_1X1.length);
+  assert.equal((await fetch(`${base}${up.data.url}`)).status, 404);
+  // Listing.
+  const list = await call('/api/images', { token: instructorToken });
+  assert.ok(list.data.images.some((i) => i.id === rep.data.id));
+
+  // A template may only reference images that exist.
+  const missing = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: {
+      ...tinyTemplate('Img missing'),
+      content: [{ title: 'S', steps: [{ type: 'desk', title: 't', body: 'see ![r](nope.png)' }] }],
+    },
+  });
+  assert.equal(missing.status, 400);
+  assert.match(
+    missing.data.details.join(';'),
+    /Image "nope\.png" referenced in Section 1 · step 1 body/,
+  );
+  const withImg = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: {
+      ...tinyTemplate('Img ok'),
+      content: [
+        {
+          title: 'S',
+          steps: [
+            {
+              type: 'desk',
+              title: 't',
+              body: 'see ![rack](RACK-DIAGRAM.png "The rack") and ![d](bench-{{ SEAT_ID }}.png)',
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(withImg.status, 201, JSON.stringify(withImg.data));
+  // Rendering (preview) rewrites the reference to the served URL; the dynamic
+  // one has no library match and is left as written.
+  const preview = await call(`/api/templates/${withImg.data.id}/preview`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { seat_id: 3 },
+  });
+  const body = preview.data.sections[0].steps[0].body;
+  assert.ok(body.includes(`![rack](${rep.data.url} "The rack")`), body);
+  assert.ok(body.includes('![d](bench-3.png)'), body);
+  // References + delete refusal while a template uses it.
+  const refs = await call(`/api/images/${rep.data.id}/references`, { token: instructorToken });
+  assert.ok(refs.data.templates.some((t) => t.id === withImg.data.id));
+  const del = await call(`/api/images/${rep.data.id}`, {
+    method: 'DELETE',
+    token: instructorToken,
+  });
+  assert.equal(del.status, 409);
+  // Archive the template (archived templates don't block), then delete works.
+  await call(`/api/templates/${withImg.data.id}`, { method: 'DELETE', token: instructorToken });
+  const del2 = await call(`/api/images/${rep.data.id}`, {
+    method: 'DELETE',
+    token: instructorToken,
+  });
+  assert.equal(del2.status, 204);
+  assert.equal((await fetch(`${base}${rep.data.url}`)).status, 404);
+});
 
 test('template validation rejects unknown placeholders and bad formulas with details', async () => {
   const bad = tinyTemplate('Broken');
@@ -627,11 +869,14 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 3: captured_values)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 3);
+test('database schema version is recorded (migration 4: images, attempt log, section times)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 4);
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()
     .map((c) => c.name);
-  assert.ok(cols.includes('captured_values'));
+  for (const c of ['captured_values', 'checkpoint_log', 'section_times', 'completed_at']) {
+    assert.ok(cols.includes(c), c);
+  }
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());
 });

@@ -27,6 +27,14 @@ const P = {
       <path d="M12 6.5v13" />
     </>
   ),
+  // Picture — image library
+  image: (
+    <>
+      <rect x="3.5" y="5" width="17" height="14" rx="1.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M20.5 15.5 15.8 11l-6 6.5M12.3 14.4l-2.1-2-4.7 4.6" />
+    </>
+  ),
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />

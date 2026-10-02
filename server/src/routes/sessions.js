@@ -4,7 +4,7 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
-import { isSectionCleared, stepHasCheckpoint } from '../lib/templating.js';
+import { isSectionCleared, stepHasCheckpoint, checkpointMode } from '../lib/templating.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
 import { log } from '../lib/logger.js';
 
@@ -39,6 +39,7 @@ const q = {
       ORDER BY s.created_at DESC`,
   ),
   participants: db.prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number'),
+  participant: db.prepare('SELECT * FROM participants WHERE id = ? AND session_id = ?'),
   terminate: db.prepare('UPDATE sessions SET is_active = 0, ended_at = ? WHERE id = ?'),
   extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?'),
   remove: db.prepare('DELETE FROM sessions WHERE id = ?'),
@@ -95,8 +96,20 @@ function captureNamesOf(sections) {
   return out;
 }
 
+/** Seconds per section index, including the open visit (unless complete). */
+function sectionTimesView(p, sectionCount, now) {
+  const stored = safeObject(p.section_times);
+  const out = [];
+  for (let i = 0; i < sectionCount; i += 1) out.push(Number(stored[String(i)]) || 0);
+  if (!p.completed_at && p.current_section < sectionCount) {
+    out[p.current_section] += secondsBetween(p.section_entered_at, now);
+  }
+  return out;
+}
+
 /** Build the analytics view for one participant. */
 function participantView(p, sections) {
+  const now = nowIso();
   const completed = new Set(JSON.parse(p.completed_checkpoints));
   const sectionCount = sections.length;
   // Completed = sections the participant has navigated past (monotonic high-
@@ -111,8 +124,17 @@ function participantView(p, sections) {
   ) {
     completedSections = sectionCount;
   }
+  // "Complete" is recorded server-side the moment the manual is cleared, so a
+  // participant who keeps reviewing (never presses Finish) still counts and
+  // their clock stays stopped. Rows from before migration 4 fall back to the
+  // cleared-everything computation.
+  const completedAt =
+    p.completed_at ||
+    (completedSections === sectionCount && sectionCount > 0 ? p.finished_at || null : null);
+  const complete = Boolean(completedAt) || (sectionCount > 0 && completedSections === sectionCount);
   const finished = Boolean(p.finished_at);
-  const secondsSinceSeen = secondsBetween(p.last_seen_at, nowIso());
+  const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
+  const clockEnd = completedAt || (complete ? now : null);
   return {
     id: p.id,
     seat_number: p.seat_number,
@@ -120,23 +142,107 @@ function participantView(p, sections) {
     last_name: p.last_name,
     name: `${p.first_name} ${p.last_name}`.trim(),
     current_section: p.current_section,
+    max_section: p.max_section,
     completed_sections: completedSections,
     completed_checkpoints: [...completed],
     captured: safeObject(p.captured_values),
     hints_taken: JSON.parse(p.hints_taken || '[]').length,
     solutions_revealed: JSON.parse(p.revealed_solutions || '[]').length,
+    wrong_attempts: (safeArray(p.checkpoint_log) || []).filter((e) => !e.ok).length,
+    complete,
+    completed_at: completedAt,
     finished,
     finished_at: p.finished_at,
-    status: finished ? 'finished' : secondsSinceSeen < 90 ? 'active' : 'idle',
-    seconds_on_current_section: secondsBetween(p.section_entered_at, nowIso()),
-    total_seconds: finished
-      ? secondsBetween(p.joined_at, p.finished_at)
-      : secondsBetween(p.joined_at, nowIso()),
+    status: complete ? 'finished' : secondsSinceSeen < 90 ? 'active' : 'idle',
+    seconds_on_current_section: complete ? 0 : secondsBetween(p.section_entered_at, now),
+    total_seconds: secondsBetween(p.joined_at, clockEnd || now),
+    section_seconds: sectionTimesView(p, sectionCount, now),
     progress_pct: sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsSinceSeen,
   };
+}
+
+function safeArray(json) {
+  try {
+    const v = JSON.parse(json || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Everything the instructor's per-participant drawer needs, resolved against
+ * the session's own copy of the manual so titles/labels are right even if the
+ * master template changed since. Answers are shown as typed; the authored
+ * expected answers are NOT included (they are per-seat secrets and the
+ * instructor can open the template).
+ */
+function participantDetail(p, sections) {
+  const view = participantView(p, sections);
+  const stepTitle = (si, sti) => {
+    const sec = sections[si];
+    const step = sec?.steps?.[sti];
+    return {
+      section_index: si,
+      step_index: sti,
+      section_title: sec?.title || `Section ${si + 1}`,
+      step_title: step?.title || `Step ${sti + 1}`,
+    };
+  };
+  const parseKey = (k) =>
+    String(k)
+      .split('.')
+      .map((n) => parseInt(n, 10));
+
+  // Checkpoints in manual order with their attempts.
+  const log = safeArray(p.checkpoint_log);
+  const checkpoints = [];
+  sections.forEach((sec, si) => {
+    (sec.steps || []).forEach((step, sti) => {
+      if (!stepHasCheckpoint(step)) return;
+      const key = `${si}.${sti}`;
+      const attempts = log
+        .filter((e) => e.k === key)
+        .map((e) => ({ answer: e.a, correct: Boolean(e.ok), at: e.at }));
+      const accepted = attempts.find((a) => a.correct);
+      checkpoints.push({
+        key,
+        ...stepTitle(si, sti),
+        prompt: step.checkpoint.prompt || 'Enter the value to continue',
+        mode: checkpointMode(step),
+        capture: step.checkpoint.capture || null,
+        cleared: view.completed_checkpoints.includes(key),
+        cleared_at: accepted?.at || null,
+        accepted_answer:
+          accepted?.answer ??
+          (step.checkpoint.capture ? (view.captured[step.checkpoint.capture] ?? null) : null),
+        wrong_attempts: attempts.filter((a) => !a.correct),
+        attempt_count: attempts.length,
+      });
+    });
+  });
+
+  const hints = safeArray(p.hints_taken).map((k) => {
+    const [si, sti, hi] = parseKey(k);
+    const label = sections[si]?.steps?.[sti]?.hints?.[hi]?.label || `Hint ${hi + 1}`;
+    return { key: k, ...stepTitle(si, sti), hint_index: hi, label };
+  });
+  const solutions = safeArray(p.revealed_solutions).map((k) => {
+    const [si, sti] = parseKey(k);
+    return { key: k, ...stepTitle(si, sti) };
+  });
+  const sectionTimes = sections.map((sec, i) => ({
+    index: i,
+    title: sec.title || `Section ${i + 1}`,
+    seconds: view.section_seconds[i] || 0,
+    current: !view.complete && p.current_section === i,
+    cleared: isSectionCleared(sec, i, new Set(view.completed_checkpoints)),
+  }));
+
+  return { ...view, checkpoints, hints, solutions, section_times: sectionTimes };
 }
 
 /** Common session summary fields. */
@@ -211,6 +317,19 @@ router.get('/', (req, res) => {
   res.json(rows.map((r) => ({ ...summarise(r), participant_count: r.participant_count })));
 });
 
+/**
+ * GET /api/sessions/:id/participants/:pid — one participant in depth:
+ * checkpoints with accepted answer + wrong attempts, hints opened, solutions
+ * revealed, time per section, captured values.
+ */
+router.get('/:id/participants/:pid', (req, res) => {
+  const row = ownedOr404(req);
+  const pid = Number(req.params.pid);
+  const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
+  if (!p) throw httpError(404, 'Participant not found');
+  res.json(participantDetail(p, JSON.parse(row.content)));
+});
+
 /** GET /api/sessions/:id — detail + live analytics dashboard data. */
 router.get('/:id', (req, res) => {
   const row = ownedOr404(req);
@@ -223,13 +342,19 @@ router.get('/:id', (req, res) => {
     index: i,
     title: s.title || `Section ${i + 1}`,
     step_count: (s.steps && s.steps.length) || 0,
+    checkpoint_count: (s.steps || []).filter((step) => stepHasCheckpoint(step)).length,
     has_checkpoint: (s.steps || []).some((step) => stepHasCheckpoint(step)),
-    seats_here: participants.filter((p) => p.current_section === i).length,
+    // Seats currently viewing this section (complete seats are counted under `complete`).
+    seats_here: participants.filter((p) => !p.complete && p.current_section === i).length,
+    // Seats that have moved past (or cleared) this section.
+    seats_past: participants.filter((p) => p.complete || p.max_section > i).length,
   }));
+  const completeCount = participants.filter((p) => p.complete).length;
 
   res.json({
     ...summarise(row),
     capture_names: captureNamesOf(sections),
+    complete_count: completeCount,
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
     section_count: sectionCount,
@@ -311,30 +436,131 @@ router.get('/:id/export', (req, res) => {
   const row = ownedOr404(req);
   const sections = JSON.parse(row.content);
   const captureNames = captureNamesOf(sections);
+
+  // Self-describing index of the manual so consumers (and the CSV builder)
+  // can lay out uniform per-section / per-checkpoint columns without parsing
+  // the template themselves.
+  const sectionIndex = sections.map((sec, i) => ({
+    index: i,
+    number: i + 1,
+    title: sec.title || `Section ${i + 1}`,
+    step_count: (sec.steps || []).length,
+  }));
+  const checkpointIndex = [];
+  sections.forEach((sec, si) => {
+    (sec.steps || []).forEach((step, sti) => {
+      if (!stepHasCheckpoint(step)) return;
+      checkpointIndex.push({
+        key: `${si}.${sti}`,
+        section_number: si + 1,
+        step_number: sti + 1,
+        section_title: sec.title || `Section ${si + 1}`,
+        step_title: step.title || `Step ${sti + 1}`,
+        prompt: step.checkpoint.prompt || 'Enter the value to continue',
+        mode: checkpointMode(step),
+        capture: step.checkpoint.capture || null,
+      });
+    });
+  });
+
   const participants = q.participants.all(row.id).map((p) => {
-    const view = participantView(p, sections);
+    const d = participantDetail(p, sections);
     return {
-      number: view.seat_number,
+      number: d.seat_number,
       first_name: p.first_name,
       last_name: p.last_name,
-      name: view.name,
+      name: d.name,
       // One key per captured variable (empty string until the seat gets there),
       // so every row has the same columns.
-      captured: Object.fromEntries(captureNames.map((n) => [n, view.captured[n] ?? ''])),
-      current_section: view.current_section + 1,
-      sections_completed: view.completed_sections,
+      captured: Object.fromEntries(captureNames.map((n) => [n, d.captured[n] ?? ''])),
+      current_section: d.current_section + 1,
+      sections_completed: d.completed_sections,
       total_sections: sections.length,
-      progress_pct: view.progress_pct,
-      checkpoints_cleared: view.completed_checkpoints.length,
-      hints_taken: view.hints_taken,
-      solutions_revealed: view.solutions_revealed,
-      finished: view.finished,
+      progress_pct: d.progress_pct,
+      checkpoints_cleared: d.completed_checkpoints.length,
+      hints_taken: d.hints.length,
+      solutions_revealed: d.solutions.length,
+      wrong_attempts: d.wrong_attempts,
+      complete: d.complete,
+      completed_at: d.completed_at,
+      finished: d.finished,
       finished_at: p.finished_at,
-      total_seconds: view.total_seconds,
+      total_seconds: d.total_seconds,
       joined_at: p.joined_at,
       last_seen_at: p.last_seen_at,
+      // Time spent per section, in manual order (seconds; the open visit of an
+      // in-progress seat is included up to export time).
+      section_seconds: d.section_seconds,
+      section_times: d.section_times.map((t) => ({
+        number: t.index + 1,
+        title: t.title,
+        seconds: t.seconds,
+        cleared: t.cleared,
+      })),
+      // Every checkpoint in the manual with what this seat typed: the accepted
+      // answer (as typed) and each incorrect attempt with its timestamp.
+      checkpoints: d.checkpoints.map((c) => ({
+        key: c.key,
+        section_number: c.section_index + 1,
+        step_number: c.step_index + 1,
+        step_title: c.step_title,
+        mode: c.mode,
+        capture: c.capture,
+        cleared: c.cleared,
+        cleared_at: c.cleared_at,
+        accepted_answer: c.accepted_answer,
+        attempt_count: c.attempt_count,
+        wrong_attempts: c.wrong_attempts.map((a) => ({ answer: a.answer, at: a.at })),
+      })),
+      hints_opened: d.hints.map((h) => ({
+        section_number: h.section_index + 1,
+        step_number: h.step_index + 1,
+        step_title: h.step_title,
+        hint_index: h.hint_index + 1,
+        label: h.label,
+      })),
+      solutions_revealed_list: d.solutions.map((x) => ({
+        section_number: x.section_index + 1,
+        step_number: x.step_index + 1,
+        step_title: x.step_title,
+      })),
     };
   });
+
+  // Flat chronological attempt log across the whole class — one row per
+  // submission — for spreadsheet analysis ("which checkpoint tripped people up").
+  const attempts = [];
+  for (const pr of participants) {
+    for (const c of pr.checkpoints) {
+      for (const a of c.wrong_attempts) {
+        attempts.push({
+          at: a.at,
+          number: pr.number,
+          name: pr.name,
+          checkpoint: c.key,
+          section_number: c.section_number,
+          step_number: c.step_number,
+          step_title: c.step_title,
+          answer: a.answer,
+          correct: false,
+        });
+      }
+      if (c.cleared && c.cleared_at) {
+        attempts.push({
+          at: c.cleared_at,
+          number: pr.number,
+          name: pr.name,
+          checkpoint: c.key,
+          section_number: c.section_number,
+          step_number: c.step_number,
+          step_title: c.step_title,
+          answer: c.accepted_answer,
+          correct: true,
+        });
+      }
+    }
+  }
+  attempts.sort((a, b) => String(a.at).localeCompare(String(b.at)) || a.number - b.number);
 
   res.json({
     exported_at: nowIso(),
@@ -351,7 +577,10 @@ router.get('/:id/export', (req, res) => {
       expires_at: row.expires_at,
       ended_at: row.ended_at,
     },
+    sections: sectionIndex,
+    checkpoints: checkpointIndex,
     participants,
+    attempts,
   });
 });
 

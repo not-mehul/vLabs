@@ -10,8 +10,9 @@ import {
 } from '../middleware/rateLimit.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { signParticipantToken } from '../lib/tokens.js';
-import { nowIso, parseUtc } from '../lib/time.js';
+import { nowIso, parseUtc, secondsBetween } from '../lib/time.js';
 import { log } from '../lib/logger.js';
+import { imageUrlMap } from '../lib/images.js';
 import {
   resolveVariables,
   matchCheckpoint,
@@ -45,14 +46,21 @@ const q = {
   touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?'),
   setCheckpoints: db.prepare(
     `UPDATE participants
-        SET completed_checkpoints = ?, captured_values = ?, last_seen_at = ?
+        SET completed_checkpoints = ?, captured_values = ?, checkpoint_log = ?, last_seen_at = ?
       WHERE id = ?`,
+  ),
+  logAttempt: db.prepare(
+    'UPDATE participants SET checkpoint_log = ?, last_seen_at = ? WHERE id = ?',
   ),
   setSection: db.prepare(
     `UPDATE participants
         SET current_section = ?, max_section = MAX(max_section, ?),
-            section_entered_at = ?, last_seen_at = ?
+            section_times = ?, section_entered_at = ?, last_seen_at = ?
       WHERE id = ?`,
+  ),
+  complete: db.prepare(
+    `UPDATE participants SET completed_at = ?, section_times = ?, last_seen_at = ?
+      WHERE id = ? AND completed_at IS NULL`,
   ),
   setHints: db.prepare('UPDATE participants SET hints_taken = ?, last_seen_at = ? WHERE id = ?'),
   setRevealed: db.prepare(
@@ -96,12 +104,73 @@ function capturedOf(p) {
   }
 }
 
+/** Checkpoint attempt log (newest last). Capped so a guessing seat can't grow it unbounded. */
+const MAX_LOG = 200;
+function logOf(p) {
+  try {
+    const v = JSON.parse(p.checkpoint_log || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Seconds spent per section on CLOSED visits ({ "0": 412 }). */
+function sectionTimesOf(p) {
+  try {
+    const v = JSON.parse(p.section_times || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Fold the open visit (section_entered_at → now) into the per-section totals. */
+function closeOpenVisit(p, times, now) {
+  const key = String(p.current_section);
+  times[key] = (Number(times[key]) || 0) + secondsBetween(p.section_entered_at, now);
+  return times;
+}
+
+/**
+ * Is the whole manual cleared? Every checkpoint in every section completed
+ * and the participant has reached the last section (so a checkpoint-free
+ * final section still has to be opened once).
+ */
+function manualComplete(sections, p, completed, reachedLast) {
+  const total = sections.length;
+  if (total === 0) return false;
+  const lastIdx = total - 1;
+  if (!(reachedLast || p.max_section >= lastIdx)) return false;
+  for (let s = 0; s < total; s += 1) {
+    if (!isSectionCleared(sections[s], s, completed)) return false;
+  }
+  return true;
+}
+
+/**
+ * Record completion the moment the manual is cleared: freezes the clock
+ * (total time = joined → completed) and lets the monitor show "Complete" even
+ * if the participant keeps reviewing instead of pressing Finish.
+ */
+function markCompleted(p, now) {
+  if (p.completed_at) return false;
+  const times = closeOpenVisit(p, sectionTimesOf(p), now);
+  const { changes } = q.complete.run(now, JSON.stringify(times), now, p.id);
+  if (changes) {
+    log.info('participant.completed', { participant: p.id, session: p.session_id });
+    p.completed_at = now;
+  }
+  return Boolean(changes);
+}
+
 /** The participant's full placeholder context: seat, names, formulas, captures. */
 function contextFor(p, variables) {
   return resolveVariables(variables, p.seat_number, {
     firstName: p.first_name,
     lastName: p.last_name,
     captured: capturedOf(p),
+    images: imageUrlMap(),
   });
 }
 
@@ -289,6 +358,7 @@ router.get(
       completed_sections: completedSections,
       progress_pct: total > 0 ? Math.round((completedSections / total) * 100) : 0,
       completed_checkpoints: [...completed],
+      completed: Boolean(p.completed_at),
       finished: Boolean(p.finished_at),
       expires_at: req.session.expires_at,
       template_version: req.session.template_version,
@@ -324,28 +394,54 @@ router.post(
     if (!stepHasCheckpoint(step)) throw httpError(400, 'This step has no checkpoint');
 
     const context = contextFor(p, variables);
+    const key = checkpointKey(si, sti);
+    const now = nowIso();
+    // Already cleared? Idempotent success; don't log a duplicate attempt.
+    if (completed.has(key)) {
+      noStore(res);
+      return res.json({
+        correct: true,
+        section_cleared: isSectionCleared(sections[si], si, completed),
+        unlocked_section: computeUnlockedSection(sections, completed),
+      });
+    }
     const { ok, value } = matchCheckpoint(step, context, answer);
+
+    // Attempt log for the instructor's per-participant view (what was typed,
+    // right or wrong). Bounded length; the text is capped too.
+    const entries = logOf(p);
+    entries.push({ k: key, a: answer.trim().slice(0, 200), ok: ok ? 1 : 0, at: now });
+    const trimmed = entries.slice(-MAX_LOG);
 
     noStore(res);
     if (!ok) {
+      q.logAttempt.run(JSON.stringify(trimmed), now, p.id);
       log.debug('checkpoint.wrong', { participant: p.id, section: si, step: sti });
       return res.status(200).json({ correct: false });
     }
 
-    completed.add(checkpointKey(si, sti));
+    completed.add(key);
     const captured = capturedOf(p);
     if (step.checkpoint.capture && value !== null) captured[step.checkpoint.capture] = value;
-    q.setCheckpoints.run(JSON.stringify([...completed]), JSON.stringify(captured), nowIso(), p.id);
+    q.setCheckpoints.run(
+      JSON.stringify([...completed]),
+      JSON.stringify(captured),
+      JSON.stringify(trimmed),
+      now,
+      p.id,
+    );
     log.info('checkpoint.cleared', {
       participant: p.id,
       session: req.session.id,
       section: si,
       step: sti,
     });
+    if (manualComplete(sections, p, completed, si === sections.length - 1)) markCompleted(p, now);
     res.json({
       correct: true,
       section_cleared: isSectionCleared(sections[si], si, completed),
       unlocked_section: computeUnlockedSection(sections, completed),
+      completed: Boolean(p.completed_at),
     });
   }),
 );
@@ -367,15 +463,23 @@ router.post(
     const completed = completedSetOf(p);
     if (si > computeUnlockedSection(sections, completed)) throw httpError(403, 'Section is locked');
 
+    const now = nowIso();
     if (si !== p.current_section) {
-      const now = nowIso();
-      // max_section is a monotonic high-water mark so progress never drops when
-      // a participant navigates back to review an earlier section.
-      q.setSection.run(si, si, now, now, p.id);
+      // Close the visit to the section being left (time-per-section analytics),
+      // then move. max_section is a monotonic high-water mark so progress never
+      // drops when a participant navigates back to review an earlier section.
+      // Once complete the clock is frozen: later visits are not accumulated.
+      const times = p.completed_at ? sectionTimesOf(p) : closeOpenVisit(p, sectionTimesOf(p), now);
+      q.setSection.run(si, si, JSON.stringify(times), now, now, p.id);
+      p.current_section = si;
+      p.section_entered_at = now;
+      p.max_section = Math.max(p.max_section, si);
     } else {
-      q.touch.run(nowIso(), p.id);
+      q.touch.run(now, p.id);
     }
-    res.json({ current_section: si });
+    // Opening a checkpoint-free final section is what completes such a manual.
+    if (manualComplete(sections, p, completed, si === sections.length - 1)) markCompleted(p, now);
+    res.json({ current_section: si, completed: Boolean(p.completed_at) });
   }),
 );
 
@@ -468,8 +572,10 @@ router.post(
       isSectionCleared(sections[total - 1], total - 1, completed);
     if (!done) throw httpError(400, 'Lab is not complete yet');
 
+    const now = nowIso();
+    markCompleted(p, now);
     if (!p.finished_at) {
-      q.finish.run(nowIso(), nowIso(), p.id);
+      q.finish.run(now, now, p.id);
       log.info('participant.finished', { participant: p.id, session: req.session.id });
     }
     res.json({ finished: true });
@@ -491,6 +597,7 @@ router.get('/status', contentLimiter, (req, res) => {
   res.json({
     session_active: true,
     expires_at: req.session.expires_at,
+    completed: Boolean(p.completed_at),
     finished: Boolean(p.finished_at),
     template_version: req.session.template_version,
   });

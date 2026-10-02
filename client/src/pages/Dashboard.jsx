@@ -213,70 +213,72 @@ export default function Dashboard() {
         ) : sessions.length === 0 ? (
           <p className="muted">No sessions yet.</p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Label</th>
-                <th>Template</th>
-                <th>Seats</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => (
-                <tr key={s.id}>
-                  <td className="mono">{s.room_code}</td>
-                  <td>{s.title}</td>
-                  <td className="muted">
-                    {s.template_title}
-                    <span className="small"> · v{s.template_version}</span>
-                    {s.status === 'active' && s.update_available && (
-                      <span
-                        className="tag tag--update"
-                        title={`Template v${s.latest_template_version} is available to push`}
-                      >
-                        update
-                      </span>
-                    )}
-                  </td>
-                  <td>{s.participant_count}</td>
-                  <td>
-                    <StatusPill status={s.status} />
-                  </td>
-                  <td className="table__actions">
-                    <Link
-                      className="btn btn--sm btn--icon btn--ghost"
-                      to={`/instructor/sessions/${s.id}`}
-                      title="Open monitor"
-                      aria-label={`Open monitor for ${s.title}`}
-                    >
-                      <Icon name="eye" size={16} />
-                    </Link>
-                    <button
-                      className="btn btn--sm btn--icon btn--ghost"
-                      onClick={() => handleExport(s)}
-                      title="Export session data (JSON)"
-                      aria-label={`Export ${s.title}`}
-                    >
-                      <Icon name="download" size={16} />
-                    </button>
-                    {s.status !== 'active' && (
-                      <button
-                        className="btn btn--sm btn--icon btn--danger-ghost"
-                        onClick={() => handleDelete(s)}
-                        title="Delete session"
-                        aria-label={`Delete ${s.title}`}
-                      >
-                        <Icon name="trash" size={16} />
-                      </button>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Label</th>
+                  <th className="col--md">Template</th>
+                  <th className="col--sm">Seats</th>
+                  <th>Status</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr key={s.id}>
+                    <td className="mono">{s.room_code}</td>
+                    <td>{s.title}</td>
+                    <td className="muted col--md">
+                      {s.template_title}
+                      <span className="small"> · v{s.template_version}</span>
+                      {s.status === 'active' && s.update_available && (
+                        <span
+                          className="tag tag--update"
+                          title={`Template v${s.latest_template_version} is available to push`}
+                        >
+                          update
+                        </span>
+                      )}
+                    </td>
+                    <td className="col--sm">{s.participant_count}</td>
+                    <td>
+                      <StatusPill status={s.status} />
+                    </td>
+                    <td className="table__actions">
+                      <Link
+                        className="btn btn--sm btn--icon btn--ghost"
+                        to={`/instructor/sessions/${s.id}`}
+                        title="Open monitor"
+                        aria-label={`Open monitor for ${s.title}`}
+                      >
+                        <Icon name="eye" size={16} />
+                      </Link>
+                      <button
+                        className="btn btn--sm btn--icon btn--ghost"
+                        onClick={() => handleExport(s)}
+                        title="Export session data (JSON)"
+                        aria-label={`Export ${s.title}`}
+                      >
+                        <Icon name="download" size={16} />
+                      </button>
+                      {s.status !== 'active' && (
+                        <button
+                          className="btn btn--sm btn--icon btn--danger-ghost"
+                          onClick={() => handleDelete(s)}
+                          title="Delete session"
+                          aria-label={`Delete ${s.title}`}
+                        >
+                          <Icon name="trash" size={16} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </PortalShell>
