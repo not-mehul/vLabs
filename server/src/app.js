@@ -110,12 +110,16 @@ export function createApp() {
       express.static(clientDist, {
         index: false,
         setHeaders(res, filePath) {
-          // Vite emits content-hashed asset filenames, so they can be cached
-          // aggressively and immutably; index.html must always be revalidated.
+          // Vite emits content-hashed filenames under /assets, so those can be
+          // cached aggressively and immutably. index.html must always be
+          // revalidated, and the un-hashed root files (favicon, manifest,
+          // touch icons) get a short TTL so a replaced icon shows up same-day.
           if (filePath.endsWith('index.html')) {
             res.setHeader('Cache-Control', 'no-cache');
-          } else {
+          } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=3600');
           }
         },
       }),

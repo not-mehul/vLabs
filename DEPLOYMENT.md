@@ -142,6 +142,11 @@ matters to you.
   projector or print a QR code (`sudo apt install qrencode && qrencode -t
 ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
   anyone on a new device.
+- **Shared iPads:** after trusting the root certificate, open
+  `https://vlabs.local` in Safari → Share → **Add to Home Screen**. The vLabs
+  icon then opens full-screen without the Safari chrome (the app ships a web
+  manifest and touch icons), which is the closest thing to kiosk mode without
+  Guided Access; pair it with Guided Access if the devices are managed.
 - **Start:** Dashboard → _Launch a session_ (duration = class length + slack;
   you can always _+30 min_). Show the 6-digit room code.
 - **During:** the monitor refreshes every 5 s. "Stuck" rows (8/15 min on a

@@ -26,7 +26,8 @@ const csvEsc = (v) => {
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
-const csvLines = (header, rows) => [header, ...rows].map((r) => r.map(csvEsc).join(',')).join('\n') + '\n';
+const csvLines = (header, rows) =>
+  [header, ...rows].map((r) => r.map(csvEsc).join(',')).join('\n') + '\n';
 const colSlug = (t) =>
   String(t || '')
     .toLowerCase()
@@ -53,7 +54,8 @@ export function participantsToCsv(docOrRows) {
     doc.sections ||
     (rows[0]?.section_times || []).map((t) => ({ number: t.number, title: t.title }));
   const checkpoints =
-    doc.checkpoints || (rows[0]?.checkpoints || []).map((c) => ({ key: c.key, step_title: c.step_title }));
+    doc.checkpoints ||
+    (rows[0]?.checkpoints || []).map((c) => ({ key: c.key, step_title: c.step_title }));
   const captureCols = Object.keys(rows[0]?.captured || {});
 
   const fixed = [

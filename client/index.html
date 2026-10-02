@@ -3,11 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Pinch-zoom is left enabled: disabling it is an accessibility barrier
-         (WCAG 1.4.4) and offers no IP protection. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b1220" />
+         (WCAG 1.4.4) and offers no IP protection. viewport-fit=cover lets the
+         app paint under the iPad/iPhone safe areas (CSS uses env() insets). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Browser chrome colour follows the app's light/dark surfaces. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a1922" />
+    <meta name="color-scheme" content="light dark" />
     <!-- IP protection: discourage indexing / caching of lab content. -->
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="vLabs — a hands-on lab manual personalised to your seat." />
+
+    <!-- Icons (files in client/public, copied to the dist root by Vite). -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- "Add to Home Screen" on classroom iPads opens full-screen without the
+         Safari chrome, which is what a kiosk-style lab wants. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="vLabs" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="application-name" content="vLabs" />
+
     <title>vLabs · Dynamic Lab Manual</title>
   </head>
   <body>

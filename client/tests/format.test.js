@@ -43,9 +43,17 @@ const doc = {
           attempt_count: 2,
           wrong_attempts: [{ answer: '=ABCD.1234', at: '2026-10-02T09:10:00.000Z' }],
         },
-        { key: '1.1', cleared: true, accepted_answer: '10.0.0.101/24', attempt_count: 1, wrong_attempts: [] },
+        {
+          key: '1.1',
+          cleared: true,
+          accepted_answer: '10.0.0.101/24',
+          attempt_count: 1,
+          wrong_attempts: [],
+        },
       ],
-      hints_opened: [{ section_number: 2, step_number: 2, step_title: 'Verify', hint_index: 1, label: 'How?' }],
+      hints_opened: [
+        { section_number: 2, step_number: 2, step_title: 'Verify', hint_index: 1, label: 'How?' },
+      ],
       solutions_revealed_list: [],
     },
     {
@@ -79,8 +87,28 @@ const doc = {
     },
   ],
   attempts: [
-    { at: '2026-10-02T09:10:00.000Z', number: 1, name: 'Ada Lovelace', checkpoint: '0.3', section_number: 1, step_number: 4, step_title: 'Serial', answer: '=ABCD.1234', correct: false },
-    { at: '2026-10-02T09:12:00.000Z', number: 1, name: 'Ada Lovelace', checkpoint: '0.3', section_number: 1, step_number: 4, step_title: 'Serial', answer: 'abcd1234wxyz', correct: true },
+    {
+      at: '2026-10-02T09:10:00.000Z',
+      number: 1,
+      name: 'Ada Lovelace',
+      checkpoint: '0.3',
+      section_number: 1,
+      step_number: 4,
+      step_title: 'Serial',
+      answer: '=ABCD.1234',
+      correct: false,
+    },
+    {
+      at: '2026-10-02T09:12:00.000Z',
+      number: 1,
+      name: 'Ada Lovelace',
+      checkpoint: '0.3',
+      section_number: 1,
+      step_number: 4,
+      step_title: 'Serial',
+      answer: 'abcd1234wxyz',
+      correct: true,
+    },
   ],
 };
 
@@ -121,7 +149,10 @@ test('attempts CSV is one row per submission with correct flag', () => {
   const csv = attemptsToCsv(doc);
   const lines = csv.trim().split('\n');
   assert.equal(lines.length, 3);
-  assert.equal(lines[0], 'at,number,name,checkpoint,section_number,step_number,step_title,answer,correct');
+  assert.equal(
+    lines[0],
+    'at,number,name,checkpoint,section_number,step_number,step_title,answer,correct',
+  );
   assert.match(lines[1], /'=ABCD\.1234,no$/);
   assert.match(lines[2], /abcd1234wxyz,yes$/);
   assert.equal(attemptsToCsv({}).trim().split('\n').length, 1, 'header only when empty');

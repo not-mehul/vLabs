@@ -335,6 +335,18 @@ Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
 - New **Attempts CSV** button (`<session>-attempts.csv`): one row per
   checkpoint submission, correct and incorrect, in time order.
 
+### Favicon + home-screen polish
+
+- Original app mark (the header's gradient tile + chevron) as
+  `client/public/favicon.svg`, `favicon.ico` (16/32/48), `apple-touch-icon.png`
+  (180), `icon-192/512.png`, a maskable 512 and `manifest.webmanifest`
+  (standalone display, brand theme colour). `index.html` links them, sets
+  light/dark `theme-color`, `color-scheme`, `viewport-fit=cover` (safe-area
+  insets) and the `apple-mobile-web-app-*` metas so "Add to Home Screen" on a
+  classroom iPad opens vLabs full-screen.
+- Static cache policy: only content-hashed `/assets/*` are immutable; root
+  files (icons, manifest) get a 1-hour TTL.
+
 ### Docs
 
 `docs/TEMPLATE_GUIDE.md`: new **Links** and **Images** sections (syntax,

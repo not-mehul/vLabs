@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- vLabs mark: the brand tile from the app header (Blue 500 → 600 gradient,
+       rounded square, white chevron pointing down — the "v" and a checkpoint
+       cleared, in one stroke). Original artwork. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#19a0d5"/>
+      <stop offset="1" stop-color="#007faf"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#g)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="14.4" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="1.5"/>
+  <path d="M18 25 L32 39 L46 25" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
