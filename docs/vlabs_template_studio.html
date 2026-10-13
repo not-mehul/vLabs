@@ -47,10 +47,10 @@
                 900: '#312e81',
               },
               surface: {
-                800: '#18181b',
-                850: '#141416',
-                900: '#0f0f11',
-                950: '#09090b',
+                800: '#1e212b',
+                850: '#161822',
+                900: '#10121a',
+                950: '#0a0b10',
               }
             },
             boxShadow: {
@@ -64,33 +64,33 @@
   </script>
 
   <style>
-    /* Custom Scrollbars */
+    /* Clean, non-intrusive scrollbars */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 9999px; }
-    .dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
-    ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
-    .dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .dark ::-webkit-scrollbar-thumb { background: #334155; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
     /* Markdown preview typographic treatment */
     .prose-preview h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 0.6rem; }
     .prose-preview h2 { font-size: 1.15rem; font-weight: 600; margin-top: 0.85rem; margin-bottom: 0.4rem; }
     .prose-preview p { margin-bottom: 0.6rem; line-height: 1.6; }
     .prose-preview code { padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; font-family: 'JetBrains Mono', monospace; }
-    :not(.dark) .prose-preview code { background-color: #f4f4f5; color: #4f46e5; }
-    .dark .prose-preview code { background-color: #27272a; color: #818cf8; }
+    :not(.dark) .prose-preview code { background-color: #f1f5f9; color: #4338ca; }
+    .dark .prose-preview code { background-color: #1e293b; color: #a5b4fc; }
     .prose-preview pre { padding: 0.75rem 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 0.85rem; font-size: 0.825rem; }
-    :not(.dark) .prose-preview pre { background-color: #18181b; color: #f4f4f5; }
-    .dark .prose-preview pre { background-color: #09090b; color: #f4f4f5; border: 1px solid #27272a; }
+    :not(.dark) .prose-preview pre { background-color: #0f172a; color: #f8fafc; }
+    .dark .prose-preview pre { background-color: #020617; color: #f8fafc; border: 1px solid #1e293b; }
     .prose-preview pre code { background: none; color: inherit; padding: 0; }
     .prose-preview table { width: 100%; border-collapse: collapse; margin-bottom: 0.85rem; font-size: 0.8rem; }
-    .prose-preview th, .prose-preview td { border: 1px solid #e4e4e7; padding: 0.45rem 0.65rem; text-align: left; }
-    .dark .prose-preview th, .dark .prose-preview td { border-color: #27272a; }
-    :not(.dark) .prose-preview th { background-color: #f4f4f5; font-weight: 600; }
-    .dark .prose-preview th { background-color: #18181b; font-weight: 600; }
-    .prose-preview blockquote { border-left: 3px solid #6366f1; padding-left: 0.85rem; opacity: 0.85; font-style: italic; }
+    .prose-preview th, .prose-preview td { border: 1px solid #e2e8f0; padding: 0.45rem 0.65rem; text-align: left; }
+    .dark .prose-preview th, .dark .prose-preview td { border-color: #334155; }
+    :not(.dark) .prose-preview th { background-color: #f8fafc; font-weight: 600; }
+    .dark .prose-preview th { background-color: #0f172a; font-weight: 600; }
+    .prose-preview blockquote { border-left: 3px solid #6366f1; padding-left: 0.85rem; opacity: 0.9; font-style: italic; }
 
-    /* Auto-grow textareas: prevent internal vertical scrollbars */
+    /* Auto-grow textareas without internal scrollbars */
     .autogrow-textarea {
       overflow-y: hidden !important;
       resize: vertical;
@@ -108,12 +108,13 @@
     }
   </style>
 </head>
-<body class="h-full flex flex-col font-sans text-zinc-800 dark:text-zinc-100 antialiased bg-zinc-100 dark:bg-surface-900 overflow-hidden transition-colors duration-200">
+<body class="h-full flex flex-col font-sans text-slate-800 dark:text-slate-100 antialiased bg-slate-50 dark:bg-surface-950 overflow-hidden transition-colors duration-200">
 
-  <header class="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-surface-950/95 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
+  <!-- Top Navigation Header -->
+  <header class="h-14 border-b border-slate-200 dark:border-slate-800/80 bg-white/95 dark:bg-surface-900/95 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
     <div class="flex items-center space-x-3">
       <!-- Sidebar Toggle Button -->
-      <button onclick="toggleSidebarCollapse()" id="sidebarCollapseBtn" class="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Toggle Sidebar">
+      <button onclick="toggleSidebarCollapse()" id="sidebarCollapseBtn" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Toggle Sidebar">
         <i class="ph ph-sidebar-simple text-lg"></i>
       </button>
 
@@ -122,8 +123,8 @@
           <i class="ph-bold ph-cube text-base"></i>
         </div>
         <div>
-          <span class="text-xs font-bold tracking-tight text-zinc-900 dark:text-zinc-100">vLabs</span>
-          <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500 ml-1">Template Studio</span>
+          <span class="text-xs font-bold tracking-tight text-slate-900 dark:text-slate-100">vLabs</span>
+          <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-1">Template Studio</span>
         </div>
       </div>
       
@@ -135,53 +136,53 @@
     <div class="flex items-center space-x-2">
       <!-- Global Search / Filter Input -->
       <div class="relative w-44 sm:w-60">
-        <i class="ph ph-magnifying-glass absolute left-2.5 top-2.5 text-xs text-zinc-400"></i>
+        <i class="ph ph-magnifying-glass absolute left-2.5 top-2.5 text-xs text-slate-400"></i>
         <input type="text" id="globalStepSearch" placeholder="Filter steps, tokens..." 
           oninput="handleGlobalSearch(this.value)"
-          class="w-full text-xs pl-8 pr-7 py-1.5 bg-zinc-50 dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-lg text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none focus:border-brand-500 transition shadow-2xs">
-        <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="hidden absolute right-2.5 top-2.5 text-xs text-zinc-400 hover:text-zinc-600">
+          class="w-full text-xs pl-8 pr-7 py-1.5 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-lg text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 transition shadow-2xs">
+        <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="hidden absolute right-2.5 top-2.5 text-xs text-slate-400 hover:text-slate-600">
           <i class="ph ph-x"></i>
         </button>
       </div>
 
       <!-- Auto-save Status Indicator -->
-      <div id="saveStatusIndicator" class="flex items-center space-x-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+      <div id="saveStatusIndicator" class="flex items-center space-x-1.5 px-2.5 py-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
         <i class="ph ph-cloud-check text-emerald-500"></i>
         <span>Saved</span>
       </div>
 
       <!-- Preset Selector Dropdown -->
       <div class="relative" id="presetDropdownContainer">
-        <button onclick="togglePresetMenu()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-surface-800 transition shadow-2xs">
+        <button onclick="togglePresetMenu()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs">
           <i class="ph ph-browsers"></i>
           <span>Examples</span>
           <i class="ph ph-caret-down text-[10px]"></i>
         </button>
-        <div id="presetMenu" class="hidden absolute right-0 mt-1.5 w-64 bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-xl shadow-lg py-1 z-50 text-xs">
-          <div class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+        <div id="presetMenu" class="hidden absolute right-0 mt-1.5 w-64 bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-lg py-1 z-50 text-xs">
+          <div class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800">
             Guide Authoring Examples
           </div>
-          <button onclick="loadTemplatePreset('minimal')" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex flex-col">
-            <span class="font-semibold text-zinc-800 dark:text-zinc-200">A. Minimal Starter Skeleton</span>
-            <span class="text-[10px] text-zinc-400">Clean starter lab to copy & adapt</span>
+          <button onclick="loadTemplatePreset('minimal')" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex flex-col">
+            <span class="font-semibold text-slate-800 dark:text-slate-200">A. Minimal Starter Skeleton</span>
+            <span class="text-[10px] text-slate-400">Clean starter lab to copy & adapt</span>
           </button>
-          <button onclick="loadTemplatePreset('network')" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex flex-col">
-            <span class="font-semibold text-zinc-800 dark:text-zinc-200">B. Network Bench Lab</span>
-            <span class="text-[10px] text-zinc-400">Seat-derived IPs, VLANs, Cabling</span>
+          <button onclick="loadTemplatePreset('network')" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex flex-col">
+            <span class="font-semibold text-slate-800 dark:text-slate-200">B. Network Bench Lab</span>
+            <span class="text-[10px] text-slate-400">Seat-derived IPs, VLANs, Cabling</span>
           </button>
-          <button onclick="loadTemplatePreset('device')" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex flex-col">
-            <span class="font-semibold text-zinc-800 dark:text-zinc-200">C. Device Provisioning Lab</span>
-            <span class="text-[10px] text-zinc-400">Pattern masks, hardware serials, MACs</span>
+          <button onclick="loadTemplatePreset('device')" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex flex-col">
+            <span class="font-semibold text-slate-800 dark:text-slate-200">C. Device Provisioning Lab</span>
+            <span class="text-[10px] text-slate-400">Pattern masks, hardware serials, MACs</span>
           </button>
-          <button onclick="loadTemplatePreset('software')" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex flex-col">
-            <span class="font-semibold text-zinc-800 dark:text-zinc-200">D. Software Onboarding Lab</span>
-            <span class="text-[10px] text-zinc-400">Git branch, PRs, accounts & wildcards</span>
+          <button onclick="loadTemplatePreset('software')" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex flex-col">
+            <span class="font-semibold text-slate-800 dark:text-slate-200">D. Software Onboarding Lab</span>
+            <span class="text-[10px] text-slate-400">Git branch, PRs, accounts & wildcards</span>
           </button>
         </div>
       </div>
 
       <!-- Import Button -->
-      <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-surface-800 transition shadow-2xs">
+      <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs">
         <i class="ph ph-upload-simple"></i>
         <span>Import</span>
       </button>
@@ -193,16 +194,16 @@
           <span>Export</span>
           <i class="ph ph-caret-down text-[10px]"></i>
         </button>
-        <div id="exportMenu" class="hidden absolute right-0 mt-1.5 w-56 bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-xl shadow-lg py-1 z-50 text-xs">
-          <button onclick="exportAsZipPackage()" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-brand-600 dark:text-brand-400 font-semibold">
+        <div id="exportMenu" class="hidden absolute right-0 mt-1.5 w-56 bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-lg py-1 z-50 text-xs">
+          <button onclick="exportAsZipPackage()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-brand-600 dark:text-brand-400 font-semibold">
             <i class="ph ph-file-zip text-sm"></i>
             <span>Export Package (.zip)</span>
           </button>
-          <button onclick="exportAsMarkdown()" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-zinc-700 dark:text-zinc-300">
+          <button onclick="exportAsMarkdown()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-slate-700 dark:text-slate-300">
             <i class="ph ph-file-text text-sm"></i>
             <span>Export Markdown (.md)</span>
           </button>
-          <button onclick="copyMarkdownToClipboard()" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-zinc-700 dark:text-zinc-300">
+          <button onclick="copyMarkdownToClipboard()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-surface-800 flex items-center space-x-2 text-slate-700 dark:text-slate-300">
             <i class="ph ph-copy text-sm"></i>
             <span>Copy Markdown</span>
           </button>
@@ -213,77 +214,80 @@
 
   <div class="flex-1 flex overflow-hidden">
     <!-- Left Navigation & Workspace Sidebar -->
-    <aside id="mainSidebar" class="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-surface-950/70 backdrop-blur flex flex-col shrink-0 transition-all duration-200 ease-in-out">
+    <aside id="mainSidebar" class="w-64 border-r border-slate-200 dark:border-slate-800/80 bg-white/70 dark:bg-surface-900/70 backdrop-blur flex flex-col shrink-0 transition-all duration-200 ease-in-out">
       <!-- Workspace Navigation Tabs -->
-      <div class="p-3 border-b border-zinc-200 dark:border-zinc-800 space-y-1">
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800/80 space-y-1">
         <button onclick="switchView('builder')" id="nav-builder" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-semibold bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-500/20 transition">
           <i class="ph ph-kanban text-base shrink-0"></i>
           <span class="sidebar-label">Content Builder</span>
         </button>
-        <button onclick="switchView('variables')" id="nav-variables" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+        <button onclick="switchView('variables')" id="nav-variables" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           <i class="ph ph-function text-base shrink-0"></i>
           <span class="sidebar-label">Variables & Formulas</span>
-          <span id="varCountBadge" class="sidebar-label ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">0</span>
+          <span id="varCountBadge" class="sidebar-label ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">0</span>
         </button>
-        <button onclick="switchView('dependencies')" id="nav-dependencies" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+        <button onclick="switchView('dependencies')" id="nav-dependencies" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           <i class="ph ph-tree-structure text-base shrink-0"></i>
           <span class="sidebar-label">Dependency Graph</span>
         </button>
-        <button onclick="switchView('images')" id="nav-images" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+        <button onclick="switchView('images')" id="nav-images" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           <i class="ph ph-images text-base shrink-0"></i>
           <span class="sidebar-label">Image Library</span>
-          <span id="imgCountBadge" class="sidebar-label ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">0</span>
+          <span id="imgCountBadge" class="sidebar-label ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">0</span>
         </button>
-        <button onclick="switchView('preview')" id="nav-preview" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+        <button onclick="switchView('preview')" id="nav-preview" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           <i class="ph ph-eye text-base shrink-0"></i>
           <span class="sidebar-label">Participant Preview</span>
         </button>
-        <button onclick="switchView('validate')" id="nav-validate" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition">
+        <button onclick="switchView('validate')" id="nav-validate" class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
           <i class="ph ph-shield-check text-base shrink-0"></i>
           <span class="sidebar-label">Validation Engine</span>
           <span id="validationErrorBadge" class="sidebar-label ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">0</span>
         </button>
       </div>
 
+      <!-- Quick Jump Outline -->
       <div id="sidebarOutlineContainer" class="flex-1 overflow-y-auto p-3 flex flex-col">
         <div class="flex items-center justify-between mb-2 px-1">
-          <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Quick Jump Outline</span>
-          <span id="outlineStepCount" class="text-[10px] text-zinc-400 font-mono">0 steps</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Quick Jump Outline</span>
+          <span id="outlineStepCount" class="text-[10px] text-slate-400 font-mono">0 steps</span>
         </div>
         <div id="outlineSearchContainer" class="mb-2">
           <input type="text" id="outlineQuickFilter" placeholder="Filter outline..." oninput="filterOutline(this.value)"
-            class="w-full text-[11px] px-2.5 py-1 bg-zinc-50 dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-md focus:outline-none focus:border-brand-500 text-zinc-800 dark:text-zinc-200">
+            class="w-full text-[11px] px-2.5 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-md focus:outline-none focus:border-brand-500 text-slate-800 dark:text-slate-200">
         </div>
         <div id="outlineList" class="space-y-1 text-xs flex-1 overflow-y-auto pr-1"></div>
       </div>
 
-      <div class="p-3 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-        <button onclick="openTokenCheatsheet()" class="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-surface-850 hover:bg-zinc-100 dark:hover:bg-surface-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg transition shadow-2xs">
+      <!-- Bottom Utility Bar -->
+      <div class="p-3 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
+        <button onclick="openTokenCheatsheet()" class="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-surface-850 hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200 dark:border-slate-700/80 rounded-lg transition shadow-2xs">
           <i class="ph ph-brackets-curly text-brand-500"></i>
           <span class="sidebar-label">Tokens & Captures</span>
         </button>
-        <button onclick="openSettingsModal()" class="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-surface-850 hover:bg-zinc-100 dark:hover:bg-surface-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg transition shadow-2xs" title="Open Settings">
-          <i class="ph ph-gear text-zinc-500"></i>
+        <button onclick="openSettingsModal()" class="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-surface-850 hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200 dark:border-slate-700/80 rounded-lg transition shadow-2xs" title="Open Settings">
+          <i class="ph ph-gear text-slate-500"></i>
           <span class="sidebar-label">Settings</span>
         </button>
       </div>
     </aside>
 
-    <main class="flex-1 flex flex-col overflow-y-auto bg-zinc-50/50 dark:bg-surface-900" id="mainScrollContainer">
+    <!-- Main Workspace Content Area -->
+    <main class="flex-1 flex flex-col overflow-y-auto bg-slate-100/60 dark:bg-surface-950" id="mainScrollContainer">
       
       <!-- VIEW 1: Builder Canvas -->
       <section id="view-builder" class="p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
         <!-- Lab Metadata Header Box -->
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-xs space-y-4">
-          <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 shadow-xs space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <span class="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
               <i class="ph-bold ph-sliders"></i> Lab Metadata
             </span>
             <div class="flex items-center space-x-2">
-              <button onclick="toggleAllSections(true)" class="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700/80 transition">
+              <button onclick="toggleAllSections(true)" class="px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 transition">
                 <i class="ph ph-caret-double-up text-xs mr-1"></i>Collapse All
               </button>
-              <button onclick="toggleAllSections(false)" class="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700/80 transition">
+              <button onclick="toggleAllSections(false)" class="px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/80 transition">
                 <i class="ph ph-caret-double-down text-xs mr-1"></i>Expand All
               </button>
             </div>
@@ -291,27 +295,27 @@
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Lab Title (Required, ≤ 200 characters)</label>
+              <label class="block text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">Lab Title (Required, ≤ 200 characters)</label>
               <button type="button" onclick="triggerAiPolish('templateTitle', 'title')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/50 transition">
                 <i class="ph ph-sparkle text-purple-500"></i>
                 <span>Polish</span>
               </button>
             </div>
             <input type="text" id="templateTitle" placeholder="e.g. Switch Bench Lab" 
-              class="w-full text-sm font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-zinc-400 transition"
+              class="w-full text-sm font-semibold text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 transition"
               oninput="onMetadataChanged()">
           </div>
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Description (Optional, ≤ 1000 characters)</label>
+              <label class="block text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">Description (Optional, ≤ 1000 characters)</label>
               <button type="button" onclick="triggerAiPolish('templateDescription', 'description')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/50 transition">
                 <i class="ph ph-sparkle text-purple-500"></i>
                 <span>Polish</span>
               </button>
             </div>
             <textarea id="templateDescription" rows="2" placeholder="One-line summary shown in the template list..." 
-              class="autogrow-textarea w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-zinc-400 min-h-[4rem]"
+              class="autogrow-textarea w-full text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 min-h-[4rem]"
               oninput="onMetadataChanged()"></textarea>
           </div>
         </div>
@@ -325,7 +329,7 @@
         <div id="sectionsContainer" class="space-y-6"></div>
 
         <!-- Add Section Button -->
-        <button onclick="addNewSection()" class="w-full py-3.5 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-brand-400 dark:hover:border-brand-500 rounded-2xl flex items-center justify-center space-x-2 text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 transition group text-xs font-semibold bg-white/40 dark:bg-surface-850/40">
+        <button onclick="addNewSection()" class="w-full py-3.5 border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-brand-400 dark:hover:border-brand-500 rounded-2xl flex items-center justify-center space-x-2 text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 transition group text-xs font-semibold bg-white/40 dark:bg-surface-900/40">
           <i class="ph ph-plus-circle text-lg group-hover:scale-110 transition-transform"></i>
           <span>Add New Section</span>
         </button>
@@ -333,13 +337,13 @@
 
       <!-- VIEW 2: Variables & Formulas -->
       <section id="view-variables" class="hidden p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-xs space-y-4">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <i class="ph ph-function text-brand-600"></i> Variables & Formulas Engine
               </h2>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Evaluated per participant for seat, registered first/last name, and earlier variables.
               </p>
             </div>
@@ -353,8 +357,8 @@
 
       <!-- VIEW 3: Dependency Graph -->
       <section id="view-dependencies" class="hidden p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-xs space-y-4">
-          <h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 shadow-xs space-y-4">
+          <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <i class="ph ph-tree-structure text-brand-600"></i> Variable & Capture Dependency Graph
           </h2>
           <div id="dependencyGraphContent" class="space-y-4 text-xs"></div>
@@ -363,13 +367,13 @@
 
       <!-- VIEW 4: Image Library Management -->
       <section id="view-images" class="hidden p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-xs space-y-4">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 shadow-xs space-y-4">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <i class="ph ph-images text-brand-600"></i> Image Asset Library
               </h2>
-              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 PNG, JPEG, GIF, WebP up to 3MB each. Referenced in Markdown via ![alt](filename.png).
               </p>
             </div>
@@ -378,12 +382,12 @@
             </button>
           </div>
           <div id="missingImagesNotice" class="hidden bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-xl p-3 text-xs text-rose-800 dark:text-rose-300"></div>
-          <div id="dropZone" class="border-2 border-dashed border-zinc-200 dark:border-zinc-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition"
+          <div id="dropZone" class="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition"
                onclick="document.getElementById('imageFileInput').click()">
             <input type="file" id="imageFileInput" class="hidden" multiple accept="image/png,image/jpeg,image/gif,image/webp" onchange="handleImageFileSelect(event)">
-            <i class="ph ph-cloud-arrow-up text-2xl text-zinc-400 mb-1"></i>
-            <p class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Drag & Drop images or click to browse</p>
-            <p class="text-[10px] text-zinc-400 mt-0.5">PNG, JPEG, GIF, WebP (≤ 3MB)</p>
+            <i class="ph ph-cloud-arrow-up text-2xl text-slate-400 mb-1"></i>
+            <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">Drag & Drop images or click to browse</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">PNG, JPEG, GIF, WebP (≤ 3MB)</p>
           </div>
           <div id="imagesGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
         </div>
@@ -391,19 +395,19 @@
 
       <!-- VIEW 5: Participant Preview -->
       <section id="view-preview" class="hidden p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-xs flex flex-wrap items-center gap-3">
-          <span class="text-xs font-bold text-zinc-700 dark:text-zinc-300">Simulate Participant:</span>
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 shadow-xs flex flex-wrap items-center gap-3">
+          <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Simulate Participant:</span>
           <div class="flex items-center space-x-1.5">
-            <label class="text-[11px] text-zinc-400">Seat:</label>
-            <input type="number" id="previewSeat" value="1" min="1" max="100" class="w-14 text-xs font-mono px-2 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-center" onchange="renderParticipantPreview()">
+            <label class="text-[11px] text-slate-400">Seat:</label>
+            <input type="number" id="previewSeat" value="1" min="1" max="100" class="w-14 text-xs font-mono px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg text-center" onchange="renderParticipantPreview()">
           </div>
           <div class="flex items-center space-x-1.5">
-            <label class="text-[11px] text-zinc-400">First Name:</label>
-            <input type="text" id="previewFirstName" value="Mary-Jane" class="w-28 text-xs px-2 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg" onchange="renderParticipantPreview()">
+            <label class="text-[11px] text-slate-400">First Name:</label>
+            <input type="text" id="previewFirstName" value="Mary-Jane" class="w-28 text-xs px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg" onchange="renderParticipantPreview()">
           </div>
           <div class="flex items-center space-x-1.5">
-            <label class="text-[11px] text-zinc-400">Last Name:</label>
-            <input type="text" id="previewLastName" value="O'Neil" class="w-28 text-xs px-2 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg" onchange="renderParticipantPreview()">
+            <label class="text-[11px] text-slate-400">Last Name:</label>
+            <input type="text" id="previewLastName" value="O'Neil" class="w-28 text-xs px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg" onchange="renderParticipantPreview()">
           </div>
           <button onclick="renderParticipantPreview()" class="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-semibold ml-auto">Re-render</button>
         </div>
@@ -412,8 +416,8 @@
 
       <!-- VIEW 6: Validation Engine -->
       <section id="view-validate" class="hidden p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-5 shadow-xs space-y-4">
-          <h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 shadow-xs space-y-4">
+          <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <i class="ph ph-shield-check text-brand-600"></i> vLabs 1.4 Rules Verification
           </h2>
           <div id="validationResultsList" class="space-y-2 text-xs"></div>
@@ -424,13 +428,13 @@
   </div>
 
   <!-- MODAL: Settings -->
-  <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <i class="ph ph-gear text-brand-600"></i> Template Studio Settings
         </h3>
-        <button onclick="closeSettingsModal()" class="text-zinc-400 hover:text-zinc-600 text-lg">
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">
           <i class="ph ph-x"></i>
         </button>
       </div>
@@ -438,24 +442,24 @@
       <div class="space-y-4 text-xs">
         <!-- Appearance Toggle -->
         <div>
-          <label class="block text-[11px] font-bold uppercase text-zinc-400 mb-1">Appearance</label>
+          <label class="block text-[11px] font-bold uppercase text-slate-400 mb-1">Appearance</label>
           <button type="button" id="settingsThemeToggleBtn" onclick="toggleDarkMode()" 
-            class="flex items-center space-x-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-800 dark:text-zinc-200 w-full justify-between">
+            class="flex items-center space-x-2 px-3 py-2 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 w-full justify-between">
             <span class="flex items-center gap-2">
               <i id="settingsThemeIcon" class="ph ph-moon"></i>
               <span id="settingsThemeText">Dark Mode</span>
             </span>
-            <span class="text-[10px] text-zinc-400 font-mono">Toggle Theme</span>
+            <span class="text-[10px] text-slate-400 font-mono">Toggle Theme</span>
           </button>
         </div>
 
         <!-- AI Provider Configuration -->
-        <div class="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <label class="block text-[11px] font-bold uppercase text-zinc-400">AI Text Polish Provider</label>
+        <div class="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <label class="block text-[11px] font-bold uppercase text-slate-400">AI Text Polish Provider</label>
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="block text-[10px] text-zinc-400 mb-0.5">Provider</label>
-              <select id="settingsAiProvider" onchange="onAiProviderChanged()" class="w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200">
+              <label class="block text-[10px] text-slate-400 mb-0.5">Provider</label>
+              <select id="settingsAiProvider" onchange="onAiProviderChanged()" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200">
                 <option value="gemini">Google Gemini</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic Claude</option>
@@ -463,36 +467,43 @@
               </select>
             </div>
             <div>
-              <label class="block text-[10px] text-zinc-400 mb-0.5">Model</label>
-              <select id="settingsAiModel" class="w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"></select>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block text-[10px] text-slate-400">Model</label>
+                <button type="button" onclick="fetchLiveModelsForProvider()" id="refreshModelsBtn" class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-0.5" title="Fetch latest models from provider API">
+                  <i class="ph ph-arrows-clockwise text-[11px]"></i>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <select id="settingsAiModel" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200"></select>
             </div>
           </div>
 
           <div>
-            <label class="block text-[10px] text-zinc-400 mb-0.5">API Key</label>
-            <input type="password" id="settingsAiApiKey" placeholder="sk-... or AIza..." class="w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-zinc-800 dark:text-zinc-200 font-mono">
+            <label class="block text-[10px] text-slate-400 mb-0.5">API Key</label>
+            <input type="password" id="settingsAiApiKey" placeholder="sk-... or AIza..." class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
           </div>
 
           <div id="customEndpointRow" class="hidden">
-            <label class="block text-[10px] text-zinc-400 mb-0.5">Custom Base URL</label>
-            <input type="text" id="settingsAiCustomUrl" placeholder="http://localhost:11434/v1" class="w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-zinc-800 dark:text-zinc-200 font-mono">
+            <label class="block text-[10px] text-slate-400 mb-0.5">Custom Base URL</label>
+            <input type="text" id="settingsAiCustomUrl" placeholder="http://localhost:11434/v1" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
           </div>
 
           <div>
-            <label class="block text-[10px] text-zinc-400 mb-0.5">Default System / Polish Instruction</label>
-            <textarea id="settingsAiSystemPrompt" rows="2" class="autogrow-textarea w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 text-zinc-800 dark:text-zinc-200 min-h-[3rem]"></textarea>
+            <label class="block text-[10px] text-slate-400 mb-0.5">Default System / Polish Instruction</label>
+            <textarea id="settingsAiSystemPrompt" rows="2" class="autogrow-textarea w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-800 dark:text-slate-200 min-h-[3rem]"></textarea>
           </div>
 
           <div class="flex items-center justify-between pt-1">
-            <button type="button" onclick="testAiConnection()" id="testConnectionBtn" class="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition">
-              Test Connection
+            <button type="button" onclick="testAiConnection()" id="testConnectionBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+              <i class="ph ph-plugs-connected text-sm"></i>
+              <span>Test Connection</span>
             </button>
-            <span id="testConnectionStatus" class="text-[11px] font-medium text-zinc-400"></span>
+            <span id="testConnectionStatus" class="text-[11px] font-medium text-slate-400 max-w-xs truncate text-right"></span>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
         <button onclick="saveAppSettingsModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-xs">
           Save Settings
         </button>
@@ -501,42 +512,45 @@
   </div>
 
   <!-- MODAL: AI Text Polish -->
-  <div id="aiPolishModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+  <div id="aiPolishModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <i class="ph ph-sparkle text-purple-600"></i> Polish Lab Content
         </h3>
-        <button onclick="closeAiPolishModal()" class="text-zinc-400 hover:text-zinc-600 text-lg">
+        <button onclick="closeAiPolishModal()" class="text-slate-400 hover:text-slate-600 text-lg">
           <i class="ph ph-x"></i>
         </button>
       </div>
 
       <div class="space-y-3 text-xs">
         <div>
-          <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Specific Polish Instruction</label>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Specific Polish Instruction</label>
           <input type="text" id="aiCustomInstructionInput" placeholder="e.g. Make it more concise, emphasize safety" 
-            class="w-full text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-800 dark:text-zinc-200">
+            class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Original Text</label>
-            <div id="aiPolishOriginalPreview" class="p-3 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl h-44 overflow-y-auto text-xs font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap"></div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Original Text</label>
+            <div id="aiPolishOriginalPreview" class="p-3 bg-slate-50 dark:bg-surface-850/80 border border-slate-200 dark:border-slate-700 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap"></div>
           </div>
           <div>
-            <label class="block text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400 mb-1">Polished Result</label>
-            <textarea id="aiPolishResultPreview" class="autogrow-textarea w-full p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 rounded-xl h-44 overflow-y-auto text-xs font-mono text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400">Polished Result</label>
+              <span id="aiPolishStatusBadge" class="text-[10px] text-slate-400"></span>
+            </div>
+            <textarea id="aiPolishResultPreview" class="autogrow-textarea w-full p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
-        <button type="button" onclick="runAiPolishGeneration()" id="regenerateAiPolishBtn" class="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
-          <i class="ph ph-arrows-clockwise"></i> Polish with AI
+      <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+        <button type="button" onclick="runAiPolishGeneration()" id="regenerateAiPolishBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+          <i class="ph ph-sparkle text-purple-600"></i> Polish with AI
         </button>
         <div class="flex items-center space-x-2">
-          <button onclick="closeAiPolishModal()" class="px-3 py-1.5 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-medium">Discard</button>
+          <button onclick="closeAiPolishModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium">Discard</button>
           <button onclick="applyAiPolishedText()" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs">Accept & Apply</button>
         </div>
       </div>
@@ -544,27 +558,27 @@
   </div>
 
   <!-- MODAL: Tokens & Captures Cheatsheet -->
-  <div id="tokenModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+  <div id="tokenModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <i class="ph ph-brackets-curly text-brand-600"></i> Placeholders & Captures
         </h3>
-        <button onclick="closeTokenCheatsheet()" class="text-zinc-400 hover:text-zinc-600 text-lg">
+        <button onclick="closeTokenCheatsheet()" class="text-slate-400 hover:text-slate-600 text-lg">
           <i class="ph ph-x"></i>
         </button>
       </div>
       <div class="space-y-3 text-xs max-h-96 overflow-y-auto pr-1">
         <div>
-          <span class="text-[10px] font-bold uppercase text-zinc-400">Built-In Participant Tokens</span>
+          <span class="text-[10px] font-bold uppercase text-slate-400">Built-In Participant Tokens</span>
           <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="builtInTokensList"></div>
         </div>
-        <div class="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <span class="text-[10px] font-bold uppercase text-zinc-400">Declared Formulas</span>
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase text-slate-400">Declared Formulas</span>
           <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="declaredTokensList"></div>
         </div>
-        <div class="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <span class="text-[10px] font-bold uppercase text-zinc-400">Captured Checkpoint Values</span>
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase text-slate-400">Captured Checkpoint Values</span>
           <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="captureTokensList"></div>
         </div>
       </div>
@@ -572,13 +586,13 @@
   </div>
 
   <!-- MODAL: Image Picker -->
-  <div id="imagePickerModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+  <div id="imagePickerModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <i class="ph ph-images text-brand-600"></i> Insert Image from Library
         </h3>
-        <button onclick="closeImagePickerModal()" class="text-zinc-400 hover:text-zinc-600 text-lg">
+        <button onclick="closeImagePickerModal()" class="text-slate-400 hover:text-slate-600 text-lg">
           <i class="ph ph-x"></i>
         </button>
       </div>
@@ -587,25 +601,25 @@
   </div>
 
   <!-- MODAL: Import Markdown -->
-  <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+  <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <i class="ph ph-upload-simple text-brand-600"></i> Import vLabs Markdown
         </h3>
-        <button onclick="closeImportModal()" class="text-zinc-400 hover:text-zinc-600 text-lg">
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600 text-lg">
           <i class="ph ph-x"></i>
         </button>
       </div>
       <textarea id="importMarkdownTextarea" rows="12" placeholder="Paste your vLabs template markdown with front matter here..."
-        class="autogrow-textarea w-full font-mono text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-brand-500 text-zinc-800 dark:text-zinc-200 min-h-[14rem]"></textarea>
+        class="autogrow-textarea w-full font-mono text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-800 dark:text-slate-200 min-h-[14rem]"></textarea>
       <div class="flex items-center justify-between">
-        <label class="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-semibold cursor-pointer">
+        <label class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold cursor-pointer">
           Choose .md file
           <input type="file" id="importFileInput" accept=".md,.markdown,.txt" class="hidden" onchange="handleImportFileSelect(event)">
         </label>
         <div class="flex items-center space-x-2">
-          <button onclick="closeImportModal()" class="px-3 py-1.5 text-zinc-600 dark:text-zinc-400 text-xs">Cancel</button>
+          <button onclick="closeImportModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-400 text-xs">Cancel</button>
           <button onclick="executeImport()" class="px-4 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold">Import Template</button>
         </div>
       </div>
@@ -748,11 +762,11 @@
         if (v === viewName) {
           el?.classList.remove('hidden');
           nav?.classList.add('bg-brand-50', 'dark:bg-brand-500/10', 'text-brand-700', 'dark:text-brand-300', 'border', 'border-brand-200/60', 'dark:border-brand-500/20');
-          nav?.classList.remove('text-zinc-600', 'dark:text-zinc-400', 'hover:bg-zinc-50', 'dark:hover:bg-zinc-800');
+          nav?.classList.remove('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-50', 'dark:hover:bg-slate-800');
         } else {
           el?.classList.add('hidden');
           nav?.classList.remove('bg-brand-50', 'dark:bg-brand-500/10', 'text-brand-700', 'dark:text-brand-300', 'border', 'border-brand-200/60', 'dark:border-brand-500/20');
-          nav?.classList.add('text-zinc-600', 'dark:text-zinc-400', 'hover:bg-zinc-50', 'dark:hover:bg-zinc-800');
+          nav?.classList.add('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-50', 'dark:hover:bg-slate-800');
         }
       });
 
@@ -896,7 +910,7 @@
         .replace(/^# (.*$)/gim, '<h1 class="font-bold text-lg mt-5 mb-2">$1</h1>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code class="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">$1</code>')
+        .replace(/`(.*?)`/g, '<code class="bg-slate-100 dark:bg-slate-800 px-1 rounded">$1</code>')
         .replace(/\n/g, '<br>');
     }
 
@@ -916,32 +930,32 @@
 
         const secEl = document.createElement('div');
         secEl.id = `section-card-${sIdx}`;
-        secEl.className = 'bg-white dark:bg-surface-850 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-xs overflow-hidden transition-all';
+        secEl.className = 'bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800/90 rounded-2xl shadow-xs overflow-hidden transition-all';
 
         secEl.innerHTML = `
           <!-- Section Header Bar -->
-          <div class="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-surface-900/40">
+          <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-surface-850/60">
             <div class="flex items-center space-x-2.5 flex-1 mr-3">
-              <button data-action="toggle-section" data-sec-idx="${sIdx}" class="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-sm p-1 rounded-md transition" title="Toggle Section">
+              <button data-action="toggle-section" data-sec-idx="${sIdx}" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm p-1 rounded-md transition" title="Toggle Section">
                 <i class="ph ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'}"></i>
               </button>
               <span class="text-xs font-mono font-bold text-brand-600 dark:text-brand-400">#${sIdx + 1}</span>
               <input type="text" value="${escapeHtml(section.title || '')}" placeholder="Section Title..." 
-                class="text-sm font-bold text-zinc-900 dark:text-zinc-100 bg-transparent border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
+                class="text-sm font-bold text-slate-900 dark:text-slate-100 bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
                 data-action="update-sec-title" data-sec-idx="${sIdx}">
             </div>
             
             <div class="flex items-center space-x-1 shrink-0">
-              <button data-action="move-sec-up" data-sec-idx="${sIdx}" class="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Move Section Up">
+              <button data-action="move-sec-up" data-sec-idx="${sIdx}" class="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Move Section Up">
                 <i class="ph ph-arrow-up"></i>
               </button>
-              <button data-action="move-sec-down" data-sec-idx="${sIdx}" class="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Move Section Down">
+              <button data-action="move-sec-down" data-sec-idx="${sIdx}" class="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Move Section Down">
                 <i class="ph ph-arrow-down"></i>
               </button>
-              <button data-action="duplicate-section" data-sec-idx="${sIdx}" class="p-1.5 text-zinc-400 hover:text-brand-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Duplicate Section">
+              <button data-action="duplicate-section" data-sec-idx="${sIdx}" class="p-1.5 text-slate-400 hover:text-brand-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Duplicate Section">
                 <i class="ph ph-copy"></i>
               </button>
-              <button data-action="delete-section" data-sec-idx="${sIdx}" class="p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Delete Section">
+              <button data-action="delete-section" data-sec-idx="${sIdx}" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Delete Section">
                 <i class="ph ph-trash"></i>
               </button>
             </div>
@@ -951,7 +965,7 @@
           <div id="section-body-${sIdx}" class="${isCollapsed ? 'hidden' : 'p-5 space-y-4'}">
             <div id="steps-container-${sIdx}" class="space-y-4"></div>
             
-            <button data-action="add-step" data-sec-idx="${sIdx}" class="w-full py-2.5 border border-dashed border-zinc-200 dark:border-zinc-700 hover:border-brand-400 dark:hover:border-brand-500 rounded-xl flex items-center justify-center space-x-1.5 text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 text-xs font-semibold transition bg-zinc-50/30 dark:bg-zinc-900/20">
+            <button data-action="add-step" data-sec-idx="${sIdx}" class="w-full py-2.5 border border-dashed border-slate-200 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500 rounded-xl flex items-center justify-center space-x-1.5 text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 text-xs font-semibold transition bg-slate-50/40 dark:bg-surface-850/40">
               <i class="ph ph-plus"></i>
               <span>Add Step to Section</span>
             </button>
@@ -985,21 +999,21 @@
     function renderStepCard(parentEl, sIdx, stepIdx, step) {
       const stepEl = document.createElement('div');
       stepEl.id = `step-card-${sIdx}-${stepIdx}`;
-      stepEl.className = 'bg-white dark:bg-surface-850 border border-zinc-200/90 dark:border-zinc-800 rounded-xl p-4 shadow-2xs space-y-3.5 transition-all';
+      stepEl.className = 'bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-3.5 transition-all';
 
       const typeStyles = {
         desk: { label: 'Hands-On', bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800/50' },
         computer: { label: 'Workstation', bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800/50' },
-        info: { label: 'Read', bg: 'bg-zinc-100 dark:bg-zinc-800', text: 'text-zinc-600 dark:text-zinc-300', border: 'border-zinc-200 dark:border-zinc-700' }
+        info: { label: 'Read', bg: 'bg-slate-100 dark:bg-surface-800', text: 'text-slate-600 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-700' }
       }[step.type || 'desk'];
 
       const isStepCollapsed = Boolean(step.collapsed);
       const bodyTextareaId = `step-body-${sIdx}-${stepIdx}`;
 
       stepEl.innerHTML = `
-        <div class="flex items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800/80 pb-2.5">
+        <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
           <div class="flex items-center space-x-2 flex-1">
-            <button data-action="toggle-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-1">
+            <button data-action="toggle-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1">
               <i class="ph ${isStepCollapsed ? 'ph-caret-right' : 'ph-caret-down'} text-xs"></i>
             </button>
             <select data-action="change-step-type" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" 
@@ -1009,21 +1023,21 @@
               <option value="info" ${step.type === 'info' ? 'selected' : ''}>[info] Read</option>
             </select>
             <input type="text" value="${escapeHtml(step.title || '')}" placeholder="Step Title (Optional)..." 
-              class="text-xs font-semibold text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 flex-1"
+              class="text-xs font-semibold text-slate-800 dark:text-slate-200 bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 flex-1"
               data-action="update-step-title" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
           </div>
 
           <div class="flex items-center space-x-1 shrink-0">
-            <button data-action="move-step-up" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" title="Move Up">
+            <button data-action="move-step-up" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" title="Move Up">
               <i class="ph ph-arrow-up text-xs"></i>
             </button>
-            <button data-action="move-step-down" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" title="Move Down">
+            <button data-action="move-step-down" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" title="Move Down">
               <i class="ph ph-arrow-down text-xs"></i>
             </button>
-            <button data-action="duplicate-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-brand-600" title="Duplicate Step">
+            <button data-action="duplicate-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-slate-400 hover:text-brand-600" title="Duplicate Step">
               <i class="ph ph-copy text-xs"></i>
             </button>
-            <button data-action="delete-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-rose-600" title="Delete Step">
+            <button data-action="delete-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-slate-400 hover:text-rose-600" title="Delete Step">
               <i class="ph ph-trash text-xs"></i>
             </button>
           </div>
@@ -1034,16 +1048,16 @@
           <div>
             ${renderMarkdownToolbar(bodyTextareaId, sIdx, stepIdx)}
             <textarea id="${bodyTextareaId}" rows="3" 
-              class="autogrow-textarea w-full text-xs font-mono text-zinc-800 dark:text-zinc-100 bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700 rounded-b-xl p-3 focus:ring-1 focus:ring-brand-500 focus:border-brand-500 placeholder:text-zinc-400 min-h-[5rem]"
+              class="autogrow-textarea w-full text-xs font-mono text-slate-800 dark:text-slate-100 bg-slate-50/50 dark:bg-surface-900 border border-slate-200 dark:border-slate-700 rounded-b-xl p-3 focus:ring-1 focus:ring-brand-500 focus:border-brand-500 placeholder:text-slate-400 min-h-[5rem]"
               placeholder="Imperative instructions... (e.g. Connect the cable to port {{ PORT }})."
               data-action="update-step-body" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">${escapeHtml(step.body || '')}</textarea>
           </div>
 
           ${step.type !== 'info' ? `
             <!-- Hints Section -->
-            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-2">
+            <div class="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
               <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                   <i class="ph ph-lightbulb text-amber-500"></i> Hints (${step.hints ? step.hints.length : 0})
                 </span>
                 <button data-action="add-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline">
@@ -1057,17 +1071,17 @@
                   <div class="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-3 space-y-2">
                     <div class="flex items-center justify-between gap-2">
                       <input type="text" value="${escapeHtml(hint.label || '')}" placeholder="Label (e.g. Which cable is mine?)" 
-                        class="text-xs font-medium text-amber-950 dark:text-amber-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg px-2.5 py-1 flex-1"
+                        class="text-xs font-medium text-amber-950 dark:text-amber-200 bg-white dark:bg-surface-850 border border-amber-200 dark:border-amber-700/60 rounded-lg px-2.5 py-1 flex-1"
                         data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="label">
                       <button type="button" onclick="triggerAiPolish('${hintTextId}', 'hint')" class="text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-800/40 flex items-center gap-1">
                         <i class="ph ph-sparkle text-purple-500"></i> Polish
                       </button>
-                      <button data-action="delete-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" class="text-zinc-400 hover:text-rose-600 text-xs">
+                      <button data-action="delete-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" class="text-slate-400 hover:text-rose-600 text-xs">
                         <i class="ph ph-x pointer-events-none"></i>
                       </button>
                     </div>
                     <textarea id="${hintTextId}" rows="2" placeholder="Hint walkthrough markdown text..." 
-                      class="autogrow-textarea w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg p-2 focus:ring-1 focus:ring-amber-500 min-h-[3.5rem]"
+                      class="autogrow-textarea w-full text-xs text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-850 border border-amber-200 dark:border-amber-700/60 rounded-lg p-2 focus:ring-1 focus:ring-amber-500 min-h-[3.5rem]"
                       data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="text">${escapeHtml(hint.text || '')}</textarea>
                   </div>
                 `}).join('')}
@@ -1075,25 +1089,25 @@
             </div>
 
             <!-- Solution Section -->
-            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div class="border-t border-slate-100 dark:border-slate-800 pt-3">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                   <i class="ph ph-key text-emerald-600 dark:text-emerald-400"></i> Walkthrough Solution (Optional)
                 </span>
                 <div class="flex items-center space-x-2">
                   <button type="button" onclick="triggerAiPolish('solution-${sIdx}-${stepIdx}', 'solution')" class="text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-800/40 flex items-center gap-1">
                     <i class="ph ph-sparkle text-purple-500"></i> Polish
                   </button>
-                  <span class="text-[10px] text-zinc-400 dark:text-zinc-500">Revealed after taking hints</span>
+                  <span class="text-[10px] text-slate-400 dark:text-slate-500">Revealed after taking hints</span>
                 </div>
               </div>
               <textarea id="solution-${sIdx}-${stepIdx}" rows="2" placeholder="Multi-line solution revealed to participants..." 
-                class="autogrow-textarea w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 focus:ring-1 focus:ring-emerald-500 min-h-[3.5rem]"
+                class="autogrow-textarea w-full text-xs text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-surface-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 focus:ring-1 focus:emerald-500 min-h-[3.5rem]"
                 data-action="update-solution" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">${escapeHtml(step.solution || '')}</textarea>
             </div>
 
             <!-- Checkpoint / Question Section -->
-            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div class="border-t border-slate-100 dark:border-slate-800 pt-3">
               ${step.checkpoint ? `
                 <div class="bg-brand-50/40 dark:bg-brand-950/20 border border-brand-200/60 dark:border-brand-800/40 rounded-xl p-3.5 space-y-3">
                   <div class="flex items-center justify-between">
@@ -1107,48 +1121,48 @@
 
                   <div>
                     <input type="text" value="${escapeHtml(step.checkpoint.prompt || '')}" placeholder="Prompt (e.g. Enter host IP to continue)..." 
-                      class="w-full text-xs text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-brand-500"
+                      class="w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-brand-500"
                       data-action="update-cp-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="prompt">
                   </div>
 
                   <div class="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Mode</label>
+                      <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Mode</label>
                       <select data-action="update-cp-mode" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" 
-                        class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-800 dark:text-zinc-200">
+                        class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-slate-800 dark:text-slate-200">
                         <option value="exact" ${step.checkpoint.mode !== 'pattern' ? 'selected' : ''}>Exact Answer</option>
                         <option value="pattern" ${step.checkpoint.mode === 'pattern' ? 'selected' : ''}>Pattern Mask</option>
                       </select>
                     </div>
 
                     <div>
-                      <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Capture As Variable (Optional)</label>
+                      <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Capture As Variable (Optional)</label>
                       <input type="text" value="${escapeHtml(step.checkpoint.capture || '')}" placeholder="e.g. SERIAL" 
-                        class="w-full text-xs font-mono uppercase bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-zinc-800 dark:text-zinc-200"
+                        class="w-full text-xs font-mono uppercase bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-800 dark:text-slate-200"
                         data-action="update-cp-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="capture">
                     </div>
                   </div>
 
                   ${step.checkpoint.mode === 'pattern' ? `
                     <div>
-                      <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Pattern Mask (9, A, X, ?, *)</label>
+                      <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Pattern Mask (9, A, X, ?, *)</label>
                       <input type="text" value="${escapeHtml(step.checkpoint.pattern || '')}" placeholder="e.g. XXXX-XXXX-XXXX" 
-                        class="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-800 dark:text-zinc-200"
+                        class="w-full text-xs font-mono bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200"
                         data-action="update-cp-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="pattern">
-                      <span class="text-[10px] text-zinc-400 mt-1 block">Preview: <code class="font-mono text-brand-600 dark:text-brand-400">${escapeHtml(generateMaskExample(step.checkpoint.pattern))}</code></span>
+                      <span class="text-[10px] text-slate-400 mt-1 block">Preview: <code class="font-mono text-brand-600 dark:text-brand-400">${escapeHtml(generateMaskExample(step.checkpoint.pattern))}</code></span>
                     </div>
                   ` : `
                     <div>
-                      <label class="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Answer / Alternatives (Use | for options)</label>
+                      <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Answer / Alternatives (Use | for options)</label>
                       <input type="text" value="${escapeHtml(formatCheckpointAnswers(step.checkpoint))}" placeholder="e.g. {{ HOST_IP }} | {{ HOST_CIDR }}" 
-                        class="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-800 dark:text-zinc-200"
+                        class="w-full text-xs font-mono bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200"
                         data-action="update-cp-answers" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
                     </div>
                   `}
 
                   <div>
                     <input type="text" value="${escapeHtml(step.checkpoint.placeholder || '')}" placeholder="Placeholder hint (e.g. e.g. 10.0.0.1XX)" 
-                      class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-700 dark:text-zinc-300"
+                      class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-700 dark:text-slate-300"
                       data-action="update-cp-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="placeholder">
                   </div>
                 </div>
@@ -1167,25 +1181,25 @@
 
     function renderMarkdownToolbar(textareaId, sIdx, stepIdx) {
       return `
-        <div class="flex flex-wrap items-center gap-1 px-3 py-1.5 bg-zinc-100/70 dark:bg-surface-900 border-t border-l border-r border-zinc-200 dark:border-zinc-700 rounded-t-xl text-zinc-600 dark:text-zinc-300">
-          <button type="button" onclick="applyFormat('${textareaId}', 'bold')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs font-bold" title="Bold">B</button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'italic')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs italic" title="Italic">I</button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'strike')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs line-through" title="Strikethrough">S</button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'code')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs font-mono" title="Inline Code">&lt;/&gt;</button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'codeblock')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs" title="Code Block">
+        <div class="flex flex-wrap items-center gap-1 px-3 py-1.5 bg-slate-100/80 dark:bg-surface-800 border-t border-l border-r border-slate-200 dark:border-slate-700 rounded-t-xl text-slate-600 dark:text-slate-300">
+          <button type="button" onclick="applyFormat('${textareaId}', 'bold')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs font-bold" title="Bold">B</button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'italic')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs italic" title="Italic">I</button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'strike')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs line-through" title="Strikethrough">S</button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'code')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs font-mono" title="Inline Code">&lt;/&gt;</button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'codeblock')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs" title="Code Block">
             <i class="ph ph-code-block"></i>
           </button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'table')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs" title="Table">
+          <button type="button" onclick="applyFormat('${textareaId}', 'table')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs" title="Table">
             <i class="ph ph-table"></i>
           </button>
-          <button type="button" onclick="applyFormat('${textareaId}', 'link')" class="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-xs" title="Link">
+          <button type="button" onclick="applyFormat('${textareaId}', 'link')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs" title="Link">
             <i class="ph ph-link"></i>
           </button>
-          <div class="h-3 w-px bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
-          <button type="button" onclick="openPhotoInsertPicker(${sIdx}, ${stepIdx}, '${textareaId}')" class="px-2 py-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-[11px] font-semibold flex items-center gap-1 text-brand-600 dark:text-brand-400">
+          <div class="h-3 w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+          <button type="button" onclick="openPhotoInsertPicker(${sIdx}, ${stepIdx}, '${textareaId}')" class="px-2 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-[11px] font-semibold flex items-center gap-1 text-brand-600 dark:text-brand-400">
             <i class="ph ph-image"></i> + Image
           </button>
-          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-[11px] font-semibold flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-[11px] font-semibold flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
             <i class="ph ph-brackets-curly"></i> + Token
           </button>
           <button type="button" onclick="triggerAiPolish('${textareaId}', 'body')" class="px-2 py-0.5 hover:bg-purple-100 dark:hover:bg-purple-950/60 rounded text-[11px] font-semibold flex items-center gap-1 text-purple-600 dark:text-purple-400 ml-auto">
@@ -1467,14 +1481,14 @@
       templateData.content.forEach((sec, sIdx) => {
         html += `
           <div class="pt-1.5 pb-0.5">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-400">#${sIdx + 1} ${escapeHtml(sec.title || 'Untitled')}</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">#${sIdx + 1} ${escapeHtml(sec.title || 'Untitled')}</span>
           </div>
         `;
         sec.steps.forEach((st, stIdx) => {
           totalSteps++;
           html += `
-            <button onclick="jumpToStep(${sIdx}, ${stIdx})" class="w-full text-left px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-surface-800 text-zinc-700 dark:text-zinc-300 truncate flex items-center space-x-1.5">
-              <span class="w-1.5 h-1.5 rounded-full ${st.type === 'desk' ? 'bg-amber-500' : st.type === 'computer' ? 'bg-blue-500' : 'bg-zinc-400'}"></span>
+            <button onclick="jumpToStep(${sIdx}, ${stIdx})" class="w-full text-left px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-surface-800 text-slate-700 dark:text-slate-300 truncate flex items-center space-x-1.5">
+              <span class="w-1.5 h-1.5 rounded-full ${st.type === 'desk' ? 'bg-amber-500' : st.type === 'computer' ? 'bg-blue-500' : 'bg-slate-400'}"></span>
               <span class="truncate">${escapeHtml(st.title || `Step ${stIdx + 1}`)}</span>
             </button>
           `;
@@ -1537,7 +1551,7 @@
       container.innerHTML = '';
 
       if (templateData.variables.length === 0) {
-        container.innerHTML = `<div class="p-4 text-center text-zinc-400 italic">No variables declared yet. Click "+ New Variable" above.</div>`;
+        container.innerHTML = `<div class="p-4 text-center text-slate-400 italic">No variables declared yet. Click "+ New Variable" above.</div>`;
         return;
       }
 
@@ -1546,15 +1560,15 @@
         const val7 = evaluateFormula(v.expression, { seat: 7 });
 
         const div = document.createElement('div');
-        div.className = 'bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3';
+        div.className = 'bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3';
         div.innerHTML = `
-          <input type="text" value="${escapeHtml(v.name || '')}" placeholder="NAME" class="w-36 text-xs font-mono font-bold uppercase bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-800 dark:text-zinc-200" oninput="updateVarField(${idx}, 'name', this.value)">
-          <span class="text-zinc-400 font-bold">=</span>
-          <input type="text" value="${escapeHtml(v.expression || '')}" placeholder="expression (e.g. 10 + seat)" class="flex-1 text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-800 dark:text-zinc-200" oninput="updateVarField(${idx}, 'expression', this.value)">
-          <div class="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 shrink-0">
+          <input type="text" value="${escapeHtml(v.name || '')}" placeholder="NAME" class="w-36 text-xs font-mono font-bold uppercase bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200" oninput="updateVarField(${idx}, 'name', this.value)">
+          <span class="text-slate-400 font-bold">=</span>
+          <input type="text" value="${escapeHtml(v.expression || '')}" placeholder="expression (e.g. 10 + seat)" class="flex-1 text-xs font-mono bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200" oninput="updateVarField(${idx}, 'expression', this.value)">
+          <div class="text-[11px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
             Seat 1: <strong class="text-brand-600 dark:text-brand-400">${escapeHtml(val1)}</strong> | Seat 7: <strong class="text-brand-600 dark:text-brand-400">${escapeHtml(val7)}</strong>
           </div>
-          <button onclick="deleteVariable(${idx})" class="text-zinc-400 hover:text-rose-600 p-1">
+          <button onclick="deleteVariable(${idx})" class="text-slate-400 hover:text-rose-600 p-1">
             <i class="ph ph-trash"></i>
           </button>
         `;
@@ -1597,27 +1611,27 @@
 
       let html = `
         <div>
-          <h3 class="font-bold uppercase text-[10px] text-zinc-400 mb-2">Variables Declared (${vars.length})</h3>
+          <h3 class="font-bold uppercase text-[10px] text-slate-400 mb-2">Variables Declared (${vars.length})</h3>
           <div class="space-y-2">
             ${vars.map(v => `
-              <div class="p-2.5 bg-zinc-50 dark:bg-surface-850 border border-zinc-200 dark:border-zinc-700/80 rounded-xl">
+              <div class="p-2.5 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700/80 rounded-xl">
                 <span class="font-mono font-bold text-brand-600 dark:text-brand-400">${escapeHtml(v.name)}</span>
-                <span class="text-zinc-400"> = </span>
+                <span class="text-slate-400"> = </span>
                 <code class="font-mono">${escapeHtml(v.expression)}</code>
               </div>
-            `).join('') || '<div class="text-zinc-400 italic">No variables declared</div>'}
+            `).join('') || '<div class="text-slate-400 italic">No variables declared</div>'}
           </div>
         </div>
 
-        <div class="pt-3 border-t border-zinc-200 dark:border-zinc-800">
-          <h3 class="font-bold uppercase text-[10px] text-zinc-400 mb-2">Captured Checkpoint Values (${captures.length})</h3>
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800">
+          <h3 class="font-bold uppercase text-[10px] text-slate-400 mb-2">Captured Checkpoint Values (${captures.length})</h3>
           <div class="space-y-2">
             ${captures.map(c => `
               <div class="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl flex items-center justify-between">
                 <span class="font-mono font-bold text-emerald-700 dark:text-emerald-300">{{ ${escapeHtml(c.name)} }}</span>
-                <span class="text-zinc-400">Captured in Section ${c.section} · Step ${c.step}</span>
+                <span class="text-slate-400">Captured in Section ${c.section} · Step ${c.step}</span>
               </div>
-            `).join('') || '<div class="text-zinc-400 italic">No checkpoint captures</div>'}
+            `).join('') || '<div class="text-slate-400 italic">No checkpoint captures</div>'}
           </div>
         </div>
       `;
@@ -1663,15 +1677,15 @@
 
       imgs.forEach((img, idx) => {
         const card = document.createElement('div');
-        card.className = 'bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 flex flex-col space-y-2';
+        card.className = 'bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 flex flex-col space-y-2';
         card.innerHTML = `
-          <div class="h-28 rounded-lg overflow-hidden bg-zinc-200 dark:bg-zinc-900 flex items-center justify-center">
+          <div class="h-28 rounded-lg overflow-hidden bg-slate-200 dark:bg-surface-900 flex items-center justify-center">
             <img src="${img.url}" alt="${escapeHtml(img.name)}" class="h-full w-full object-contain">
           </div>
-          <span class="text-xs font-mono font-semibold truncate text-zinc-800 dark:text-zinc-200">${escapeHtml(img.name)}</span>
-          <div class="flex items-center justify-between pt-1 border-t border-zinc-200 dark:border-zinc-700">
+          <span class="text-xs font-mono font-semibold truncate text-slate-800 dark:text-slate-200">${escapeHtml(img.name)}</span>
+          <div class="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
             <button onclick="copySnippet('![${escapeHtml(img.name)}](${escapeHtml(img.name)})')" class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline">Copy Snippet</button>
-            <button onclick="deleteImage(${idx})" class="text-zinc-400 hover:text-rose-600 text-xs"><i class="ph ph-trash"></i></button>
+            <button onclick="deleteImage(${idx})" class="text-slate-400 hover:text-rose-600 text-xs"><i class="ph ph-trash"></i></button>
           </div>
         `;
         grid.appendChild(card);
@@ -1722,7 +1736,7 @@
       let added = 0;
       referenced.forEach(refName => {
         if (!templateData.images.some(img => img.name.toLowerCase() === refName)) {
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" fill="#27272a"/><text x="50%" y="50%" fill="#a1a1aa" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${refName}</text></svg>`;
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" fill="#1e293b"/><text x="50%" y="50%" fill="#94a3b8" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${refName}</text></svg>`;
           const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
           templateData.images.push({ name: refName, url: dataUrl });
           added++;
@@ -1748,16 +1762,16 @@
       });
 
       let html = `
-        <div class="bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-6">
-          <div class="border-b border-zinc-100 dark:border-zinc-800 pb-4">
-            <h1 class="text-xl font-bold text-zinc-900 dark:text-zinc-100">${escapeHtml(substitutePlaceholders(templateData.title, context))}</h1>
-            <p class="text-xs text-zinc-500 mt-1">${escapeHtml(substitutePlaceholders(templateData.description, context))}</p>
+        <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-6">
+          <div class="border-b border-slate-100 dark:border-slate-800 pb-4">
+            <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">${escapeHtml(substitutePlaceholders(templateData.title, context))}</h1>
+            <p class="text-xs text-slate-500 mt-1">${escapeHtml(substitutePlaceholders(templateData.description, context))}</p>
           </div>
       `;
 
       templateData.content.forEach((sec, sIdx) => {
         html += `
-          <div class="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 first:border-0 first:pt-0">
+          <div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 first:border-0 first:pt-0">
             <h2 class="text-sm font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
               # ${sIdx + 1} · ${escapeHtml(substitutePlaceholders(sec.title, context))}
             </h2>
@@ -1771,16 +1785,16 @@
           });
 
           html += `
-            <div class="bg-zinc-50/70 dark:bg-surface-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-3">
+            <div class="bg-slate-50/70 dark:bg-surface-850 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                <span class="text-xs font-bold text-slate-900 dark:text-slate-100">
                   Step ${stIdx + 1}: ${escapeHtml(substitutePlaceholders(st.title || '', context))}
                 </span>
-                <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                   ${st.type}
                 </span>
               </div>
-              <div class="prose-preview text-xs text-zinc-700 dark:text-zinc-300">
+              <div class="prose-preview text-xs text-slate-700 dark:text-slate-300">
                 ${parseMarkdownSafe(renderedBody)}
               </div>
             </div>
@@ -2063,276 +2077,348 @@
       a.download = `${slug}.md`;
       a.click();
       URL.revokeObjectURL(a.href);
-      showToast("Exported markdown file (.md)", "success");
+      showToast("Markdown downloaded (.md)", "success");
     }
 
     function copyMarkdownToClipboard() {
       const md = generateMarkdown();
-      copySnippet(md);
-      showToast("Copied Markdown to clipboard", "success");
+      copySnippet(md, "Markdown copied to clipboard");
     }
 
-    function executeImport() {
-      const text = document.getElementById('importMarkdownTextarea')?.value;
-      if (!text || !text.trim()) {
-        showToast("Please paste markdown text to import.", "error");
-        return;
+    // --- Unified Live AI API Dispatcher ---
+    async function callLiveAiProvider({ provider, model, apiKey, customUrl, systemPrompt, userPrompt, maxTokens = 1000 }) {
+      const cleanKey = (apiKey || '').trim();
+      const cleanModel = (model || '').trim();
+
+      if (provider !== 'custom' && !cleanKey) {
+        throw new Error('API Key is required. Configure it in Settings.');
       }
-      templateData = parseMarkdown(text);
-      closeImportModal();
-      renderBuilder();
-      renderVariablesList();
-      renderImagesGrid();
-      showToast("Template imported successfully", "success");
-      scheduleAutoSave();
-    }
 
-    function handleImportFileSelect(e) {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        document.getElementById('importMarkdownTextarea').value = evt.target.result || '';
-      };
-      reader.readAsText(file);
-    }
-
-    function scheduleAutoSave() {
-      const status = document.getElementById('saveStatusIndicator');
-      if (status) {
-        status.innerHTML = `<i class="ph ph-circle-notch animate-spin text-amber-500"></i><span>Saving...</span>`;
-      }
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(() => {
-        try {
-          localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(templateData));
-        } catch (_) {
-          // Payload reduction fallback if images hit localStorage quota
-          const lightData = { ...templateData, images: [] };
-          try { localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(lightData)); } catch (_) {}
+      if (provider === 'gemini') {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+        const body = {
+          contents: [{ parts: [{ text: userPrompt }] }]
+        };
+        if (systemPrompt && systemPrompt.trim()) {
+          body.systemInstruction = { parts: [{ text: systemPrompt }] };
         }
-        if (status) {
-          status.innerHTML = `<i class="ph ph-cloud-check text-emerald-500"></i><span>Saved</span>`;
+        if (maxTokens) {
+          body.generationConfig = { maxOutputTokens: maxTokens };
         }
-      }, 500);
-    }
 
-    function showToast(msg, type = 'info') {
-      const existing = document.getElementById('studioToast');
-      if (existing) existing.remove();
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
 
-      const toast = document.createElement('div');
-      toast.id = 'studioToast';
-      toast.className = `fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center space-x-2 transition-all transform duration-200 ${
-        type === 'error' ? 'bg-rose-600 text-white' : type === 'success' ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-white'
-      }`;
-      toast.innerHTML = `<i class="ph ${type === 'error' ? 'ph-warning-circle' : type === 'success' ? 'ph-check-circle' : 'ph-info'}"></i><span>${escapeHtml(msg)}</span>`;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 2800);
-    }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text === undefined) throw new Error('No candidate content returned by Gemini.');
+        return text;
+      } 
+      
+      if (provider === 'openai') {
+        const url = 'https://api.openai.com/v1/chat/completions';
+        const messages = [];
+        if (systemPrompt && systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt });
+        messages.push({ role: 'user', content: userPrompt });
 
-    function escapeHtml(str) {
-      return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: cleanModel,
+            messages,
+            max_tokens: maxTokens
+          })
+        });
 
-    function copySnippet(text) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => copySnippetFallback(text));
-      } else {
-        copySnippetFallback(text);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        const text = data?.choices?.[0]?.message?.content;
+        if (text === undefined) throw new Error('No completion returned by OpenAI.');
+        return text;
       }
+
+      if (provider === 'anthropic') {
+        const url = 'https://api.anthropic.com/v1/messages';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': cleanKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: cleanModel,
+            system: systemPrompt || undefined,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: userPrompt }]
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        const text = data?.content?.[0]?.text;
+        if (text === undefined) throw new Error('No message content returned by Anthropic.');
+        return text;
+      }
+
+      if (provider === 'custom') {
+        const base = (customUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
+        const url = `${base}/chat/completions`;
+        const headers = { 'Content-Type': 'application/json' };
+        if (cleanKey) headers['Authorization'] = `Bearer ${cleanKey}`;
+
+        const messages = [];
+        if (systemPrompt && systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt });
+        messages.push({ role: 'user', content: userPrompt });
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: cleanModel || 'default',
+            messages,
+            max_tokens: maxTokens
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        const text = data?.choices?.[0]?.message?.content;
+        if (text === undefined) throw new Error('No content returned by custom endpoint.');
+        return text;
+      }
+
+      throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    function copySnippetFallback(text) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    }
-
-    function openSettingsModal() {
-      document.getElementById('settingsAiProvider').value = appSettings.aiProvider;
-      onAiProviderChanged();
-      document.getElementById('settingsAiModel').value = appSettings.aiModel;
-      document.getElementById('settingsAiApiKey').value = appSettings.aiApiKey;
-      document.getElementById('settingsAiCustomUrl').value = appSettings.aiCustomUrl;
-      document.getElementById('settingsAiSystemPrompt').value = appSettings.aiSystemPrompt;
-      document.getElementById('settingsModal').classList.remove('hidden');
-      autoGrowAllTextareas(document.getElementById('settingsModal'));
-    }
-    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-    function saveAppSettingsModal() {
-      appSettings.aiProvider = document.getElementById('settingsAiProvider').value;
-      appSettings.aiModel = document.getElementById('settingsAiModel').value;
-      appSettings.aiApiKey = document.getElementById('settingsAiApiKey').value;
-      appSettings.aiCustomUrl = document.getElementById('settingsAiCustomUrl').value;
-      appSettings.aiSystemPrompt = document.getElementById('settingsAiSystemPrompt').value;
-      saveAppSettings();
-      closeSettingsModal();
-      showToast('Settings saved', 'success');
-    }
-
-    function onAiProviderChanged() {
+    // --- Dynamic Live Model Fetching Engine ---
+    async function fetchLiveModelsForProvider() {
       const prov = document.getElementById('settingsAiProvider').value;
+      const key = document.getElementById('settingsAiApiKey').value.trim();
+      const customUrl = document.getElementById('settingsAiCustomUrl')?.value.trim();
       const modelSelect = document.getElementById('settingsAiModel');
-      const customRow = document.getElementById('customEndpointRow');
-      modelSelect.innerHTML = (PROVIDER_MODELS[prov] || []).map(m => `<option value="${m}">${m}</option>`).join('');
-      if (prov === 'custom') customRow?.classList.remove('hidden');
-      else customRow?.classList.add('hidden');
+      const btn = document.getElementById('refreshModelsBtn');
+      const originalText = btn.innerHTML;
+
+      btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-[11px]"></i> Fetching...`;
+
+      try {
+        let fetchedModels = [];
+
+        if (prov === 'gemini') {
+          if (!key) throw new Error("API Key required to query models");
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+          }
+          const data = await res.json();
+          fetchedModels = (data.models || [])
+            .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+            .map(m => m.name.replace('models/', ''));
+        } else if (prov === 'openai') {
+          if (!key) throw new Error("API Key required to query models");
+          const res = await fetch('https://api.openai.com/v1/models', {
+            headers: { 'Authorization': `Bearer ${key}` }
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
+          }
+          const data = await res.json();
+          fetchedModels = (data.data || [])
+            .map(m => m.id)
+            .filter(id => id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3'))
+            .sort();
+        } else if (prov === 'anthropic') {
+          fetchedModels = [
+            'claude-3-7-sonnet-latest',
+            'claude-3-5-sonnet-latest',
+            'claude-3-5-haiku-latest',
+            'claude-3-opus-latest'
+          ];
+        } else if (prov === 'custom') {
+          const base = (customUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
+          const res = await fetch(`${base}/models`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          const data = await res.json();
+          fetchedModels = (data.data || data.models || []).map(m => m.id || m.name);
+        }
+
+        if (fetchedModels && fetchedModels.length > 0) {
+          modelSelect.innerHTML = fetchedModels.map(m => `<option value="${m}">${m}</option>`).join('');
+          showToast(`Loaded ${fetchedModels.length} models for ${prov}`, 'success');
+        } else {
+          showToast(`No matching models found. Using defaults.`, 'info');
+        }
+      } catch (err) {
+        showToast(`Could not fetch live models: ${err.message}`, 'error');
+      } finally {
+        btn.innerHTML = originalText;
+      }
     }
 
     async function testAiConnection() {
       const status = document.getElementById('testConnectionStatus');
-      status.textContent = 'Testing connection...';
+      const btn = document.getElementById('testConnectionBtn');
+      if (!status || !btn) return;
+
       const prov = document.getElementById('settingsAiProvider').value;
-      const key = document.getElementById('settingsAiApiKey').value;
+      const model = document.getElementById('settingsAiModel').value;
+      const key = document.getElementById('settingsAiApiKey').value.trim();
+      const customUrl = document.getElementById('settingsAiCustomUrl').value.trim();
+
+      const origBtnHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-sm"></i><span>Testing...</span>`;
+      status.textContent = 'Connecting...';
+      status.className = 'text-[11px] font-medium text-amber-500 max-w-xs truncate text-right';
+
+      const startTime = performance.now();
 
       try {
-        if (!key && prov !== 'custom') throw new Error("API key required");
-        status.textContent = '✓ Ready';
-        status.className = 'text-[11px] font-medium text-emerald-500';
+        await callLiveAiProvider({
+          provider: prov,
+          model,
+          apiKey: key,
+          customUrl,
+          systemPrompt: 'Respond strictly with: OK',
+          userPrompt: 'Ping test. Reply OK.',
+          maxTokens: 5
+        });
+
+        const elapsedMs = Math.round(performance.now() - startTime);
+        status.innerHTML = `<span class="flex items-center gap-1 text-emerald-500 font-semibold"><i class="ph-bold ph-check"></i> Connected (${elapsedMs}ms)</span>`;
+        status.className = 'text-[11px] font-medium text-emerald-500 max-w-xs truncate text-right';
+        showToast(`AI Connected successfully (${prov} · ${elapsedMs}ms)`, 'success');
       } catch (err) {
-        status.textContent = `Error: ${err.message}`;
-        status.className = 'text-[11px] font-medium text-rose-500';
+        const errorMsg = err.message || 'Connection failed';
+        status.innerHTML = `<span class="flex items-center gap-1 text-rose-500 font-semibold" title="${escapeHtml(errorMsg)}"><i class="ph-bold ph-warning-circle"></i> Failed</span>`;
+        status.className = 'text-[11px] font-medium text-rose-500 max-w-xs truncate text-right';
+        showToast(`Connection failed: ${errorMsg}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origBtnHtml;
       }
     }
-
-    function openImportModal() { document.getElementById('importModal').classList.remove('hidden'); }
-    function closeImportModal() { document.getElementById('importModal').classList.add('hidden'); }
-    function togglePresetMenu() { document.getElementById('presetMenu').classList.toggle('hidden'); }
-    function toggleExportMenu() { document.getElementById('exportMenu').classList.toggle('hidden'); }
-
-    function openTokenCheatsheet(cb = null) {
-      tokenSelectCallback = cb;
-      const builtIns = ['SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME'];
-      const builtInList = document.getElementById('builtInTokensList');
-      builtInList.innerHTML = builtIns.map(t => `
-        <button onclick="handleTokenSelect('${t}')" class="p-1.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-brand-50 border border-zinc-200 dark:border-zinc-700 rounded text-left font-mono text-[11px] truncate">
-          {{ ${t} }}
-        </button>
-      `).join('');
-
-      const declList = document.getElementById('declaredTokensList');
-      declList.innerHTML = (templateData.variables || []).map(v => `
-        <button onclick="handleTokenSelect('${v.name}')" class="p-1.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-brand-50 border border-zinc-200 dark:border-zinc-700 rounded text-left font-mono text-[11px] truncate">
-          {{ ${v.name} }}
-        </button>
-      `).join('') || '<div class="text-zinc-400 italic">None declared</div>';
-
-      const capList = document.getElementById('captureTokensList');
-      const caps = [];
-      templateData.content.forEach(s => s.steps.forEach(st => { if (st.checkpoint?.capture) caps.push(st.checkpoint.capture); }));
-      capList.innerHTML = caps.map(c => `
-        <button onclick="handleTokenSelect('${c}')" class="p-1.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-emerald-50 border border-zinc-200 dark:border-zinc-700 rounded text-left font-mono text-[11px] truncate text-emerald-600">
-          {{ ${c} }}
-        </button>
-      `).join('') || '<div class="text-zinc-400 italic">None captured</div>';
-
-      document.getElementById('tokenModal').classList.remove('hidden');
-    }
-    function closeTokenCheatsheet() {
-      document.getElementById('tokenModal').classList.add('hidden');
-      tokenSelectCallback = null;
-    }
-    function handleTokenSelect(token) {
-      if (tokenSelectCallback) tokenSelectCallback(token);
-      else copySnippet(`{{ ${token} }}`);
-      closeTokenCheatsheet();
-    }
-
-    function pickTokenForTextarea(taId) {
-      openTokenCheatsheet((token) => {
-        const ta = document.getElementById(taId);
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const ins = `{{ ${token} }}`;
-        ta.value = ta.value.substring(0, start) + ins + ta.value.substring(end);
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
-        autoGrowTextarea(ta);
-      });
-    }
-
-    function openPhotoInsertPicker(sIdx, stepIdx, taId) {
-      const grid = document.getElementById('imagePickerGrid');
-      grid.innerHTML = '';
-      const imgs = templateData.images || [];
-
-      if (imgs.length === 0) {
-        showToast("No images uploaded yet. Go to Image Library.", "info");
-        switchView('images');
-        return;
-      }
-
-      imgs.forEach(img => {
-        const item = document.createElement('div');
-        item.className = 'cursor-pointer p-2 bg-zinc-50 dark:bg-zinc-800 hover:border-brand-500 border border-zinc-200 dark:border-zinc-700 rounded-xl text-center space-y-1';
-        item.onclick = () => {
-          const ta = document.getElementById(taId);
-          if (ta) {
-            const start = ta.selectionStart;
-            const ins = `![${img.name}](${img.name})\n`;
-            ta.value = ta.value.substring(0, start) + ins + ta.value.substring(ta.selectionEnd);
-            ta.dispatchEvent(new Event('input', { bubbles: true }));
-            autoGrowTextarea(ta);
-          }
-          closeImagePickerModal();
-        };
-        item.innerHTML = `
-          <div class="h-20 bg-zinc-200 dark:bg-zinc-900 rounded overflow-hidden flex items-center justify-center">
-            <img src="${img.url}" class="h-full object-contain">
-          </div>
-          <span class="block truncate text-[11px] font-mono">${escapeHtml(img.name)}</span>
-        `;
-        grid.appendChild(item);
-      });
-
-      document.getElementById('imagePickerModal').classList.remove('hidden');
-    }
-    function closeImagePickerModal() { document.getElementById('imagePickerModal').classList.add('hidden'); }
 
     let aiActiveTarget = null;
     function triggerAiPolish(elId, type) {
       const el = document.getElementById(elId);
       if (!el) return;
-      const text = el.value || '';
-      aiActiveTarget = { elId, type, original: text };
-      document.getElementById('aiPolishOriginalPreview').textContent = text;
-      document.getElementById('aiPolishResultPreview').value = text;
+
+      const selStart = el.selectionStart;
+      const selEnd = el.selectionEnd;
+      const rawVal = el.value || '';
+      const isPartial = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
+      const textToPolish = isPartial ? rawVal.substring(selStart, selEnd) : rawVal;
+
+      aiActiveTarget = {
+        elId,
+        type,
+        fullText: rawVal,
+        original: textToPolish,
+        isPartial,
+        selStart: selStart || 0,
+        selEnd: selEnd || 0
+      };
+
+      document.getElementById('aiPolishOriginalPreview').textContent = textToPolish || '(Empty text)';
+      document.getElementById('aiPolishResultPreview').value = textToPolish;
+      document.getElementById('aiCustomInstructionInput').value = '';
+      const statusBadge = document.getElementById('aiPolishStatusBadge');
+      if (statusBadge) statusBadge.textContent = isPartial ? 'Polishing selected segment' : 'Polishing entire text';
+
       document.getElementById('aiPolishModal').classList.remove('hidden');
       autoGrowAllTextareas(document.getElementById('aiPolishModal'));
     }
+
     function closeAiPolishModal() {
       document.getElementById('aiPolishModal').classList.add('hidden');
       aiActiveTarget = null;
     }
-    function runAiPolishGeneration() {
-      const btn = document.getElementById('regenerateAiPolishBtn');
-      btn.innerHTML = `<i class="ph ph-circle-notch animate-spin"></i> Polishing...`;
-      setTimeout(() => {
-        const orig = aiActiveTarget ? aiActiveTarget.original : '';
-        const polished = orig.trim() ? `${orig.trim()}\n\n*(Polished: concise imperative instructions)*` : 'Step action instructions...';
-        document.getElementById('aiPolishResultPreview').value = polished;
-        btn.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Polish with AI`;
-        autoGrowAllTextareas(document.getElementById('aiPolishModal'));
-      }, 700);
-    }
-    function applyAiPolishedText() {
-      if (aiActiveTarget) {
-        const el = document.getElementById(aiActiveTarget.elId);
-        if (el) {
-          el.value = document.getElementById('aiPolishResultPreview').value;
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          autoGrowTextarea(el);
-        }
+
+    async function runAiPolishGeneration() {
+      if (!aiActiveTarget || !aiActiveTarget.original.trim()) {
+        showToast('No text available to polish.', 'info');
+        return;
       }
+
+      const btn = document.getElementById('regenerateAiPolishBtn');
+      const origBtnHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-purple-600"></i> Polishing...`;
+
+      const customInstruction = document.getElementById('aiCustomInstructionInput')?.value.trim();
+      const baseSystemPrompt = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+      const combinedSystem = `${baseSystemPrompt}\nCRITICAL: Keep all vLabs tokens like {{ VARIABLE }} intact. Maintain imperative instructional style for technical lab manuals. Return ONLY the polished text without any preamble or conversational framing.`;
+      
+      const userPrompt = customInstruction
+        ? `Instruction: ${customInstruction}\n\nText to polish:\n${aiActiveTarget.original}`
+        : `Polish the following lab instructions:\n${aiActiveTarget.original}`;
+
+      try {
+        const polished = await callLiveAiProvider({
+          provider: appSettings.aiProvider,
+          model: appSettings.aiModel,
+          apiKey: appSettings.aiApiKey,
+          customUrl: appSettings.aiCustomUrl,
+          systemPrompt: combinedSystem,
+          userPrompt,
+          maxTokens: 2000
+        });
+
+        document.getElementById('aiPolishResultPreview').value = polished.trim();
+        autoGrowAllTextareas(document.getElementById('aiPolishModal'));
+        showToast('Text polished successfully', 'success');
+      } catch (err) {
+        showToast(`AI Polish error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origBtnHtml;
+      }
+    }
+
+    function applyAiPolishedText() {
+      if (!aiActiveTarget) return;
+
+      const el = document.getElementById(aiActiveTarget.elId);
+      const polishedText = document.getElementById('aiPolishResultPreview').value;
+
+      if (el) {
+        if (aiActiveTarget.isPartial) {
+          const before = aiActiveTarget.fullText.substring(0, aiActiveTarget.selStart);
+          const after = aiActiveTarget.fullText.substring(aiActiveTarget.selEnd);
+          el.value = before + polishedText + after;
+        } else {
+          el.value = polishedText;
+        }
+
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        autoGrowTextarea(el);
+      }
+
       closeAiPolishModal();
       showToast('Polished text applied', 'success');
     }
@@ -2381,6 +2467,62 @@
           ],
           images: []
         };
+      } else if (type === 'device') {
+        templateData = {
+          title: "Device Provisioning Lab",
+          description: "Pattern masks, hardware serials, MAC addresses. 45 min.",
+          variables: [
+            { name: "BENCH", expression: "'B' + pad(seat, 2)" },
+            { name: "DEVICE_NAME", expression: "'dev-' + slug(last_name) + '-' + pad(seat, 2)" }
+          ],
+          content: [
+            {
+              title: "Unbox and Record",
+              collapsed: false,
+              steps: [
+                { type: "info", title: "Overview", body: "Unbox your device at bench {{ BENCH }}.", collapsed: false, hints: [], solution: "", checkpoint: null },
+                {
+                  type: "desk",
+                  title: "Record Serial",
+                  body: "Enter the serial number from the back label.",
+                  collapsed: false,
+                  hints: [{ label: "Where is the serial?", text: "Look for the barcode label on the underside." }],
+                  solution: "",
+                  checkpoint: { prompt: "Enter serial number", mode: "pattern", pattern: "XXXX.XXXX.XXXX", capture: "SERIAL", placeholder: "ABCD.1234.WXYZ", answer: "", answers: [] }
+                }
+              ]
+            }
+          ],
+          images: []
+        };
+      } else if (type === 'software') {
+        templateData = {
+          title: "Developer Onboarding Lab",
+          description: "Git branches, pull requests, accounts. 60 min.",
+          variables: [
+            { name: "USERNAME", expression: "slug(first_name) + '.' + slug(last_name)" },
+            { name: "BRANCH", expression: "'feat/' + slug(last_name) + '-' + pad(seat, 2)" }
+          ],
+          content: [
+            {
+              title: "Setup Account",
+              collapsed: false,
+              steps: [
+                { type: "info", title: "Identity", body: "Your username is `{{ USERNAME }}`.", collapsed: false, hints: [], solution: "", checkpoint: null },
+                {
+                  type: "computer",
+                  title: "Create Branch",
+                  body: "Run: `git checkout -b {{ BRANCH }}` and submit short commit hash.",
+                  collapsed: false,
+                  hints: [],
+                  solution: "",
+                  checkpoint: { prompt: "Short commit hash", mode: "pattern", pattern: "xxxxxxx", capture: "COMMIT", placeholder: "a1b2c3d", answer: "", answers: [] }
+                }
+              ]
+            }
+          ],
+          images: []
+        };
       }
       document.getElementById('presetMenu').classList.add('hidden');
       renderBuilder();
@@ -2400,6 +2542,309 @@
     function updateBadges() {
       document.getElementById('varCountBadge').textContent = (templateData.variables || []).length;
       document.getElementById('imgCountBadge').textContent = (templateData.images || []).length;
+    }
+
+    // Modal & Dropdown Openers/Closers
+    function openSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      if (!modal) return;
+      document.getElementById('settingsAiProvider').value = appSettings.aiProvider || 'gemini';
+      onAiProviderChanged();
+      document.getElementById('settingsAiModel').value = appSettings.aiModel || 'gemini-2.5-flash';
+      document.getElementById('settingsAiApiKey').value = appSettings.aiApiKey || '';
+      document.getElementById('settingsAiCustomUrl').value = appSettings.aiCustomUrl || '';
+      document.getElementById('settingsAiSystemPrompt').value = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+      document.getElementById('testConnectionStatus').textContent = '';
+      modal.classList.remove('hidden');
+      autoGrowAllTextareas(modal);
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal')?.classList.add('hidden');
+    }
+
+    function saveAppSettingsModal() {
+      appSettings.aiProvider = document.getElementById('settingsAiProvider').value;
+      appSettings.aiModel = document.getElementById('settingsAiModel').value;
+      appSettings.aiApiKey = document.getElementById('settingsAiApiKey').value.trim();
+      appSettings.aiCustomUrl = document.getElementById('settingsAiCustomUrl').value.trim();
+      appSettings.aiSystemPrompt = document.getElementById('settingsAiSystemPrompt').value.trim();
+      saveAppSettings();
+      closeSettingsModal();
+      showToast('Settings saved successfully', 'success');
+    }
+
+    function onAiProviderChanged() {
+      const prov = document.getElementById('settingsAiProvider').value;
+      const customRow = document.getElementById('customEndpointRow');
+      const modelSelect = document.getElementById('settingsAiModel');
+      if (prov === 'custom') {
+        customRow?.classList.remove('hidden');
+      } else {
+        customRow?.classList.add('hidden');
+      }
+      const models = PROVIDER_MODELS[prov] || ['default'];
+      modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+      if (appSettings.aiProvider === prov && models.includes(appSettings.aiModel)) {
+        modelSelect.value = appSettings.aiModel;
+      }
+    }
+
+    function openTokenCheatsheet(callback = null) {
+      tokenSelectCallback = callback;
+      const modal = document.getElementById('tokenModal');
+      if (!modal) return;
+
+      const builtInList = document.getElementById('builtInTokensList');
+      const declaredList = document.getElementById('declaredTokensList');
+      const captureList = document.getElementById('captureTokensList');
+
+      const builtIns = ['SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME'];
+      builtInList.innerHTML = builtIns.map(t => `
+        <button onclick="handleTokenSelect('${t}')" class="p-2 rounded-lg bg-slate-50 dark:bg-surface-850 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200 dark:border-slate-700 font-mono text-left text-brand-600 dark:text-brand-400 font-semibold truncate">
+          {{ ${t} }}
+        </button>
+      `).join('');
+
+      const declared = (templateData.variables || []).map(v => v.name);
+      declaredList.innerHTML = declared.length ? declared.map(t => `
+        <button onclick="handleTokenSelect('${t}')" class="p-2 rounded-lg bg-slate-50 dark:bg-surface-850 hover:bg-brand-50 dark:hover:bg-brand-950/40 border border-slate-200 dark:border-slate-700 font-mono text-left text-brand-600 dark:text-brand-400 font-semibold truncate">
+          {{ ${t} }}
+        </button>
+      `).join('') : '<span class="text-slate-400 italic col-span-2">No variables declared</span>';
+
+      const captures = [];
+      templateData.content.forEach(s => s.steps.forEach(st => {
+        if (st.checkpoint && st.checkpoint.capture) captures.push(st.checkpoint.capture);
+      }));
+      captureList.innerHTML = captures.length ? captures.map(t => `
+        <button onclick="handleTokenSelect('${t}')" class="p-2 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 font-mono text-left text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+          {{ ${t} }}
+        </button>
+      `).join('') : '<span class="text-slate-400 italic col-span-2">No captures defined</span>';
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeTokenCheatsheet() {
+      document.getElementById('tokenModal')?.classList.add('hidden');
+      tokenSelectCallback = null;
+    }
+
+    function handleTokenSelect(token) {
+      if (tokenSelectCallback) {
+        tokenSelectCallback(token);
+      } else {
+        copySnippet(`{{ ${token} }}`, `Copied {{ ${token} }}`);
+      }
+      closeTokenCheatsheet();
+    }
+
+    function pickTokenForTextarea(textareaId, sIdx, stepIdx) {
+      openTokenCheatsheet((token) => {
+        const ta = document.getElementById(textareaId);
+        if (!ta) return;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const val = ta.value;
+        const tokenStr = `{{ ${token} }}`;
+        ta.value = val.substring(0, start) + tokenStr + val.substring(end);
+        ta.focus();
+        ta.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        autoGrowTextarea(ta);
+      });
+    }
+
+    function openPhotoInsertPicker(sIdx, stepIdx, textareaId) {
+      activeImageInsertContext = { sIdx, stepIdx, textareaId };
+      const modal = document.getElementById('imagePickerModal');
+      const grid = document.getElementById('imagePickerGrid');
+      if (!modal || !grid) return;
+
+      const imgs = templateData.images || [];
+      if (!imgs.length) {
+        showToast('No images in library. Upload images in the Image Library tab first.', 'info');
+        switchView('images');
+        return;
+      }
+
+      grid.innerHTML = imgs.map((img, idx) => `
+        <div onclick="selectImageForInsertion('${escapeHtml(img.name)}')" class="p-2 border border-slate-200 dark:border-slate-700 hover:border-brand-500 rounded-xl cursor-pointer bg-slate-50 dark:bg-surface-850 flex flex-col items-center space-y-1.5 transition">
+          <div class="h-20 w-full rounded-lg overflow-hidden bg-slate-200 dark:bg-surface-900 flex items-center justify-center">
+            <img src="${img.url}" alt="${escapeHtml(img.name)}" class="h-full w-full object-contain">
+          </div>
+          <span class="text-[11px] font-mono truncate w-full text-center text-slate-700 dark:text-slate-300">${escapeHtml(img.name)}</span>
+        </div>
+      `).join('');
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeImagePickerModal() {
+      document.getElementById('imagePickerModal')?.classList.add('hidden');
+      activeImageInsertContext = null;
+    }
+
+    function selectImageForInsertion(imgName) {
+      if (!activeImageInsertContext) return;
+      const ta = document.getElementById(activeImageInsertContext.textareaId);
+      if (ta) {
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const val = ta.value;
+        const snippet = `![${imgName}](${imgName})\n`;
+        ta.value = val.substring(0, start) + snippet + val.substring(end);
+        ta.focus();
+        ta.setSelectionRange(start + snippet.length, start + snippet.length);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        autoGrowTextarea(ta);
+      }
+      closeImagePickerModal();
+    }
+
+    function openImportModal() {
+      const modal = document.getElementById('importModal');
+      const ta = document.getElementById('importMarkdownTextarea');
+      if (ta) ta.value = '';
+      modal?.classList.remove('hidden');
+      autoGrowAllTextareas(modal);
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal')?.classList.add('hidden');
+    }
+
+    function handleImportFileSelect(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const ta = document.getElementById('importMarkdownTextarea');
+        if (ta) {
+          ta.value = evt.target.result || '';
+          autoGrowTextarea(ta);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function executeImport() {
+      const text = document.getElementById('importMarkdownTextarea')?.value || '';
+      if (!text.trim()) {
+        showToast('Please paste Markdown content or choose a file.', 'error');
+        return;
+      }
+      try {
+        const parsed = parseMarkdown(text);
+        templateData = parsed;
+        closeImportModal();
+        renderBuilder();
+        renderVariablesList();
+        renderImagesGrid();
+        showToast('Template imported successfully', 'success');
+        scheduleAutoSave();
+      } catch (err) {
+        showToast(`Failed to parse template: ${err.message}`, 'error');
+      }
+    }
+
+    function togglePresetMenu() {
+      const menu = document.getElementById('presetMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function toggleExportMenu() {
+      const menu = document.getElementById('exportMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function showToast(message, type = 'info') {
+      let toastBox = document.getElementById('toastContainer');
+      if (!toastBox) {
+        toastBox = document.createElement('div');
+        toastBox.id = 'toastContainer';
+        toastBox.className = 'fixed bottom-5 right-5 z-[100] flex flex-col space-y-2 pointer-events-none';
+        document.body.appendChild(toastBox);
+      }
+      const toast = document.createElement('div');
+      const bg = type === 'error' ? 'bg-rose-600 text-white' : type === 'success' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-100 dark:bg-slate-700';
+      toast.className = `${bg} px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      toastBox.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 350);
+      }, 3000);
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function copySnippet(text, toastMsg = 'Copied to clipboard') {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast(toastMsg, 'success');
+          }).catch(() => fallbackCopy(text, toastMsg));
+        } else {
+          fallbackCopy(text, toastMsg);
+        }
+      } catch (_) {
+        fallbackCopy(text, toastMsg);
+      }
+    }
+
+    function fallbackCopy(text, toastMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast(toastMsg, 'success');
+      } catch (e) {
+        showToast('Unable to copy to clipboard', 'error');
+      }
+      document.body.removeChild(ta);
+    }
+
+    function scheduleAutoSave() {
+      const indicator = document.getElementById('saveStatusIndicator');
+      if (indicator) {
+        indicator.innerHTML = `<i class="ph ph-circle-notch animate-spin text-amber-500"></i><span>Saving...</span>`;
+      }
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        try {
+          localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(templateData));
+        } catch (e) {
+          // If quota exceeded due to large base64 images, save without large image data urls
+          try {
+            const trimmed = {
+              ...templateData,
+              images: (templateData.images || []).map(img => ({ name: img.name, url: '' }))
+            };
+            localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(trimmed));
+          } catch (_) {}
+        }
+        if (indicator) {
+          indicator.innerHTML = `<i class="ph ph-cloud-check text-emerald-500"></i><span>Saved</span>`;
+        }
+      }, 600);
     }
 
     // Global click listener to close menus
