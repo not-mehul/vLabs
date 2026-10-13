@@ -1,0 +1,3447 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vLabs Template Studio</title>
+  
+  <!-- Embedded SVG Favicon matching the brand logo -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%234f46e5'/%3E%3Cstop offset='100%25' stop-color='%230284c7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M9 11L14 16L9 21' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cline x1='16' y1='21' x2='23' y2='21' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+
+  <!-- Inter Font with native system fallbacks for air-gapped / offline support -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons (with fallback to inline SVG engine) -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Marked Markdown Parser (with fallback to robust bundled parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <script>
+    window.tailwind = window.tailwind || {};
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          boxShadow: {
+            '2xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            surface: {
+              50: '#fafafa',
+              100: '#f4f4f5',
+              200: '#e4e4e7',
+              700: '#27272a',
+              800: '#18181b',
+              850: '#121215',
+              900: '#09090b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Smooth custom scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 9999px; }
+    .dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
+    ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+    .dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+    /* Flash highlight animation for quick navigation jumps */
+    .highlight-flash { animation: flashHighlight 1.4s ease-out; }
+    @keyframes flashHighlight {
+      0% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.6); }
+      100% { box-shadow: none; }
+    }
+
+    /* Markdown preview typographic treatment */
+    .prose-preview h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .prose-preview h2 { font-size: 1.15rem; font-weight: 600; margin-top: 0.85rem; margin-bottom: 0.4rem; }
+    .prose-preview p { margin-bottom: 0.6rem; line-height: 1.6; }
+    .prose-preview code { padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; font-family: 'JetBrains Mono', monospace; }
+    :not(.dark) .prose-preview code { background-color: #f4f4f5; color: #4f46e5; }
+    .dark .prose-preview code { background-color: #27272a; color: #818cf8; }
+    .prose-preview pre { padding: 0.75rem 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 0.85rem; font-size: 0.825rem; }
+    :not(.dark) .prose-preview pre { background-color: #18181b; color: #f4f4f5; }
+    .dark .prose-preview pre { background-color: #09090b; color: #f4f4f5; border: 1px solid #27272a; }
+    .prose-preview pre code { background: none; color: inherit; padding: 0; }
+    .prose-preview table { width: 100%; border-collapse: collapse; margin-bottom: 0.85rem; font-size: 0.8rem; }
+    .prose-preview th, .prose-preview td { border: 1px solid #e4e4e7; padding: 0.45rem 0.65rem; text-align: left; }
+    .dark .prose-preview th, .dark .prose-preview td { border-color: #27272a; }
+    :not(.dark) .prose-preview th { background-color: #f4f4f5; font-weight: 600; }
+    .dark .prose-preview th { background-color: #18181b; font-weight: 600; }
+    .prose-preview blockquote { border-left: 3px solid #6366f1; padding-left: 0.85rem; opacity: 0.85; font-style: italic; }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans text-zinc-800 dark:text-zinc-100 antialiased bg-zinc-100 dark:bg-surface-900 overflow-hidden transition-colors duration-200">
+
+  <header class="bg-white/95 dark:bg-surface-850/95 backdrop-blur-md border-b border-zinc-200/80 dark:border-zinc-800 px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xs z-30 shrink-0 transition-colors">
+    <div class="flex items-center space-x-3">
+      <!-- Sidebar collapse toggle trigger -->
+      <button onclick="toggleSidebarCollapse()" class="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Toggle Sidebar">
+        <i class="ph ph-sidebar text-lg"></i>
+      </button>
+
+      <!-- Brand Logo / Badge -->
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-xs shadow-brand-500/30">
+          <svg class="w-4 h-4" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 11L14 16L9 21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="16" y1="21" x2="23" y2="21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-50">vLabs Studio</h1>
+            <span class="text-[10px] bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-semibold px-2 py-0.5 rounded-full border border-brand-200/70 dark:border-brand-500/20">v1.4.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Search Filter in Header -->
+    <div class="hidden md:flex items-center relative w-72 lg:w-80">
+      <i class="ph ph-magnifying-glass absolute left-3 text-zinc-400 dark:text-zinc-500 text-sm"></i>
+      <input type="text" id="globalSearchInput" placeholder="Search steps, variables, tokens..." 
+        class="w-full pl-8 pr-7 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800/80 hover:bg-white dark:hover:bg-zinc-800 focus:bg-white dark:focus:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:border-brand-500 rounded-lg transition focus:ring-1 focus:ring-brand-500 text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400"
+        oninput="handleGlobalSearch(this.value)">
+      <button id="clearSearchBtn" onclick="clearGlobalSearch()" class="hidden absolute right-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+        <i class="ph ph-x-circle text-xs"></i>
+      </button>
+    </div>
+
+    <!-- Actions & Toolbar -->
+    <div class="flex items-center space-x-2">
+      <!-- Auto-save status indicator with localStorage persistence badge -->
+      <div id="autoSaveIndicator" class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/80 transition-all">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span id="autoSaveText">Saved</span>
+      </div>
+
+      <!-- Theme Toggle Button -->
+      <button id="themeToggleBtn" onclick="toggleDarkMode()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs" title="Toggle color theme">
+        <i id="themeIcon" class="ph ph-moon text-sm text-zinc-500 dark:text-zinc-400"></i>
+        <span id="themeText">Theme</span>
+      </button>
+
+      <!-- Starter presets -->
+      <div class="relative inline-block text-left" id="presetDropdownContainer">
+        <button id="presetBtn" onclick="toggleDropdown('presetMenu')" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs">
+          <i class="ph ph-sparkle text-sm text-brand-600 dark:text-brand-400"></i>
+          <span>Examples</span>
+          <i class="ph ph-caret-down text-xs text-zinc-400"></i>
+        </button>
+        <div id="presetMenu" class="hidden absolute right-0 mt-1 w-64 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 py-1.5 z-50 text-xs">
+          <button onclick="loadExample('skeleton')" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex flex-col">
+            <span class="font-semibold text-brand-600 dark:text-brand-400">A. Minimal Starter Skeleton</span>
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">Clean baseline structure to start crafting</span>
+          </button>
+          <button onclick="loadExample('network')" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex flex-col border-t border-zinc-100 dark:border-zinc-700/50">
+            <span class="font-semibold text-zinc-800 dark:text-zinc-200">B. Network Bench Lab</span>
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">Per-seat IP addressing, VLANs & cabling gates</span>
+          </button>
+          <button onclick="loadExample('provisioning')" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex flex-col border-t border-zinc-100 dark:border-zinc-700/50">
+            <span class="font-semibold text-zinc-800 dark:text-zinc-200">C. Device Provisioning & Serials</span>
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">Hardware masks, MAC verification & captures</span>
+          </button>
+          <button onclick="loadExample('onboarding')" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex flex-col border-t border-zinc-100 dark:border-zinc-700/50">
+            <span class="font-semibold text-zinc-800 dark:text-zinc-200">D. Software Onboarding & Git</span>
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">Name formulas, slug derivation & commit hashes</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Import Button -->
+      <button onclick="openImportModal()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs" title="Import from Markdown or JSON">
+        <i class="ph ph-arrow-square-in text-sm text-zinc-500 dark:text-zinc-400"></i>
+        <span>Import</span>
+      </button>
+
+      <!-- Quick Export Dropdown -->
+      <div class="relative inline-block text-left" id="exportDropdownContainer">
+        <button id="exportBtn" onclick="toggleDropdown('exportMenu')" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-2xs shadow-brand-500/30">
+          <i class="ph ph-download-simple text-sm"></i>
+          <span>Export</span>
+          <i class="ph ph-caret-down text-xs opacity-80"></i>
+        </button>
+        <div id="exportMenu" class="hidden absolute right-0 mt-1 w-52 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 py-1.5 z-50 text-xs">
+          <button onclick="exportMarkdownFile()" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-center space-x-2 text-zinc-700 dark:text-zinc-200">
+            <i class="ph ph-file-text text-brand-600 dark:text-brand-400 text-sm"></i>
+            <span>Export Markdown (.md)</span>
+          </button>
+          <button onclick="exportJsonFile()" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-center space-x-2 text-zinc-700 dark:text-zinc-200 border-t border-zinc-100 dark:border-zinc-700/50">
+            <i class="ph ph-brackets-curly text-indigo-600 dark:text-indigo-400 text-sm"></i>
+            <span>Export JSON (.json)</span>
+          </button>
+          <button onclick="copyMarkdownToClipboard()" class="w-full text-left px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-center space-x-2 text-zinc-700 dark:text-zinc-200 border-t border-zinc-100 dark:border-zinc-700/50">
+            <i class="ph ph-copy text-amber-600 dark:text-amber-400 text-sm"></i>
+            <span>Copy to Clipboard</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Validation Indicator -->
+      <div id="validationBadge" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 cursor-pointer" onclick="switchView('validate')">
+        <i class="ph-bold ph-check-circle text-emerald-600 dark:text-emerald-400"></i>
+        <span id="validationStatusText">Valid Spec</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Left Navigation & Outline Sidebar -->
+    <aside id="mainSidebar" class="w-64 bg-white dark:bg-surface-850 border-r border-zinc-200 dark:border-zinc-800 flex flex-col justify-between shrink-0 transition-all duration-200">
+      <div class="p-3 space-y-3 overflow-y-auto flex-1">
+        
+        <!-- View selector tabs -->
+        <div class="space-y-1" id="sidebarWorkspacesContainer">
+          <label class="sidebar-label text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-2">Workspaces</label>
+          <button onclick="switchView('builder')" id="nav-builder" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-500/20" title="Content Builder">
+            <i class="ph ph-tree-structure text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">Content Builder</span>
+          </button>
+          <button onclick="switchView('variables')" id="nav-variables" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800" title="Variables & Formulas">
+            <i class="ph ph-function text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">Variables & Formulas</span>
+            <span id="varCountBadge" class="sidebar-text text-[10px] bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.2 rounded-full font-mono">0</span>
+          </button>
+          <button onclick="switchView('dependencies')" id="nav-dependencies" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800" title="Dependency Graph">
+            <i class="ph ph-graph text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">Dependency Graph</span>
+            <span id="graphCountBadge" class="sidebar-text text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded-full font-mono">0</span>
+          </button>
+          <button onclick="switchView('images')" id="nav-images" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800" title="Image Library">
+            <i class="ph ph-image text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">Image Library</span>
+            <span id="missingImagesBadge" class="hidden text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-bold">!</span>
+            <span id="imgCountBadge" class="sidebar-text text-[10px] bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.2 rounded-full font-mono">0</span>
+          </button>
+          <button onclick="switchView('preview')" id="nav-preview" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800" title="Participant Preview">
+            <i class="ph ph-users-three text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">Participant Preview</span>
+          </button>
+          <button onclick="switchView('validate')" id="nav-validate" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800" title="vLabs Rules Engine">
+            <i class="ph ph-shield-check text-base shrink-0"></i>
+            <span class="sidebar-text flex-1 text-left">vLabs Rules Engine</span>
+            <span id="errCountBadge" class="hidden text-[10px] bg-rose-500 text-white font-bold px-1.5 py-0.2 rounded-full">0</span>
+          </button>
+        </div>
+
+        <hr class="border-zinc-100 dark:border-zinc-800" />
+
+        <!-- Quick Jump Outline & Step Search Filter -->
+        <div class="space-y-2" id="sidebarOutlineContainer">
+          <div class="flex items-center justify-between px-1">
+            <span class="sidebar-label text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Outline</span>
+            <button onclick="addNewSection()" class="sidebar-text text-brand-600 dark:text-brand-400 hover:text-brand-700 text-xs font-bold" title="Add Section">+ Section</button>
+          </div>
+          <div class="relative sidebar-search">
+            <input type="text" id="outlineFilterInput" placeholder="Filter outline..." 
+              class="w-full px-2.5 py-1 text-[11px] bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-800 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:border-brand-500"
+              oninput="filterOutline(this.value)">
+          </div>
+          <div id="outlineList" class="space-y-1.5 text-xs max-h-96 overflow-y-auto pr-1">
+            <!-- Dynamically populated outline tree -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Helper Token Picker footer -->
+      <div id="sidebarFooter" class="p-3 bg-zinc-50 dark:bg-surface-900 border-t border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 text-[11px] leading-relaxed shrink-0">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+            <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i> Tokens
+          </span>
+          <button onclick="openTokenCheatsheet()" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Inspect</button>
+        </div>
+        <p class="text-zinc-500 dark:text-zinc-400 text-[10px]">Insert <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ SEAT_ID }}</code>, <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ FIRST_NAME }}</code>, or variables.</p>
+      </div>
+    </aside>
+
+    <!-- Center Workspace -->
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col" id="mainContainer">
+
+      <!-- ============================================== -->
+      <!-- VIEW 1: CONTENT BUILDER (SECTIONS & STEPS) -->
+      <!-- ============================================== -->
+      <section id="view-builder" class="space-y-5 max-w-5xl mx-auto w-full pb-24">
+        
+        <!-- Lab Header Metadata Card -->
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5 shadow-xs space-y-4">
+          <div class="flex items-start justify-between">
+            <div class="space-y-1 flex-1 pr-4">
+              <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Template Title *</label>
+              <input type="text" id="templateTitle" placeholder="e.g. Switch Bench Lab" 
+                class="w-full text-lg font-bold text-zinc-900 dark:text-zinc-100 bg-transparent border-0 border-b border-zinc-200 dark:border-zinc-700 focus:border-brand-600 focus:ring-0 px-0 py-1 transition placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+                oninput="onMetadataChanged()">
+            </div>
+            <div class="flex items-center space-x-2 shrink-0">
+              <button onclick="toggleAllSections(true)" class="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700/80" title="Collapse all sections">
+                <i class="ph ph-arrows-in-line"></i> Collapse All
+              </button>
+              <button onclick="toggleAllSections(false)" class="px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700/80" title="Expand all sections">
+                <i class="ph ph-arrows-out-line"></i> Expand All
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider mb-1">Description (Optional, ≤ 1000 characters)</label>
+            <textarea id="templateDescription" rows="2" placeholder="One-line summary shown in the template list..." 
+              class="w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-zinc-400"
+              oninput="onMetadataChanged()"></textarea>
+          </div>
+        </div>
+
+        <!-- Search Results Count Banner -->
+        <div id="searchFilterBanner" class="hidden bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800 text-brand-800 dark:text-brand-300 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i class="ph-bold ph-funnel text-brand-600 dark:text-brand-400"></i>
+            <span>Showing filtered steps for: <b id="searchQueryText"></b></span>
+          </div>
+          <button onclick="clearGlobalSearch()" class="text-brand-700 dark:text-brand-300 font-bold hover:underline">Show All</button>
+        </div>
+
+        <!-- Missing Images Warning Banner if any -->
+        <div id="missingImagesBanner" class="hidden bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 px-4 py-3 rounded-xl text-xs space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 font-bold">
+              <i class="ph-bold ph-warning text-amber-600 dark:text-amber-400 text-base"></i>
+              <span>Missing Image Assets Referenced in Template</span>
+            </div>
+            <button onclick="switchView('images')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px]">
+              Resolve in Image Library →
+            </button>
+          </div>
+          <p id="missingImagesText" class="text-amber-800 dark:text-amber-200 text-[11px]"></p>
+        </div>
+
+        <!-- Sections Container -->
+        <div id="sectionsContainer" class="space-y-5">
+          <!-- Populated by JavaScript -->
+        </div>
+
+        <!-- Add Section Button -->
+        <div class="text-center pt-2">
+          <button onclick="addNewSection()" class="inline-flex items-center space-x-2 px-5 py-3 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/30 text-zinc-600 dark:text-zinc-300 hover:text-brand-600 dark:hover:text-brand-300 font-semibold text-xs transition duration-150">
+            <i class="ph-bold ph-plus-circle text-base"></i>
+            <span>Add New Section</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- VIEW 2: VARIABLES & FORMULAS EDITOR -->
+      <section id="view-variables" class="hidden space-y-6 max-w-5xl mx-auto w-full pb-20">
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-6 shadow-xs">
+          <div class="flex items-start justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+            <div>
+              <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <i class="ph-bold ph-function text-brand-600 dark:text-brand-400"></i> Variables & Formulas
+              </h2>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Evaluated per participant based on <code class="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-brand-700 dark:text-brand-300 font-mono">seat</code>, <code class="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-brand-700 dark:text-brand-300 font-mono">first_name</code>, <code class="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-brand-700 dark:text-brand-300 font-mono">last_name</code>, or prior variables.
+              </p>
+            </div>
+            <button onclick="addNewVariable()" class="px-3.5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5">
+              <i class="ph-bold ph-plus"></i> Add Formula
+            </button>
+          </div>
+
+          <!-- Variables List -->
+          <div class="mt-6 space-y-3" id="variablesListContainer">
+            <!-- Injected by JS -->
+          </div>
+
+          <!-- Formula Helper Cheatsheet Card -->
+          <div class="mt-8 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-750 space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+              <i class="ph ph-lightbulb text-amber-500"></i> Allowed Helper Functions & Syntax
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">pad(value, width, [char])</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Left pad.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">pad(seat, 3) → "007"</code></p>
+              </div>
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">hex(n)</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Hexadecimal.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">hex(seat + 15) → "16"</code></p>
+              </div>
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">floor(n), ceil(n), round(n)</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Arithmetic rounding.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">ceil(seat / 4) → 2</code></p>
+              </div>
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">slug(s)</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Lower-case alphanumeric only.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">slug(first_name) → "maryjane"</code></p>
+              </div>
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">initials(s)</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Uppercase word initials.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">initials("Jane Doe") → "JD"</code></p>
+              </div>
+              <div class="bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-2xs">
+                <code class="font-bold text-brand-600 dark:text-brand-400">mod(a, b)</code>
+                <p class="text-zinc-500 dark:text-zinc-400 mt-1">Modulo.<br><code class="text-[11px] text-zinc-600 dark:text-zinc-300">mod(seat, 4) → 3</code></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: DEPENDENCY GRAPH & TOKEN MAP -->
+      <section id="view-dependencies" class="hidden space-y-6 max-w-5xl mx-auto w-full pb-20">
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-6 shadow-xs space-y-6">
+          <div class="flex items-start justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+            <div>
+              <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <i class="ph-bold ph-graph text-indigo-600 dark:text-indigo-400"></i> Dependency Graph & Token Map
+              </h2>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Visual audit of formula references, checkpoint captures, and downstream token consumers across all sections.
+              </p>
+            </div>
+            <button onclick="renderDependencyGraph()" class="px-3.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5">
+              <i class="ph ph-arrows-clockwise"></i> Refresh Map
+            </button>
+          </div>
+
+          <div id="dependencyGraphContent" class="space-y-6">
+            <!-- Dynamically populated graph cards -->
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: IMAGE LIBRARY & ASSET AUDITOR -->
+      <section id="view-images" class="hidden space-y-6 max-w-5xl mx-auto w-full pb-20">
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-6 shadow-xs space-y-5">
+          <div class="flex items-start justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+            <div>
+              <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <i class="ph-bold ph-images text-brand-600 dark:text-brand-400"></i> Image Asset Library & Auditor
+              </h2>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Drag and drop lab photos, diagrams, or schematics here. Supports PNG, JPEG, GIF, WebP (≤ 3 MB). Referenced via: <code class="bg-zinc-100 dark:bg-zinc-800 text-brand-700 dark:text-brand-300 px-1 py-0.5 rounded font-mono">![alt](filename.png "title")</code>.
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="generateAllMissingPlaceholders()" id="createMockImagesBtn" class="hidden px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5">
+                <i class="ph ph-magic-wand"></i> Generate Mock Assets
+              </button>
+              <label class="cursor-pointer px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-2">
+                <i class="ph-bold ph-upload-simple"></i> Upload Files
+                <input type="file" id="imageFileInput" multiple accept="image/png,image/jpeg,image/gif,image/webp" class="hidden" onchange="handleImageFileSelect(event)">
+              </label>
+            </div>
+          </div>
+
+          <!-- Missing Images Audit Card if any -->
+          <div id="missingAssetsLibraryCard" class="hidden bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                <i class="ph-bold ph-warning-circle text-amber-600 dark:text-amber-400 text-base"></i>
+                Missing Referenced Images in Markdown Steps
+              </span>
+              <span class="text-[11px] text-amber-700 dark:text-amber-400">Drop matching files or generate placeholders</span>
+            </div>
+            <div id="missingAssetsList" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Drag and Drop Zone -->
+          <div id="dropZone" class="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-8 text-center bg-zinc-50 dark:bg-zinc-800/40 hover:bg-brand-50/40 dark:hover:bg-brand-950/20 hover:border-brand-400 transition cursor-pointer" onclick="document.getElementById('imageFileInput').click()">
+            <div class="w-12 h-12 mx-auto rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl mb-2">
+              <i class="ph ph-cloud-arrow-up"></i>
+            </div>
+            <p class="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Drop equipment photos, rack diagrams, or schematics here</p>
+            <p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Filenames normalized to kebab-case per vLabs 1.4 conventions</p>
+          </div>
+
+          <!-- Uploaded Images Grid -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Stored Library Files (<span id="imgCountText">0</span>)</span>
+            </div>
+            <div id="imagesGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: PARTICIPANT PREVIEW & SEAT SIMULATOR -->
+      <section id="view-preview" class="hidden space-y-6 max-w-5xl mx-auto w-full pb-20">
+        <!-- Simulator Toolbar -->
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+              <label class="text-xs font-bold text-zinc-600 dark:text-zinc-300">Simulate Seat:</label>
+              <input type="number" id="simSeat" min="1" max="100" value="1" class="w-20 px-2 py-1 border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-lg text-xs font-mono font-semibold text-zinc-800 dark:text-zinc-200" onchange="renderParticipantPreview()">
+            </div>
+            <div class="flex items-center space-x-2">
+              <label class="text-xs font-bold text-zinc-600 dark:text-zinc-300">Participant Name:</label>
+              <input type="text" id="simName" value="Mary-Jane O'Neil" class="w-48 px-2 py-1 border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 rounded-lg text-xs text-zinc-800 dark:text-zinc-200" oninput="renderParticipantPreview()">
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="setSimSeat(1)" class="px-2.5 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium text-zinc-700 dark:text-zinc-300">Seat 1</button>
+            <button onclick="setSimSeat(7)" class="px-2.5 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium text-zinc-700 dark:text-zinc-300">Seat 7</button>
+            <button onclick="setSimSeat(100)" class="px-2.5 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 font-medium text-zinc-700 dark:text-zinc-300">Seat 100</button>
+          </div>
+        </div>
+
+        <!-- Rendered Manual Container -->
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-8 shadow-xs space-y-8" id="participantManualContainer"></div>
+      </section>
+
+      <!-- VIEW 6: VLABS RULES ENGINE & VALIDATION REPORT -->
+      <section id="view-validate" class="hidden space-y-6 max-w-4xl mx-auto w-full pb-20">
+        <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-6 shadow-xs space-y-5">
+          <div class="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+            <div>
+              <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <i class="ph-bold ph-shield-check text-brand-600 dark:text-brand-400"></i> vLabs 1.4.0 Validation Report
+              </h2>
+              <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Audits structural limits, placeholder dependencies, variable formulas, image libraries, and limits before saving.
+              </p>
+            </div>
+            <button onclick="runFullValidation(true)" class="px-3.5 py-1.5 bg-zinc-800 dark:bg-zinc-700 hover:bg-zinc-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5">
+              <i class="ph ph-arrows-clockwise"></i> Re-validate
+            </button>
+          </div>
+
+          <div id="validationReportContent" class="space-y-4"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="importModal" class="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-850 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <i class="ph-bold ph-arrow-square-in text-brand-600 dark:text-brand-400"></i> Import Template (Markdown or JSON)
+        </h3>
+        <button onclick="closeImportModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-1">Paste Markdown or JSON:</label>
+        <textarea id="importTextInput" rows="12" class="w-full font-mono text-xs p-3 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 rounded-xl focus:ring-1 focus:ring-brand-500 focus:border-brand-500" placeholder="---&#10;title: My Lab&#10;variables:&#10;  PORT = seat&#10;---&#10;&#10;# Section 1&#10;## [desk] Step Title..."></textarea>
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <label class="cursor-pointer text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
+          <i class="ph ph-file-arrow-up text-sm"></i> Upload .md / .json file
+          <input type="file" accept=".md,.markdown,.json" class="hidden" onchange="handleImportFile(event)">
+        </label>
+        <div class="flex space-x-2">
+          <button onclick="closeImportModal()" class="px-4 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-semibold">Cancel</button>
+          <button onclick="processImport()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs">Import Template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Token Picker Modal -->
+  <div id="tokenModal" class="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-850 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <i class="ph-bold ph-brackets-curly text-brand-600 dark:text-brand-400"></i> Available Tokens & Placeholders
+        </h3>
+        <button onclick="closeTokenModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+      <p class="text-xs text-zinc-500 dark:text-zinc-400">Click any token to insert into cursor position or copy to clipboard:</p>
+      
+      <div class="space-y-4 max-h-80 overflow-y-auto pr-1">
+        <div>
+          <h4 class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Participant Built-ins</h4>
+          <div class="grid grid-cols-2 gap-2" id="builtinTokensGrid"></div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Defined Variables (Formulas)</h4>
+          <div class="grid grid-cols-2 gap-2" id="varTokensGrid"></div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Captured Checkpoint Values</h4>
+          <div class="grid grid-cols-2 gap-2" id="captureTokensGrid"></div>
+        </div>
+      </div>
+
+      <div class="text-right pt-2 border-t border-zinc-100 dark:border-zinc-800">
+        <button onclick="closeTokenModal()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-900 text-white rounded-lg text-xs font-semibold">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <script>
+    // Robust, zero-dependency Markdown parser fallback ensuring offline reliability
+    function parseMarkdownSafe(md) {
+      if (typeof window.marked !== 'undefined' && typeof window.marked.parse === 'function') {
+        try {
+          return window.marked.parse(md);
+        } catch (_) {}
+      }
+      
+      // Built-in resilient GFM-compliant fallback
+      let html = escapeHtml(md || '');
+      // Fenced code blocks
+      html = html.replace(/```([\s\S]*?)```/g, (m, code) => `<pre><code>${code.trim()}</code></pre>`);
+      // Tables
+      html = html.replace(/(?:^|\n)\|([^\n]+)\|\r?\n\|[-:\s|]+\|\r?\n((?:\|[^\n]+\|\r?\n?)+)/g, (match, header, rows) => {
+        const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+        const trs = rows.trim().split('\n').map(row => {
+          const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+          return `<tr>${tds}</tr>`;
+        }).join('');
+        return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+      });
+      // Inlines
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-brand-600 hover:underline">$1</a>');
+      html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="rounded-lg max-w-full my-2">');
+      html = html.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+      return `<p>${html}</p>`;
+    }
+
+    // Primary template data model adhering strictly to vLabs v1.4.0 specification
+    function createBlankTemplate() {
+      return {
+        title: "Untitled Lab",
+        description: "",
+        variables: [
+          { name: "SEAT_TAG", expression: "'S' + pad(seat, 2)" }
+        ],
+        images: [],
+        content: [
+          {
+            title: "Section 1 · Briefing",
+            collapsed: false,
+            steps: [
+              {
+                type: "info",
+                title: "What you will do",
+                collapsed: false,
+                checkpointCollapsed: false,
+                body: "Welcome, {{ FIRST_NAME }}. You are on seat {{ SEAT_ID }} (tag **{{ SEAT_TAG }}**). Read through these instructions before beginning.",
+                hints: [],
+                solution: "",
+                checkpoint: null
+              }
+            ]
+          },
+          {
+            title: "Section 2 · Core Task",
+            collapsed: false,
+            steps: [
+              {
+                type: "desk",
+                title: "Prepare your equipment",
+                collapsed: false,
+                checkpointCollapsed: false,
+                body: "Carry out the initial setup at your workstation and confirm your seat tag is displayed.",
+                hints: [
+                  { label: "Where do I look?", text: "Check the physical label tagged on the front panel." }
+                ],
+                solution: "Ensure you are viewing tag {{ SEAT_TAG }} corresponding to seat {{ SEAT_ID }}.",
+                checkpoint: {
+                  prompt: "Enter your seat tag to continue",
+                  placeholder: "e.g. S01",
+                  mode: "exact",
+                  answer: "{{ SEAT_TAG }}",
+                  answers: [],
+                  pattern: "",
+                  capture: ""
+                }
+              }
+            ]
+          }
+        ]
+      };
+    }
+
+    let templateData = createBlankTemplate();
+    let tokenSelectCallback = null;
+    let globalSearchQuery = "";
+    let autoSaveTimer = null;
+    let currentView = 'builder';
+    let isSidebarCollapsed = false;
+
+    // Reserved identifiers per vLabs 1.4 (§4.1)
+    const RESERVED_NAMES = new Set([
+      'SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME',
+      'seat', 'first_name', 'last_name',
+      'pad', 'hex', 'floor', 'ceil', 'round', 'abs', 'mod',
+      'min', 'max', 'upper', 'lower', 'str', 'slug', 'initials'
+    ]);
+
+    // Theme Management
+    function initTheme() {
+      const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        updateThemeDisplay(true);
+      } else {
+        document.documentElement.classList.remove('dark');
+        updateThemeDisplay(false);
+      }
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      updateThemeDisplay(isDark);
+      showToast(isDark ? 'Dark mode enabled' : 'Light mode enabled', 'info');
+    }
+
+    function updateThemeDisplay(isDark) {
+      const icon = document.getElementById('themeIcon');
+      const text = document.getElementById('themeText');
+      if (icon) {
+        icon.className = isDark ? 'ph ph-sun text-sm text-amber-400' : 'ph ph-moon text-sm text-zinc-500 dark:text-zinc-400';
+      }
+      if (text) {
+        text.innerText = isDark ? 'Light' : 'Dark';
+      }
+    }
+
+    // Sidebar Collapse Management
+    function toggleSidebarCollapse() {
+      isSidebarCollapsed = !isSidebarCollapsed;
+      const sidebar = document.getElementById('mainSidebar');
+      const texts = document.querySelectorAll('.sidebar-text');
+      const labels = document.querySelectorAll('.sidebar-label');
+      const search = document.querySelector('.sidebar-search');
+      const footer = document.getElementById('sidebarFooter');
+
+      if (isSidebarCollapsed) {
+        sidebar.classList.remove('w-64');
+        sidebar.classList.add('w-16');
+        texts.forEach(el => el.classList.add('hidden'));
+        labels.forEach(el => el.classList.add('hidden'));
+        if (search) search.classList.add('hidden');
+        if (footer) footer.classList.add('hidden');
+        document.querySelectorAll('#sidebarWorkspacesContainer button').forEach(b => {
+          b.classList.add('justify-center', 'px-0');
+        });
+      } else {
+        sidebar.classList.remove('w-16');
+        sidebar.classList.add('w-64');
+        texts.forEach(el => el.classList.remove('hidden'));
+        labels.forEach(el => el.classList.remove('hidden'));
+        if (search) search.classList.remove('hidden');
+        if (footer) footer.classList.remove('hidden');
+        document.querySelectorAll('#sidebarWorkspacesContainer button').forEach(b => {
+          b.classList.remove('justify-center', 'px-0');
+        });
+      }
+    }
+  </script>
+
+  <script>
+    function vlabsPad(value, width, char = '0') {
+      let str = String(value ?? '');
+      while (str.length < width) str = char + str;
+      return str;
+    }
+    function vlabsHex(n) { return Math.floor(Number(n)).toString(16).toLowerCase(); }
+    function vlabsFloor(n) { return Math.floor(Number(n)); }
+    function vlabsCeil(n) { return Math.ceil(Number(n)); }
+    function vlabsRound(n) { return Math.round(Number(n)); }
+    function vlabsAbs(n) { return Math.abs(Number(n)); }
+    function vlabsMod(a, b) { const m = Number(a) % Number(b); return m < 0 ? m + Number(b) : m; }
+    function vlabsMin(...args) { return Math.min(...args.map(Number)); }
+    function vlabsMax(...args) { return Math.max(...args.map(Number)); }
+    function vlabsUpper(s) { return String(s ?? '').toUpperCase(); }
+    function vlabsLower(s) { return String(s ?? '').toLowerCase(); }
+    function vlabsStr(v) { return String(v ?? ''); }
+    function vlabsSlug(s) { return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+    function vlabsInitials(s) {
+      return String(s ?? '')
+        .trim()
+        .split(/\s+/)
+        .map(w => w[0] ? w[0].toUpperCase() : '')
+        .join('');
+    }
+
+    function evaluateFormula(expr, context) {
+      try {
+        const keys = Object.keys(context);
+        const vals = Object.values(context);
+        const helpers = {
+          pad: vlabsPad,
+          hex: vlabsHex,
+          floor: vlabsFloor,
+          ceil: vlabsCeil,
+          round: vlabsRound,
+          abs: vlabsAbs,
+          mod: vlabsMod,
+          min: vlabsMin,
+          max: vlabsMax,
+          upper: vlabsUpper,
+          lower: vlabsLower,
+          str: vlabsStr,
+          slug: vlabsSlug,
+          initials: vlabsInitials
+        };
+        const allKeys = [...Object.keys(helpers), ...keys];
+        const allVals = [...Object.values(helpers), ...vals];
+        const fn = new Function(...allKeys, `"use strict"; return (${expr});`);
+        return fn(...allVals);
+      } catch (err) {
+        throw new Error(err.message);
+      }
+    }
+
+    function substitutePlaceholders(str, context) {
+      if (!str) return "";
+      return str.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, p1) => {
+        if (context.hasOwnProperty(p1)) {
+          return context[p1];
+        }
+        return `⟨missing:${p1}⟩`;
+      });
+    }
+
+    function generateMaskExample(pattern) {
+      if (!pattern) return "";
+      let out = "";
+      for (let i = 0; i < pattern.length; i++) {
+        const ch = pattern[i];
+        if (ch === '\\' && i + 1 < pattern.length) {
+          out += pattern[++i];
+        } else if (ch === '9') {
+          out += "7";
+        } else if (ch === 'A') {
+          out += "B";
+        } else if (ch === 'a') {
+          out += "b";
+        } else if (ch === 'X') {
+          out += "K";
+        } else if (ch === 'x') {
+          out += "k";
+        } else if (ch === '?') {
+          out += "#";
+        } else if (ch === '*') {
+          out += "XYZ";
+        } else {
+          out += ch;
+        }
+      }
+      return out;
+    }
+  </script>
+
+  <script>
+    function applyFormat(textareaId, formatType) {
+      const textarea = document.getElementById(textareaId);
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const val = textarea.value;
+      const selectedText = val.substring(start, end);
+
+      let replacement = "";
+      let cursorOffset = 0;
+
+      switch(formatType) {
+        case 'bold':
+          replacement = `**${selectedText || 'bold text'}**`;
+          cursorOffset = selectedText ? replacement.length : 2;
+          break;
+        case 'italic':
+          replacement = `*${selectedText || 'italic text'}*`;
+          cursorOffset = selectedText ? replacement.length : 1;
+          break;
+        case 'strike':
+          replacement = `~~${selectedText || 'strikethrough text'}~~`;
+          cursorOffset = selectedText ? replacement.length : 2;
+          break;
+        case 'code':
+          replacement = `\`${selectedText || 'code'}\``;
+          cursorOffset = selectedText ? replacement.length : 1;
+          break;
+        case 'codeblock':
+          replacement = `\n\`\`\`\n${selectedText || 'code block'}\n\`\`\`\n`;
+          cursorOffset = replacement.length;
+          break;
+        case 'bullet':
+          replacement = selectedText 
+            ? selectedText.split('\n').map(l => `- ${l}`).join('\n')
+            : '\n- Item 1\n- Item 2\n';
+          cursorOffset = replacement.length;
+          break;
+        case 'number':
+          replacement = selectedText 
+            ? selectedText.split('\n').map((l, i) => `${i + 1}. ${l}`).join('\n')
+            : '\n1. First step\n2. Second step\n';
+          cursorOffset = replacement.length;
+          break;
+        case 'table':
+          replacement = `\n| Field | Value |\n| --- | --- |\n| Setting | **Value** |\n| Mode | \`Default\` |\n\n`;
+          cursorOffset = replacement.length;
+          break;
+        case 'link':
+          replacement = `[${selectedText || 'link text'}](https://example.com)`;
+          cursorOffset = replacement.length;
+          break;
+      }
+
+      textarea.value = val.substring(0, start) + replacement + val.substring(end);
+      textarea.focus();
+      textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function renderMarkdownToolbar(textareaId, sIdx, stepIdx) {
+      return `
+        <div class="flex flex-wrap items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1.5 rounded-t-xl border border-b-0 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-[11px]">
+          <button type="button" onclick="applyFormat('${textareaId}', 'bold')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md font-bold transition" title="Bold (**text**)">
+            B
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'italic')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md italic font-serif transition" title="Italic (*text*)">
+            I
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'strike')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md line-through transition" title="Strikethrough (~~text~~)">
+            S
+          </button>
+          <span class="w-px h-3.5 bg-zinc-300 dark:bg-zinc-700 mx-0.5"></span>
+          <button type="button" onclick="applyFormat('${textareaId}', 'code')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md font-mono text-[10px] transition" title="Inline Code">
+            &lt;&gt;
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'codeblock')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md font-mono text-[10px] transition" title="Code Block">
+            { }
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'table')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition" title="Insert Markdown Table">
+            <i class="ph ph-table"></i> Table
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'bullet')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition" title="Bulleted list">
+            <i class="ph ph-list-dashes"></i>
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'number')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition" title="Numbered list">
+            <i class="ph ph-list-numbers"></i>
+          </button>
+          <button type="button" onclick="applyFormat('${textareaId}', 'link')" class="p-1 px-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded-md transition" title="Link">
+            <i class="ph ph-link"></i>
+          </button>
+          <span class="w-px h-3.5 bg-zinc-300 dark:bg-zinc-700 mx-0.5"></span>
+          <button type="button" onclick="insertPlaceholderToBody(${sIdx}, ${stepIdx})" class="px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/60 font-semibold text-[10px] transition" title="Insert Token">
+            + {{ Token }}
+          </button>
+          <button type="button" onclick="openPhotoInsertPicker(${sIdx}, ${stepIdx})" class="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-semibold text-[10px] transition" title="Insert Image from Library">
+            <i class="ph ph-image"></i> + Image
+          </button>
+        </div>
+      `;
+    }
+  </script>
+
+  <script>
+    function renderBuilder() {
+      // Preserve metadata inputs without wiping if they already match
+      const titleEl = document.getElementById('templateTitle');
+      const descEl = document.getElementById('templateDescription');
+      if (titleEl && titleEl.value !== (templateData.title || '')) titleEl.value = templateData.title || '';
+      if (descEl && descEl.value !== (templateData.description || '')) descEl.value = templateData.description || '';
+
+      const container = document.getElementById('sectionsContainer');
+      container.innerHTML = '';
+
+      auditMissingImages();
+
+      let visibleCount = 0;
+      const q = globalSearchQuery.toLowerCase();
+
+      templateData.content.forEach((section, sIdx) => {
+        const isCollapsed = Boolean(section.collapsed);
+        const secMatches = !q || (section.title && section.title.toLowerCase().includes(q));
+
+        const secEl = document.createElement('div');
+        secEl.className = "bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-xs overflow-hidden transition-all duration-150";
+        secEl.id = `section-card-${sIdx}`;
+
+        secEl.innerHTML = `
+          <!-- Section Header -->
+          <div class="bg-zinc-50/90 dark:bg-zinc-800/60 px-4 sm:px-5 py-3 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+            <div class="flex items-center space-x-2 sm:space-x-3 flex-1 mr-2 sm:mr-4">
+              <button data-action="toggle-section" data-sec-idx="${sIdx}" class="p-1 rounded-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition" title="${isCollapsed ? 'Expand section' : 'Collapse section'}">
+                <i class="ph-bold ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'} text-base pointer-events-none"></i>
+              </button>
+              <span class="w-6 h-6 rounded-md bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center justify-center shrink-0">
+                ${sIdx + 1}
+              </span>
+              <input type="text" value="${escapeHtml(section.title)}" placeholder="Section Title..." 
+                class="font-bold text-sm text-zinc-900 dark:text-zinc-100 bg-transparent border-0 border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 focus:border-brand-500 focus:bg-white dark:focus:bg-zinc-800 focus:ring-0 px-1 py-0.5 flex-1 transition truncate"
+                data-action="update-sec-title" data-sec-idx="${sIdx}">
+              ${isCollapsed ? `
+                <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full shrink-0">
+                  ${section.steps.length} step${section.steps.length === 1 ? '' : 's'} (hidden)
+                </span>
+              ` : ''}
+            </div>
+            <div class="flex items-center space-x-1 shrink-0">
+              <button data-action="clone-section" data-sec-idx="${sIdx}" class="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50" title="Duplicate Section">
+                <i class="ph-bold ph-copy pointer-events-none"></i>
+              </button>
+              <button data-action="move-section" data-sec-idx="${sIdx}" data-dir="-1" ${sIdx === 0 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30" title="Move Up">
+                <i class="ph-bold ph-caret-up pointer-events-none"></i>
+              </button>
+              <button data-action="move-section" data-sec-idx="${sIdx}" data-dir="1" ${sIdx === templateData.content.length - 1 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30" title="Move Down">
+                <i class="ph-bold ph-caret-down pointer-events-none"></i>
+              </button>
+              <button data-action="delete-section" data-sec-idx="${sIdx}" class="p-1 text-zinc-400 hover:text-rose-600 ml-1 sm:ml-2" title="Delete Section">
+                <i class="ph-bold ph-trash pointer-events-none"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section Body Wrapper -->
+          <div id="section-body-${sIdx}" class="${isCollapsed ? 'hidden' : 'block'}">
+            <div class="p-4 sm:p-5 space-y-4" id="steps-container-${sIdx}"></div>
+
+            <!-- Add Step Row -->
+            <div class="px-5 py-3 bg-zinc-50/50 dark:bg-zinc-800/30 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+              <span class="text-xs text-zinc-400 dark:text-zinc-500 font-medium">${section.steps.length} step${section.steps.length === 1 ? '' : 's'}</span>
+              <div class="flex items-center space-x-2">
+                <button data-action="add-step" data-sec-idx="${sIdx}" data-step-type="desk" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800/60 hover:bg-orange-100 flex items-center gap-1">
+                  <i class="ph-bold ph-wrench pointer-events-none"></i> + Hands-On (Desk)
+                </button>
+                <button data-action="add-step" data-sec-idx="${sIdx}" data-step-type="computer" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 flex items-center gap-1">
+                  <i class="ph-bold ph-desktop pointer-events-none"></i> + Workstation
+                </button>
+                <button data-action="add-step" data-sec-idx="${sIdx}" data-step-type="info" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 flex items-center gap-1">
+                  <i class="ph-bold ph-book-open pointer-events-none"></i> + Read (Info)
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(secEl);
+
+        const stepsContainer = secEl.querySelector(`#steps-container-${sIdx}`);
+        let stepCountRendered = 0;
+
+        section.steps.forEach((step, stepIdx) => {
+          const stepMatches = !q || 
+            (step.title && step.title.toLowerCase().includes(q)) || 
+            (step.body && step.body.toLowerCase().includes(q)) ||
+            (step.checkpoint && (
+              (step.checkpoint.prompt && step.checkpoint.prompt.toLowerCase().includes(q)) ||
+              (step.checkpoint.capture && step.checkpoint.capture.toLowerCase().includes(q))
+            ));
+
+          if (stepMatches || secMatches) {
+            renderStepCard(stepsContainer, sIdx, stepIdx, step);
+            stepCountRendered++;
+            visibleCount++;
+          }
+        });
+
+        if (q && stepCountRendered === 0 && !secMatches) {
+          secEl.classList.add('hidden');
+        }
+      });
+
+      renderOutline();
+      updateBadges();
+      runFullValidation(false);
+    }
+
+    function renderStepCard(parentEl, sIdx, stepIdx, step) {
+      const stepEl = document.createElement('div');
+      const isStepCollapsed = Boolean(step.collapsed);
+      const isChkCollapsed = Boolean(step.checkpointCollapsed);
+      const bodyTextareaId = `step-body-${sIdx}-${stepIdx}`;
+      
+      const typeConfig = {
+        desk: { label: 'Hands-On', badgeBg: 'bg-orange-100 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800/60', icon: 'ph-wrench' },
+        computer: { label: 'Workstation', badgeBg: 'bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/60', icon: 'ph-desktop' },
+        info: { label: 'Read (Info)', badgeBg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700', icon: 'ph-book-open' }
+      }[step.type || 'desk'];
+
+      stepEl.className = `rounded-xl border ${step.type === 'info' ? 'border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/40 dark:bg-zinc-800/20' : 'border-zinc-200 dark:border-zinc-750 bg-white dark:bg-surface-850'} shadow-xs overflow-hidden transition`;
+      stepEl.id = `step-card-${sIdx}-${stepIdx}`;
+
+      const bodySnippet = (step.body || '').split('\n')[0].substring(0, 65) || 'Empty body';
+
+      stepEl.innerHTML = `
+        <!-- Step Header Bar -->
+        <div class="px-3 sm:px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2 flex-1 mr-2 sm:mr-4 min-w-0">
+            <button data-action="toggle-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 rounded-md text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50" title="${isStepCollapsed ? 'Expand step' : 'Collapse step'}">
+              <i class="ph-bold ${isStepCollapsed ? 'ph-caret-right' : 'ph-caret-down'} text-sm pointer-events-none"></i>
+            </button>
+
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${typeConfig.badgeBg} flex items-center gap-1 shrink-0">
+              <i class="ph-bold ${typeConfig.icon}"></i> ${typeConfig.label}
+            </span>
+            <input type="text" value="${escapeHtml(step.title || '')}" placeholder="Step Title (defaults to 'Step ${stepIdx + 1}')" 
+              class="font-semibold text-xs text-zinc-800 dark:text-zinc-100 bg-transparent border-0 border-b border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 focus:border-brand-500 focus:bg-white dark:focus:bg-zinc-800 px-1.5 py-0.5 flex-1 truncate"
+              data-action="update-step-title" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
+            
+            ${isStepCollapsed ? `
+              <span class="text-[11px] text-zinc-400 dark:text-zinc-500 truncate hidden md:inline-block italic max-w-sm">
+                ${escapeHtml(bodySnippet)}...
+              </span>
+            ` : ''}
+          </div>
+
+          <div class="flex items-center space-x-1 shrink-0">
+            <!-- Step Type Selector -->
+            <select data-action="change-step-type" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[11px] font-medium border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-0.5 text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800">
+              <option value="desk" ${step.type === 'desk' ? 'selected' : ''}>desk</option>
+              <option value="computer" ${step.type === 'computer' ? 'selected' : ''}>computer</option>
+              <option value="info" ${step.type === 'info' ? 'selected' : ''}>info</option>
+            </select>
+
+            <!-- Clone Step -->
+            <button data-action="clone-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" title="Duplicate Step">
+              <i class="ph-bold ph-copy pointer-events-none"></i>
+            </button>
+
+            <!-- Move Across Sections Menu -->
+            <div class="relative inline-block">
+              <button data-action="toggle-transfer-menu" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-indigo-600" title="Transfer Step...">
+                <i class="ph-bold ph-arrows-out-card pointer-events-none"></i>
+              </button>
+              <div id="transfer-menu-${sIdx}-${stepIdx}" class="transfer-menu hidden absolute right-0 mt-1 w-52 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 py-1.5 z-50 text-xs">
+                <div class="px-3 py-1 font-bold text-[10px] text-zinc-400 uppercase">Move Step To:</div>
+                ${templateData.content.map((sec, targetIdx) => `
+                  <button data-action="transfer-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-target-sec-idx="${targetIdx}" class="w-full text-left px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-center justify-between text-zinc-700 dark:text-zinc-200 ${targetIdx === sIdx ? 'bg-zinc-50 dark:bg-zinc-750 text-zinc-400 pointer-events-none' : ''}">
+                    <span class="truncate pointer-events-none">${targetIdx + 1}. ${escapeHtml(sec.title || 'Untitled')}</span>
+                    ${targetIdx === sIdx ? '<span class="text-[9px] pointer-events-none">(Current)</span>' : ''}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <button data-action="move-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-dir="-1" ${stepIdx === 0 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30" title="Move Up">
+              <i class="ph ph-caret-up pointer-events-none"></i>
+            </button>
+            <button data-action="move-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-dir="1" ${stepIdx === templateData.content[sIdx].steps.length - 1 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30" title="Move Down">
+              <i class="ph ph-caret-down pointer-events-none"></i>
+            </button>
+            <button data-action="delete-step" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-1 text-zinc-400 hover:text-rose-600 ml-1" title="Delete Step">
+              <i class="ph ph-trash pointer-events-none"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step Body & Directives -->
+        <div class="p-4 space-y-4 ${isStepCollapsed ? 'hidden' : 'block'}">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 flex items-center gap-1">
+                <span>Body (Markdown) *</span>
+                <span class="text-zinc-400 dark:text-zinc-500 font-normal">Line breaks literal; placeholders {{ TOKEN }} allowed</span>
+              </label>
+            </div>
+            
+            ${renderMarkdownToolbar(bodyTextareaId, sIdx, stepIdx)}
+            <textarea id="${bodyTextareaId}" rows="4" 
+              class="w-full text-xs font-mono text-zinc-800 dark:text-zinc-100 bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700 rounded-b-xl p-3 focus:ring-1 focus:ring-brand-500 focus:border-brand-500 placeholder:text-zinc-400"
+              placeholder="Imperative instructions... (e.g. Connect the cable to port {{ PORT }})."
+              data-action="update-step-body" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">${escapeHtml(step.body || '')}</textarea>
+          </div>
+
+          ${step.type !== 'info' ? `
+            <!-- Hints Section -->
+            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <i class="ph ph-lightbulb text-amber-500"></i> Hints (${step.hints ? step.hints.length : 0})
+                </span>
+                <button data-action="add-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                  + Add Hint
+                </button>
+              </div>
+              <div id="hints-list-${sIdx}-${stepIdx}" class="space-y-2">
+                ${(step.hints || []).map((hint, hIdx) => `
+                  <div class="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-3 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <input type="text" value="${escapeHtml(hint.label || '')}" placeholder="Label (e.g. Which cable is mine?)" 
+                        class="text-xs font-medium text-amber-950 dark:text-amber-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg px-2.5 py-1 flex-1"
+                        data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="label">
+                      <button data-action="delete-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" class="text-zinc-400 hover:text-rose-600 text-xs">
+                        <i class="ph ph-x pointer-events-none"></i>
+                      </button>
+                    </div>
+                    <textarea rows="2" placeholder="Hint walkthrough markdown text..." 
+                      class="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg p-2 focus:ring-1 focus:ring-amber-500"
+                      data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="text">${escapeHtml(hint.text || '')}</textarea>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Solution Section -->
+            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <i class="ph ph-key text-emerald-600 dark:text-emerald-400"></i> Walkthrough Solution (Optional)
+                </span>
+                <span class="text-[10px] text-zinc-400 dark:text-zinc-500">Revealed after taking hints</span>
+              </div>
+              <textarea rows="2" placeholder="Multi-line solution revealed to participants..." 
+                class="w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 focus:ring-1 focus:ring-emerald-500"
+                data-action="update-solution" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">${escapeHtml(step.solution || '')}</textarea>
+            </div>
+
+            <!-- Checkpoint / Question Section -->
+            <div class="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  ${step.checkpoint ? `
+                    <button data-action="toggle-checkpoint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="p-0.5 rounded text-indigo-500 hover:text-indigo-800" title="Collapse / hide question">
+                      <i class="ph-bold ${isChkCollapsed ? 'ph-caret-right' : 'ph-caret-down'} text-xs pointer-events-none"></i>
+                    </button>
+                  ` : ''}
+                  <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <i class="ph ph-lock-key text-indigo-600 dark:text-indigo-400"></i> Checkpoint Gate
+                  </span>
+                  ${step.checkpoint && isChkCollapsed ? `
+                    <span class="text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800/60 truncate max-w-xs">
+                      ${escapeHtml(step.checkpoint.prompt || 'Question defined')} (folded)
+                    </span>
+                  ` : ''}
+                </div>
+                <div class="flex items-center space-x-2">
+                  ${step.checkpoint ? `
+                    <button data-action="toggle-checkpoint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                      ${isChkCollapsed ? 'Expand Q' : 'Fold Q'}
+                    </button>
+                    <button data-action="remove-checkpoint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline">
+                      Remove Checkpoint
+                    </button>
+                  ` : `
+                    <button data-action="init-checkpoint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" class="text-[11px] text-brand-600 dark:text-brand-400 font-semibold hover:underline">
+                      + Add Checkpoint Gate
+                    </button>
+                  `}
+                </div>
+              </div>
+
+              ${step.checkpoint ? `
+                <div class="${isChkCollapsed ? 'hidden' : 'block'} bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/40 rounded-xl p-3.5 space-y-3">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1">Prompt Question</label>
+                      <input type="text" value="${escapeHtml(step.checkpoint.prompt || '')}" placeholder="Defaults to: Enter the value to continue" 
+                        class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"
+                        data-action="update-checkpoint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="prompt">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1">Input Placeholder (Grey helper)</label>
+                      <input type="text" value="${escapeHtml(step.checkpoint.placeholder || '')}" placeholder="e.g. 10.0.0.1XX" 
+                        class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"
+                        data-action="update-checkpoint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="placeholder">
+                    </div>
+                  </div>
+
+                  <!-- Mode Toggle: Exact vs Pattern -->
+                  <div class="flex items-center space-x-4 border-t border-indigo-100 dark:border-indigo-900/40 pt-2">
+                    <label class="flex items-center space-x-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                      <input type="radio" name="chk-mode-${sIdx}-${stepIdx}" value="exact" ${step.checkpoint.mode !== 'pattern' ? 'checked' : ''} 
+                        data-action="update-checkpoint-mode" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-mode="exact">
+                      <span>Exact Answer</span>
+                    </label>
+                    <label class="flex items-center space-x-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                      <input type="radio" name="chk-mode-${sIdx}-${stepIdx}" value="pattern" ${step.checkpoint.mode === 'pattern' ? 'checked' : ''} 
+                        data-action="update-checkpoint-mode" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-mode="pattern">
+                      <span>Pattern Mask (e.g. XXXX.XXXX.XXXX)</span>
+                    </label>
+                  </div>
+
+                  ${step.checkpoint.mode !== 'pattern' ? `
+                    <div class="space-y-2">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label class="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1">Primary Expected Answer *</label>
+                          <input type="text" value="${escapeHtml(step.checkpoint.answer || '')}" placeholder="e.g. {{ HOST_IP }}" 
+                            class="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"
+                            data-action="update-checkpoint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-field="answer">
+                        </div>
+                        <div>
+                          <label class="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400 mb-1">Alternative Answers (pipe separated)</label>
+                          <input type="text" value="${escapeHtml((step.checkpoint.answers || []).join(' | '))}" placeholder="e.g. {{ HOST_IP }}/24 | {{ HOST_CIDR }}" 
+                            class="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"
+                            data-action="update-checkpoint-alts" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
+                        </div>
+                      </div>
+                    </div>
+                  ` : `
+                    <div class="space-y-2">
+                      <div>
+                        <div class="flex items-center justify-between mb-1">
+                          <label class="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400">Mask Pattern *</label>
+                          <span class="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">Example fit: <span class="font-bold text-brand-600 dark:text-brand-400">${escapeHtml(generateMaskExample(step.checkpoint.pattern || ''))}</span></span>
+                        </div>
+                        <input type="text" value="${escapeHtml(step.checkpoint.pattern || '')}" placeholder="e.g. XXXX.XXXX.XXXX" 
+                          class="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200"
+                          data-action="update-checkpoint-pattern" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
+                      </div>
+                    </div>
+                  `}
+
+                  <!-- Capture into Variable -->
+                  <div class="border-t border-indigo-100 dark:border-indigo-900/40 pt-2 flex items-center space-x-3">
+                    <label class="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 flex items-center gap-1 shrink-0">
+                      <i class="ph ph-floppy-disk text-indigo-600 dark:text-indigo-400"></i> Capture value as:
+                    </label>
+                    <input type="text" value="${escapeHtml(step.checkpoint.capture || '')}" placeholder="e.g. SERIAL (available in downstream steps)" 
+                      class="text-xs font-mono uppercase bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 flex-1 text-zinc-800 dark:text-zinc-200"
+                      data-action="update-checkpoint-capture" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          ` : `
+            <div class="bg-zinc-100 dark:bg-zinc-800/60 rounded-xl p-2.5 text-[11px] text-zinc-500 dark:text-zinc-400 italic border border-zinc-200/60 dark:border-zinc-700/60">
+              Info steps are context-only. Hints, solutions, and checkpoints are disallowed (§6).
+            </div>
+          `}
+        </div>
+      `;
+
+      parentEl.appendChild(stepEl);
+    }
+  </script>
+
+  <script>
+    // Global Click Delegation
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const sIdx = btn.dataset.secIdx !== undefined ? parseInt(btn.dataset.secIdx, 10) : null;
+      const stepIdx = btn.dataset.stepIdx !== undefined ? parseInt(btn.dataset.stepIdx, 10) : null;
+
+      switch(action) {
+        case 'toggle-section':
+          toggleSectionCollapse(sIdx);
+          break;
+        case 'clone-section':
+          cloneSection(sIdx);
+          break;
+        case 'move-section':
+          moveSection(sIdx, parseInt(btn.dataset.dir, 10));
+          break;
+        case 'delete-section':
+          deleteSection(sIdx);
+          break;
+        case 'add-step':
+          addNewStep(sIdx, btn.dataset.stepType || 'desk');
+          break;
+        case 'toggle-step':
+          toggleStepCollapse(sIdx, stepIdx);
+          break;
+        case 'clone-step':
+          cloneStep(sIdx, stepIdx);
+          break;
+        case 'toggle-transfer-menu':
+          toggleTransferMenu(sIdx, stepIdx);
+          break;
+        case 'transfer-step':
+          transferStepToSection(sIdx, stepIdx, parseInt(btn.dataset.targetSecIdx, 10));
+          break;
+        case 'move-step':
+          moveStep(sIdx, stepIdx, parseInt(btn.dataset.dir, 10));
+          break;
+        case 'delete-step':
+          deleteStep(sIdx, stepIdx);
+          break;
+        case 'add-hint':
+          addHint(sIdx, stepIdx);
+          break;
+        case 'delete-hint':
+          deleteHint(sIdx, stepIdx, parseInt(btn.dataset.hintIdx, 10));
+          break;
+        case 'toggle-checkpoint':
+          toggleCheckpointCollapse(sIdx, stepIdx);
+          break;
+        case 'remove-checkpoint':
+          removeCheckpoint(sIdx, stepIdx);
+          break;
+        case 'init-checkpoint':
+          initCheckpoint(sIdx, stepIdx);
+          break;
+      }
+    });
+
+    // Delegated Change Handlers (for select/radio/blur changes)
+    document.addEventListener('change', (e) => {
+      const target = e.target;
+      const action = target.dataset.action;
+      if (!action) return;
+
+      const sIdx = target.dataset.secIdx !== undefined ? parseInt(target.dataset.secIdx, 10) : null;
+      const stepIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
+
+      switch(action) {
+        case 'update-sec-title':
+          updateSectionTitle(sIdx, target.value);
+          break;
+        case 'update-step-title':
+          updateStepTitle(sIdx, stepIdx, target.value);
+          break;
+        case 'change-step-type':
+          changeStepType(sIdx, stepIdx, target.value);
+          break;
+        case 'update-hint-field':
+          updateHint(sIdx, stepIdx, parseInt(target.dataset.hintIdx, 10), target.dataset.field, target.value);
+          break;
+        case 'update-solution':
+          updateSolution(sIdx, stepIdx, target.value);
+          break;
+        case 'update-checkpoint-field':
+          updateCheckpoint(sIdx, stepIdx, target.dataset.field, target.value);
+          break;
+        case 'update-checkpoint-mode':
+          updateCheckpointMode(sIdx, stepIdx, target.dataset.mode);
+          break;
+        case 'update-checkpoint-alts':
+          updateCheckpointAlternatives(sIdx, stepIdx, target.value);
+          break;
+        case 'update-checkpoint-capture':
+          updateCheckpoint(sIdx, stepIdx, 'capture', target.value.toUpperCase());
+          break;
+      }
+    });
+
+    // Delegated Input Handlers without Full Re-render to Protect Typing Focus
+    document.addEventListener('input', (e) => {
+      const target = e.target;
+      const action = target.dataset.action;
+      if (!action) return;
+
+      const sIdx = target.dataset.secIdx !== undefined ? parseInt(target.dataset.secIdx, 10) : null;
+      const stepIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
+
+      if (action === 'update-step-body') {
+        templateData.content[sIdx].steps[stepIdx].body = target.value;
+        runFullValidation(false);
+        scheduleAutoSave();
+      } else if (action === 'update-sec-title') {
+        templateData.content[sIdx].title = target.value;
+        renderOutline();
+        runFullValidation(false);
+        scheduleAutoSave();
+      } else if (action === 'update-step-title') {
+        templateData.content[sIdx].steps[stepIdx].title = target.value;
+        renderOutline();
+        runFullValidation(false);
+        scheduleAutoSave();
+      } else if (action === 'update-checkpoint-pattern') {
+        templateData.content[sIdx].steps[stepIdx].checkpoint.pattern = target.value;
+        runFullValidation(false);
+        scheduleAutoSave();
+      }
+    });
+
+    function toggleTransferMenu(sIdx, stepIdx) {
+      document.querySelectorAll('.transfer-menu').forEach(m => {
+        if (m.id !== `transfer-menu-${sIdx}-${stepIdx}`) m.classList.add('hidden');
+      });
+      const menu = document.getElementById(`transfer-menu-${sIdx}-${stepIdx}`);
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function transferStepToSection(sourceSecIdx, stepIdx, targetSecIdx) {
+      if (sourceSecIdx === targetSecIdx) return;
+      const step = templateData.content[sourceSecIdx].steps.splice(stepIdx, 1)[0];
+      templateData.content[targetSecIdx].steps.push(step);
+      renderBuilder();
+      showToast(`Moved step to Section ${targetSecIdx + 1}`, 'info');
+      scheduleAutoSave();
+    }
+
+    function cloneSection(sIdx) {
+      const source = templateData.content[sIdx];
+      const cloned = JSON.parse(JSON.stringify(source));
+      cloned.title = `${cloned.title} (Copy)`;
+      templateData.content.splice(sIdx + 1, 0, cloned);
+      renderBuilder();
+      showToast(`Duplicated Section ${sIdx + 1}`, 'success');
+      scheduleAutoSave();
+    }
+
+    function cloneStep(sIdx, stepIdx) {
+      const source = templateData.content[sIdx].steps[stepIdx];
+      const cloned = JSON.parse(JSON.stringify(source));
+      cloned.title = cloned.title ? `${cloned.title} (Copy)` : 'Copy of Step';
+      templateData.content[sIdx].steps.splice(stepIdx + 1, 0, cloned);
+      renderBuilder();
+      showToast(`Duplicated step`, 'success');
+      scheduleAutoSave();
+    }
+  </script>
+
+  <script>
+    function renderDependencyGraph() {
+      const container = document.getElementById('dependencyGraphContent');
+      if (!container) return;
+
+      container.innerHTML = "";
+
+      const vars = templateData.variables || [];
+      const captures = [];
+      const tokenUsageMap = new Map();
+
+      function registerUsage(token, location) {
+        if (!tokenUsageMap.has(token)) tokenUsageMap.set(token, []);
+        tokenUsageMap.get(token).push(location);
+      }
+
+      templateData.content.forEach((sec, sIdx) => {
+        sec.steps.forEach((step, stepIdx) => {
+          const loc = `Sec ${sIdx + 1} · Step ${stepIdx + 1} (${step.title || 'Untitled'})`;
+          
+          if (step.checkpoint && step.checkpoint.capture) {
+            captures.push({
+              name: step.checkpoint.capture,
+              location: loc
+            });
+          }
+
+          const texts = [
+            step.body,
+            step.solution,
+            ...(step.hints || []).map(h => h.text),
+            step.checkpoint ? (step.checkpoint.prompt + ' ' + (step.checkpoint.answer || '')) : ''
+          ].join(' ');
+
+          const foundTokens = [...texts.matchAll(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g)].map(m => m[1]);
+          foundTokens.forEach(t => registerUsage(t, loc));
+        });
+      });
+
+      document.getElementById('graphCountBadge').innerText = vars.length + captures.length;
+
+      // Card 1: Declared Formulas
+      const varsCard = document.createElement('div');
+      varsCard.className = "border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-surface-850 space-y-4";
+      varsCard.innerHTML = `
+        <div class="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+          <h3 class="font-bold text-sm text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <i class="ph ph-function text-brand-600 dark:text-brand-400"></i> Declared Formula Variables (${vars.length})
+          </h3>
+          <span class="text-xs text-zinc-400 dark:text-zinc-500">Front matter formulas</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${vars.length === 0 ? '<p class="text-xs text-zinc-400 col-span-2">No variables declared.</p>' : ''}
+          ${vars.map(v => {
+            const usages = tokenUsageMap.get(v.name) || [];
+            const dependentVars = vars.filter(other => other.name !== v.name && other.expression.includes(v.name)).map(o => o.name);
+
+            return `
+              <div class="p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono font-bold text-brand-700 dark:text-brand-300">{{ ${v.name} }}</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 font-semibold">${usages.length} uses</span>
+                </div>
+                <div class="font-mono text-[11px] text-zinc-600 dark:text-zinc-400 truncate bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  = ${escapeHtml(v.expression)}
+                </div>
+                ${dependentVars.length > 0 ? `
+                  <div class="text-[10px] text-indigo-600 dark:text-indigo-400">
+                    Feeds: <span class="font-semibold">${dependentVars.join(', ')}</span>
+                  </div>
+                ` : ''}
+                <div class="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  Used in: ${usages.length > 0 ? usages.slice(0, 2).join(', ') + (usages.length > 2 ? ` +${usages.length - 2} more` : '') : 'Not referenced yet'}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+      container.appendChild(varsCard);
+
+      // Card 2: Checkpoint Captures
+      const capCard = document.createElement('div');
+      capCard.className = "border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-surface-850 space-y-4";
+      capCard.innerHTML = `
+        <div class="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+          <h3 class="font-bold text-sm text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <i class="ph ph-floppy-disk text-indigo-600 dark:text-indigo-400"></i> Checkpoint Captures (${captures.length})
+          </h3>
+          <span class="text-xs text-zinc-400 dark:text-zinc-500">Runtime captures (§10)</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${captures.length === 0 ? '<p class="text-xs text-zinc-400 col-span-2">No checkpoint captures defined yet.</p>' : ''}
+          ${captures.map(c => {
+            const usages = tokenUsageMap.get(c.name) || [];
+            return `
+              <div class="p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono font-bold text-indigo-900 dark:text-indigo-300">{{ ${c.name} }}</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">${usages.length} uses</span>
+                </div>
+                <div class="text-[11px] text-zinc-600 dark:text-zinc-400 flex items-center gap-1">
+                  <i class="ph ph-map-pin text-indigo-500"></i>
+                  <span>Captured at: <b>${c.location}</b></span>
+                </div>
+                <div class="text-[10px] text-zinc-500 dark:text-zinc-400">
+                  Downstream steps: ${usages.length > 0 ? usages.join(' → ') : 'None yet'}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+      container.appendChild(capCard);
+    }
+
+    function auditMissingImages() {
+      const referenced = new Set();
+      templateData.content.forEach(sec => {
+        sec.steps.forEach(step => {
+          const matches = [...(step.body || '').matchAll(/!\[(.*?)\]\((?:images\/)?([^\s"]+)(?:\s+"(.*?)")?\)/g)];
+          matches.forEach(m => {
+            const fn = m[2];
+            if (!fn.includes('{{')) referenced.add(fn);
+          });
+        });
+      });
+
+      const existing = new Set((templateData.images || []).map(img => img.name.toLowerCase()));
+      const missing = [...referenced].filter(fn => !existing.has(fn.toLowerCase()));
+
+      const banner = document.getElementById('missingImagesBanner');
+      const missingBadge = document.getElementById('missingImagesBadge');
+      const mockBtn = document.getElementById('createMockImagesBtn');
+      const missingLibCard = document.getElementById('missingAssetsLibraryCard');
+      const missingList = document.getElementById('missingAssetsList');
+
+      if (missing.length > 0) {
+        banner?.classList.remove('hidden');
+        missingBadge?.classList.remove('hidden');
+        mockBtn?.classList.remove('hidden');
+        missingLibCard?.classList.remove('hidden');
+        
+        if (document.getElementById('missingImagesText')) {
+          document.getElementById('missingImagesText').innerText = `Missing: ${missing.join(', ')}`;
+        }
+
+        if (missingList) {
+          missingList.innerHTML = missing.map(fn => `
+            <div class="flex items-center space-x-1.5 bg-white dark:bg-zinc-800 border border-amber-300 dark:border-amber-700 px-2.5 py-1 rounded-lg text-[11px] text-amber-900 dark:text-amber-300 font-mono">
+              <i class="ph ph-image text-amber-600 dark:text-amber-400"></i>
+              <span>${fn}</span>
+              <button onclick="generateMockImage('${fn}')" class="ml-1 text-[10px] text-brand-600 dark:text-brand-400 hover:underline font-sans font-bold">Generate</button>
+            </div>
+          `).join('');
+        }
+      } else {
+        banner?.classList.add('hidden');
+        missingBadge?.classList.add('hidden');
+        mockBtn?.classList.add('hidden');
+        missingLibCard?.classList.add('hidden');
+      }
+    }
+
+    function generateMockImage(fileName) {
+      const title = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ").toUpperCase();
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340">
+          <rect width="600" height="340" fill="#18181b"/>
+          <rect x="20" y="20" width="560" height="300" rx="12" fill="#27272a" stroke="#3f3f46" stroke-width="2" stroke-dasharray="6"/>
+          <text x="300" y="150" font-family="sans-serif" font-size="18" font-weight="bold" fill="#818cf8" text-anchor="middle">vLabs Asset Diagram</text>
+          <text x="300" y="180" font-family="sans-serif" font-size="14" fill="#f4f4f5" text-anchor="middle">${title}</text>
+          <text x="300" y="210" font-family="monospace" font-size="11" fill="#a1a1aa" text-anchor="middle">${fileName}</text>
+        </svg>
+      `;
+      const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+      templateData.images.push({
+        name: fileName,
+        alt: title,
+        url: url,
+        size: 2048
+      });
+
+      renderImagesGrid();
+      runFullValidation(false);
+      showToast(`Generated asset for ${fileName}`, 'success');
+      scheduleAutoSave();
+    }
+
+    function generateAllMissingPlaceholders() {
+      const referenced = new Set();
+      templateData.content.forEach(sec => {
+        sec.steps.forEach(step => {
+          const matches = [...(step.body || '').matchAll(/!\[(.*?)\]\((?:images\/)?([^\s"]+)(?:\s+"(.*?)")?\)/g)];
+          matches.forEach(m => {
+            const fn = m[2];
+            if (!fn.includes('{{')) referenced.add(fn);
+          });
+        });
+      });
+
+      const existing = new Set((templateData.images || []).map(img => img.name.toLowerCase()));
+      const missing = [...referenced].filter(fn => !existing.has(fn.toLowerCase()));
+      missing.forEach(fn => generateMockImage(fn));
+    }
+
+    function handleImageFileSelect(event) {
+      const files = event.target.files;
+      if (!files) return;
+
+      Array.from(files).forEach(file => {
+        if (file.size > 3 * 1024 * 1024) {
+          showToast(`File ${file.name} exceeds 3 MB limit`, 'error');
+          return;
+        }
+
+        const normalizedName = file.name
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]/g, '-')
+          .replace(/-+/g, '-');
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const existingIdx = templateData.images.findIndex(img => img.name === normalizedName);
+          const item = {
+            name: normalizedName,
+            alt: file.name.split('.')[0],
+            url: e.target.result,
+            size: file.size
+          };
+
+          if (existingIdx !== -1) {
+            templateData.images[existingIdx] = item;
+          } else {
+            templateData.images.push(item);
+          }
+
+          renderImagesGrid();
+          runFullValidation(false);
+          scheduleAutoSave();
+          showToast(`Added ${normalizedName}`, 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function renderImagesGrid() {
+      auditMissingImages();
+      const grid = document.getElementById('imagesGrid');
+      if (!grid) return;
+
+      grid.innerHTML = "";
+      document.getElementById('imgCountText').innerText = templateData.images.length;
+      document.getElementById('imgCountBadge').innerText = templateData.images.length;
+
+      if (templateData.images.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-xs text-zinc-400 dark:text-zinc-500">No images stored in library yet.</div>`;
+        return;
+      }
+
+      templateData.images.forEach((img, idx) => {
+        const card = document.createElement('div');
+        card.className = "bg-white dark:bg-surface-850 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-xs group flex flex-col";
+        card.innerHTML = `
+          <div class="h-32 bg-zinc-900 flex items-center justify-center overflow-hidden relative">
+            <img src="${img.url}" alt="${escapeHtml(img.alt)}" class="max-h-full max-w-full object-contain">
+            <button onclick="deleteImage(${idx})" class="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-900/80 text-white hover:bg-rose-600 opacity-0 group-hover:opacity-100 transition text-xs" title="Delete image">
+              <i class="ph ph-trash"></i>
+            </button>
+          </div>
+          <div class="p-3 text-xs space-y-1.5 flex-1 flex flex-col justify-between">
+            <div>
+              <div class="font-mono font-bold text-zinc-800 dark:text-zinc-200 truncate" title="${escapeHtml(img.name)}">${escapeHtml(img.name)}</div>
+              <div class="text-[10px] text-zinc-400 dark:text-zinc-500">${Math.round(img.size / 1024)} KB</div>
+            </div>
+            <button data-copy-img-name="${escapeHtml(img.name)}" data-copy-img-alt="${escapeHtml(img.alt)}" class="copy-img-btn w-full py-1.5 px-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-brand-950/40 dark:hover:text-brand-300 text-zinc-600 dark:text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition">
+              <i class="ph ph-copy pointer-events-none"></i> Copy Markdown
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      grid.querySelectorAll('.copy-img-btn').forEach(btn => {
+        btn.onclick = () => {
+          const name = btn.getAttribute('data-copy-img-name');
+          const alt = btn.getAttribute('data-copy-img-alt');
+          copySnippet(`![${alt}](${name})`);
+        };
+      });
+    }
+
+    function deleteImage(idx) {
+      templateData.images.splice(idx, 1);
+      renderImagesGrid();
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+  </script>
+
+  <script>
+    function renderOutline(filterTerm = "") {
+      const list = document.getElementById('outlineList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      const term = filterTerm.toLowerCase();
+
+      templateData.content.forEach((sec, sIdx) => {
+        const secMatches = !term || (sec.title && sec.title.toLowerCase().includes(term));
+        const matchingSteps = sec.steps.filter((st) => 
+          !term || (st.title && st.title.toLowerCase().includes(term)) || (st.body && st.body.toLowerCase().includes(term))
+        );
+
+        if (!secMatches && matchingSteps.length === 0) return;
+
+        const secDiv = document.createElement('div');
+        secDiv.className = "space-y-0.5 border-b border-zinc-100 dark:border-zinc-800 pb-1.5 last:border-0";
+        secDiv.innerHTML = `
+          <div class="font-bold text-zinc-700 dark:text-zinc-200 truncate hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer flex items-center justify-between py-1" 
+               onclick="jumpToSection(${sIdx})">
+            <div class="flex items-center gap-1.5 truncate">
+              <span class="text-zinc-400 dark:text-zinc-500 font-mono text-[10px]">${sIdx + 1}.</span>
+              <span class="truncate">${escapeHtml(sec.title || `Section ${sIdx + 1}`)}</span>
+            </div>
+            <span class="text-[9px] text-zinc-400 dark:text-zinc-500">${sec.steps.length}</span>
+          </div>
+          <div class="pl-2 border-l border-zinc-200 dark:border-zinc-700 ml-1.5 space-y-0.5">
+            ${sec.steps.map((st, stIdx) => {
+              const stMatches = !term || (st.title && st.title.toLowerCase().includes(term)) || (st.body && st.body.toLowerCase().includes(term));
+              if (!stMatches && !secMatches) return '';
+
+              return `
+                <div class="text-[11px] text-zinc-500 dark:text-zinc-400 truncate hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer flex items-center gap-1.5 py-0.5" 
+                     onclick="jumpToStep(${sIdx}, ${stIdx})">
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0 ${st.type === 'desk' ? 'bg-orange-400' : st.type === 'computer' ? 'bg-blue-400' : 'bg-zinc-400'}"></span>
+                  <span class="truncate">${escapeHtml(st.title || `Step ${stIdx + 1}`)}</span>
+                  ${st.checkpoint ? '<i class="ph ph-lock-key text-indigo-500 text-[10px] shrink-0"></i>' : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+        list.appendChild(secDiv);
+      });
+    }
+
+    function jumpToSection(sIdx) {
+      switchView('builder');
+      templateData.content[sIdx].collapsed = false;
+      renderBuilder();
+      setTimeout(() => {
+        const el = document.getElementById(`section-card-${sIdx}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.classList.add('highlight-flash');
+          setTimeout(() => el.classList.remove('highlight-flash'), 1500);
+        }
+      }, 50);
+    }
+
+    function jumpToStep(sIdx, stepIdx) {
+      switchView('builder');
+      templateData.content[sIdx].collapsed = false;
+      templateData.content[sIdx].steps[stepIdx].collapsed = false;
+      renderBuilder();
+      setTimeout(() => {
+        const el = document.getElementById(`step-card-${sIdx}-${stepIdx}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('highlight-flash');
+          setTimeout(() => el.classList.remove('highlight-flash'), 1500);
+        }
+      }, 50);
+    }
+
+    function filterOutline(val) {
+      renderOutline(val);
+    }
+
+    function handleGlobalSearch(query) {
+      globalSearchQuery = query.trim();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      const banner = document.getElementById('searchFilterBanner');
+      const queryText = document.getElementById('searchQueryText');
+
+      if (globalSearchQuery) {
+        clearBtn?.classList.remove('hidden');
+        banner?.classList.remove('hidden');
+        if (queryText) queryText.innerText = globalSearchQuery;
+      } else {
+        clearBtn?.classList.add('hidden');
+        banner?.classList.add('hidden');
+      }
+
+      renderBuilder();
+    }
+
+    function clearGlobalSearch() {
+      const input = document.getElementById('globalSearchInput');
+      if (input) input.value = "";
+      handleGlobalSearch("");
+    }
+  </script>
+
+  <script>
+    function generateMarkdown() {
+      let md = "---\n";
+      md += `title: ${templateData.title || 'Untitled Lab'}\n`;
+      if (templateData.description) {
+        md += `description: ${templateData.description}\n`;
+      }
+      if (templateData.variables && templateData.variables.length > 0) {
+        md += "variables:\n";
+        templateData.variables.forEach(v => {
+          md += `  ${v.name} = ${v.expression}\n`;
+        });
+      }
+      md += "---\n\n";
+
+      templateData.content.forEach((sec, sIdx) => {
+        md += `# ${sec.title || `Section ${sIdx + 1}`}\n\n`;
+
+        sec.steps.forEach((step, stepIdx) => {
+          const typeTag = step.type ? `[${step.type}] ` : '';
+          const title = step.title || `Step ${stepIdx + 1}`;
+          md += `## ${typeTag}${title}\n`;
+          
+          if (step.body) {
+            md += `${step.body.trim()}\n`;
+          }
+
+          if (step.type !== 'info') {
+            if (step.hints && step.hints.length > 0) {
+              step.hints.forEach(h => {
+                const label = h.label || 'Hint';
+                md += `\n> hint: ${label} :: ${h.text || ''}\n`;
+              });
+            }
+
+            if (step.solution && step.solution.trim()) {
+              md += `\n> solution:\n`;
+              const solLines = step.solution.trim().split('\n');
+              solLines.forEach(line => {
+                md += `> ${line}\n`;
+              });
+            }
+
+            if (step.checkpoint) {
+              const chk = step.checkpoint;
+              md += `\n`;
+              if (chk.mode === 'pattern') {
+                md += `> checkpoint: ${chk.prompt || 'Enter the value to continue'}\n`;
+                if (chk.pattern) {
+                  md += `> pattern: ${chk.pattern}\n`;
+                }
+              } else {
+                let ansString = chk.answer || '';
+                if (chk.answers && chk.answers.length > 0) {
+                  ansString += ` | ${chk.answers.join(' | ')}`;
+                }
+                md += `> checkpoint: ${chk.prompt || 'Enter the value to continue'} :: ${ansString}\n`;
+              }
+
+              if (chk.capture) {
+                md += `> capture: ${chk.capture}\n`;
+              }
+              if (chk.placeholder) {
+                md += `> placeholder: ${chk.placeholder}\n`;
+              }
+            }
+          }
+
+          md += `\n`;
+        });
+      });
+
+      return md.trim() + "\n";
+    }
+
+    function parseMarkdown(mdText) {
+      const result = {
+        title: "",
+        description: "",
+        variables: [],
+        images: [...(templateData.images || [])],
+        content: []
+      };
+
+      let lines = mdText.split(/\r?\n/);
+      let idx = 0;
+
+      if (lines[0] && lines[0].trim() === '---') {
+        idx = 1;
+        let inVariables = false;
+        while (idx < lines.length && lines[idx].trim() !== '---') {
+          const line = lines[idx];
+          if (/^title:\s*/i.test(line)) {
+            result.title = line.replace(/^title:\s*/i, '').trim();
+            inVariables = false;
+          } else if (/^description:\s*/i.test(line)) {
+            result.description = line.replace(/^description:\s*/i, '').trim();
+            inVariables = false;
+          } else if (/^variables:\s*$/i.test(line)) {
+            inVariables = true;
+          } else if (inVariables && /^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.test(line)) {
+            const match = line.match(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+            result.variables.push({
+              name: match[1].trim(),
+              expression: match[2].trim()
+            });
+          } else if (inVariables && line.trim() && !line.startsWith(' ')) {
+            inVariables = false;
+          }
+          idx++;
+        }
+        if (idx < lines.length && lines[idx].trim() === '---') {
+          idx++;
+        }
+      }
+
+      let currentSection = null;
+      let currentStep = null;
+      let bodyLines = [];
+      let inCodeFence = false;
+
+      function commitStep() {
+        if (!currentStep) return;
+        currentStep.body = bodyLines.join('\n').trim();
+        bodyLines = [];
+        inCodeFence = false;
+        if (currentSection) {
+          currentSection.steps.push(currentStep);
+        }
+        currentStep = null;
+      }
+
+      function commitSection() {
+        commitStep();
+        if (currentSection) {
+          result.content.push(currentSection);
+          currentSection = null;
+        }
+      }
+
+      for (; idx < lines.length; idx++) {
+        const line = lines[idx];
+        const trimmed = line.trim();
+
+        // Track code block fences so nested '#' or '>' are preserved as body text
+        if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+          inCodeFence = !inCodeFence;
+          bodyLines.push(line);
+          continue;
+        }
+
+        if (!inCodeFence && line.startsWith('# ')) {
+          commitSection();
+          currentSection = {
+            title: line.substring(2).trim(),
+            steps: []
+          };
+          continue;
+        }
+
+        if (!inCodeFence && line.startsWith('## ')) {
+          commitStep();
+          if (!currentSection) {
+            currentSection = { title: "Section 1", steps: [] };
+          }
+          const rawHeader = line.substring(3).trim();
+          let type = 'desk';
+          let title = rawHeader;
+
+          const typeMatch = rawHeader.match(/^\[(desk|computer|info)\]\s*(.*)$/i);
+          if (typeMatch) {
+            type = typeMatch[1].toLowerCase();
+            title = typeMatch[2].trim();
+          }
+
+          currentStep = {
+            type: type,
+            title: title,
+            body: "",
+            hints: [],
+            solution: "",
+            checkpoint: null
+          };
+          continue;
+        }
+
+        if (!currentStep) continue;
+
+        if (!inCodeFence && /^>\s*hint:\s*/i.test(line)) {
+          const rest = line.replace(/^>\s*hint:\s*/i, '').trim();
+          const splitIdx = rest.indexOf('::');
+          let label = "Hint";
+          let text = rest;
+          if (splitIdx !== -1) {
+            label = rest.substring(0, splitIdx).trim();
+            text = rest.substring(splitIdx + 2).trim();
+          }
+          currentStep.hints.push({ label, text });
+          continue;
+        }
+
+        if (!inCodeFence && /^>\s*solution:\s*/i.test(line)) {
+          let text = line.replace(/^>\s*solution:\s*/i, '').trim();
+          idx++;
+          while (idx < lines.length && lines[idx].startsWith('>')) {
+            const peek = lines[idx].trim();
+            if (/^>\s*(checkpoint|pattern|capture|placeholder|hint):/i.test(peek)) {
+              break;
+            }
+            text += '\n' + lines[idx].replace(/^>\s?/, '');
+            idx++;
+          }
+          idx--;
+          currentStep.solution = text.trim();
+          continue;
+        }
+
+        if (!inCodeFence && /^>\s*checkpoint:\s*/i.test(line)) {
+          const rest = line.replace(/^>\s*checkpoint:\s*/i, '').trim();
+          const splitIdx = rest.indexOf('::');
+          let prompt = rest;
+          let answerPart = "";
+          if (splitIdx !== -1) {
+            prompt = rest.substring(0, splitIdx).trim();
+            answerPart = rest.substring(splitIdx + 2).trim();
+          }
+
+          const answers = answerPart.split('|').map(s => s.trim()).filter(Boolean);
+          const primaryAnswer = answers[0] || "";
+          const altAnswers = answers.slice(1);
+
+          currentStep.checkpoint = {
+            prompt: prompt,
+            placeholder: "",
+            mode: "exact",
+            answer: primaryAnswer,
+            answers: altAnswers,
+            pattern: "",
+            capture: ""
+          };
+          continue;
+        }
+
+        if (!inCodeFence && /^>\s*pattern:\s*/i.test(line)) {
+          if (!currentStep.checkpoint) {
+            currentStep.checkpoint = { prompt: "Enter the value to continue", placeholder: "", mode: "pattern", answer: "", answers: [], pattern: "", capture: "" };
+          }
+          currentStep.checkpoint.mode = "pattern";
+          currentStep.checkpoint.pattern = line.replace(/^>\s*pattern:\s*/i, '').trim();
+          continue;
+        }
+
+        if (!inCodeFence && /^>\s*capture:\s*/i.test(line)) {
+          if (currentStep.checkpoint) {
+            currentStep.checkpoint.capture = line.replace(/^>\s*capture:\s*/i, '').trim();
+          }
+          continue;
+        }
+
+        if (!inCodeFence && /^>\s*placeholder:\s*/i.test(line)) {
+          if (currentStep.checkpoint) {
+            currentStep.checkpoint.placeholder = line.replace(/^>\s*placeholder:\s*/i, '').trim();
+          }
+          continue;
+        }
+
+        bodyLines.push(line);
+      }
+
+      commitSection();
+
+      if (!result.title) result.title = "Untitled Template";
+      return result;
+    }
+  </script>
+
+  <script>
+    function buildVariablesContextUpTo(idx, seatNum, fName, lName) {
+      const ctx = {
+        seat: seatNum,
+        first_name: fName,
+        last_name: lName,
+        SEAT_ID: seatNum,
+        FIRST_NAME: fName,
+        LAST_NAME: lName,
+        FULL_NAME: `${fName} ${lName}`
+      };
+      for (let i = 0; i < idx; i++) {
+        const v = templateData.variables[i];
+        try {
+          ctx[v.name] = evaluateFormula(v.expression, ctx);
+        } catch (_) {}
+      }
+      return ctx;
+    }
+
+    function runFullValidation(showAlert = false) {
+      const issues = [];
+      if (!templateData.title || !templateData.title.trim()) {
+        issues.push({ type: 'error', location: 'Template', msg: 'Title is required' });
+      } else if (templateData.title.length > 200) {
+        issues.push({ type: 'error', location: 'Template Title', msg: 'Exceeds limit of 200 characters' });
+      }
+
+      if (templateData.description && templateData.description.length > 1000) {
+        issues.push({ type: 'error', location: 'Template Description', msg: 'Exceeds limit of 1000 characters' });
+      }
+
+      if (!templateData.content || templateData.content.length === 0) {
+        issues.push({ type: 'error', location: 'Content', msg: 'At least one section is required' });
+      }
+
+      const declaredVarNames = new Set();
+      templateData.variables.forEach((v, idx) => {
+        const vLoc = `Variable #${idx + 1} (${v.name || 'unnamed'})`;
+        if (!v.name || !v.name.trim()) {
+          issues.push({ type: 'error', location: vLoc, msg: 'Missing a name' });
+          return;
+        }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.name)) {
+          issues.push({ type: 'error', location: vLoc, msg: `"${v.name}" is not a valid variable name` });
+        }
+        if (RESERVED_NAMES.has(v.name)) {
+          issues.push({ type: 'error', location: vLoc, msg: `Variable "${v.name}" is reserved (§4.1)` });
+        }
+        if (declaredVarNames.has(v.name)) {
+          issues.push({ type: 'error', location: vLoc, msg: `Variable "${v.name}" is declared more than once` });
+        }
+        declaredVarNames.add(v.name);
+
+        if (!v.expression || !v.expression.trim()) {
+          issues.push({ type: 'error', location: vLoc, msg: `Variable "${v.name}" has no formula` });
+        } else {
+          try {
+            evaluateFormula(v.expression, {
+              ...buildVariablesContextUpTo(idx, 1, "Sample", "Participant")
+            });
+          } catch (err) {
+            issues.push({ type: 'error', location: vLoc, msg: `Error in formula for "${v.name}": ${err.message}` });
+          }
+        }
+      });
+
+      const knownCaptures = new Set();
+      const capturesSeenOrder = new Map();
+      const availableImages = new Set((templateData.images || []).map(img => img.name.toLowerCase()));
+
+      templateData.content.forEach((sec, sIdx) => {
+        const secLoc = `Section ${sIdx + 1}`;
+        if (!sec.title || !sec.title.trim()) {
+          issues.push({ type: 'error', location: secLoc, msg: 'Section needs a title' });
+        }
+        if (!sec.steps || sec.steps.length === 0) {
+          issues.push({ type: 'error', location: secLoc, msg: 'Section has no steps' });
+        }
+
+        sec.steps.forEach((step, stepIdx) => {
+          const stepLoc = `Section ${sIdx + 1} · step ${stepIdx + 1}`;
+          if (!step.body || !step.body.trim()) {
+            issues.push({ type: 'error', location: stepLoc, msg: 'Has an empty body' });
+          }
+
+          const imgMatches = [...(step.body || '').matchAll(/!\[(.*?)\]\((?:images\/)?([^\s"]+)(?:\s+"(.*?)")?\)/g)];
+          imgMatches.forEach(m => {
+            const referencedFile = m[2].toLowerCase();
+            if (!referencedFile.includes('{{') && !availableImages.has(referencedFile)) {
+              issues.push({
+                type: 'error',
+                location: `${stepLoc} body`,
+                msg: `Image "${m[2]}" is not in the image library`
+              });
+            }
+          });
+
+          const textSources = [
+            { field: 'title', val: step.title },
+            { field: 'body', val: step.body },
+            ...(step.hints || []).map((h, i) => ({ field: `hint #${i + 1}`, val: (h.label || '') + ' ' + (h.text || '') })),
+            { field: 'solution', val: step.solution },
+            ...(step.checkpoint ? [
+              { field: 'checkpoint prompt', val: step.checkpoint.prompt },
+              { field: 'checkpoint answer', val: step.checkpoint.answer },
+              ...(step.checkpoint.answers || []).map(a => ({ field: 'checkpoint alt', val: a }))
+            ] : [])
+          ];
+
+          textSources.forEach(src => {
+            if (!src.val) return;
+            const phMatches = [...src.val.matchAll(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g)];
+            phMatches.forEach(m => {
+              const token = m[1];
+              const isBuiltin = ['SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME'].includes(token);
+              const isDeclared = declaredVarNames.has(token);
+              const isCaptured = knownCaptures.has(token);
+
+              if (!isBuiltin && !isDeclared && !isCaptured) {
+                if (capturesSeenOrder.has(token)) {
+                  issues.push({
+                    type: 'error',
+                    location: `${stepLoc} ${src.field}`,
+                    msg: `{{ ${token} }} is used before the checkpoint that captures it (§10)`
+                  });
+                } else {
+                  issues.push({
+                    type: 'error',
+                    location: `${stepLoc} ${src.field}`,
+                    msg: `Unknown placeholder {{ ${token} }}`
+                  });
+                }
+              }
+            });
+          });
+
+          if (step.checkpoint && step.type !== 'info') {
+            const chkLoc = `${stepLoc} checkpoint`;
+            const chk = step.checkpoint;
+
+            if (chk.mode === 'pattern') {
+              if (chk.pattern && !/[9AaXx?\*]/.test(chk.pattern)) {
+                issues.push({ type: 'error', location: chkLoc, msg: 'Pattern has no wildcards (use an exact answer instead)' });
+              }
+              const asteriskCount = ((chk.pattern || '').match(/\*/g) || []).length;
+              if (asteriskCount > 3) {
+                issues.push({ type: 'error', location: chkLoc, msg: 'Pattern may use * at most three times' });
+              }
+            }
+
+            if (chk.capture && chk.capture.trim()) {
+              const cap = chk.capture.trim();
+              if (RESERVED_NAMES.has(cap)) {
+                issues.push({ type: 'error', location: chkLoc, msg: `Variable name "${cap}" is reserved` });
+              }
+              if (declaredVarNames.has(cap)) {
+                issues.push({ type: 'error', location: chkLoc, msg: `"${cap}" is already a declared formula variable` });
+              }
+              if (knownCaptures.has(cap)) {
+                issues.push({ type: 'error', location: chkLoc, msg: `"${cap}" is already captured by an earlier checkpoint` });
+              }
+              knownCaptures.add(cap);
+              capturesSeenOrder.set(cap, { sectionIdx: sIdx, stepIdx: stepIdx });
+            }
+          }
+        });
+      });
+
+      const badge = document.getElementById('validationBadge');
+      const errCount = issues.filter(i => i.type === 'error').length;
+      const warnCount = issues.filter(i => i.type === 'warn').length;
+
+      if (errCount > 0) {
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 cursor-pointer";
+        badge.innerHTML = `<i class="ph-bold ph-x-circle text-rose-600 dark:text-rose-400"></i><span>${errCount} Error${errCount === 1 ? '' : 's'}</span>`;
+        document.getElementById('errCountBadge').innerText = errCount;
+        document.getElementById('errCountBadge').classList.remove('hidden');
+      } else if (warnCount > 0) {
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 cursor-pointer";
+        badge.innerHTML = `<i class="ph-bold ph-warning text-amber-600 dark:text-amber-400"></i><span>${warnCount} Warning${warnCount === 1 ? '' : 's'}</span>`;
+        document.getElementById('errCountBadge').classList.add('hidden');
+      } else {
+        badge.className = "flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 cursor-pointer";
+        badge.innerHTML = `<i class="ph-bold ph-check-circle text-emerald-600 dark:text-emerald-400"></i><span>Valid Spec</span>`;
+        document.getElementById('errCountBadge').classList.add('hidden');
+      }
+
+      renderValidationReport(issues);
+      if (showAlert) {
+        if (errCount === 0) showToast('Template is 100% compliant with vLabs 1.4!', 'success');
+        else showToast(`Found ${errCount} validation issue(s).`, 'error');
+      }
+
+      return errCount === 0;
+    }
+
+    function renderValidationReport(issues) {
+      const container = document.getElementById('validationReportContent');
+      if (!container) return;
+
+      if (issues.length === 0) {
+        container.innerHTML = `
+          <div class="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-6 text-center space-y-2">
+            <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center text-2xl mx-auto">
+              <i class="ph-bold ph-check"></i>
+            </div>
+            <h3 class="font-bold text-emerald-950 dark:text-emerald-200 text-sm">Perfect Compliance with vLabs 1.4.0</h3>
+            <p class="text-xs text-emerald-700 dark:text-emerald-400 max-w-md mx-auto">
+              All placeholders resolve cleanly, step sequences are valid, formulas evaluate for all seats, and library assets are verified.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-2">
+          ${issues.map(item => `
+            <div class="flex items-start space-x-3 p-3 rounded-xl border ${item.type === 'error' ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-900 dark:text-rose-200' : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200'} text-xs">
+              <i class="ph-bold ${item.type === 'error' ? 'ph-x-circle text-rose-600 dark:text-rose-400 text-base' : 'ph-warning text-amber-600 dark:text-amber-400 text-base'} shrink-0 mt-0.5"></i>
+              <div class="flex-1">
+                <span class="font-bold">${escapeHtml(item.location)}</span>:
+                <span>${escapeHtml(item.msg)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function setSimSeat(n) {
+      document.getElementById('simSeat').value = n;
+      renderParticipantPreview();
+    }
+
+    function renderParticipantPreview() {
+      const seat = parseInt(document.getElementById('simSeat').value) || 1;
+      const rawName = (document.getElementById('simName').value || 'Mary-Jane O\'Neil').trim();
+      const parts = rawName.split(/\s+/);
+      const firstName = parts[0] || 'Participant';
+      const lastName = parts.slice(1).join(' ') || 'User';
+
+      const ctx = {
+        seat: seat,
+        first_name: firstName,
+        last_name: lastName,
+        SEAT_ID: seat,
+        FIRST_NAME: firstName,
+        LAST_NAME: lastName,
+        FULL_NAME: `${firstName} ${lastName}`
+      };
+
+      (templateData.variables || []).forEach(v => {
+        try {
+          ctx[v.name] = evaluateFormula(v.expression, ctx);
+        } catch (err) {
+          ctx[v.name] = `⟨error:${err.message}⟩`;
+        }
+      });
+
+      const container = document.getElementById('participantManualContainer');
+      container.innerHTML = `
+        <div class="border-b border-zinc-200 dark:border-zinc-800 pb-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">Participant Lab Manual</span>
+              <h2 class="text-2xl font-black text-zinc-900 dark:text-zinc-50 mt-1">${escapeHtml(substitutePlaceholders(templateData.title, ctx))}</h2>
+            </div>
+            <div class="text-right">
+              <span class="inline-block bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-mono font-bold px-2.5 py-1 rounded-md">Seat ${seat}</span>
+              <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">${escapeHtml(rawName)}</div>
+            </div>
+          </div>
+          ${templateData.description ? `
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-2">${escapeHtml(substitutePlaceholders(templateData.description, ctx))}</p>
+          ` : ''}
+        </div>
+      `;
+
+      let runningContext = { ...ctx };
+
+      templateData.content.forEach((sec) => {
+        const secDiv = document.createElement('div');
+        secDiv.className = "space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 first:border-0";
+        secDiv.innerHTML = `
+          <h3 class="text-base font-bold text-zinc-900 dark:text-zinc-100 border-l-4 border-brand-600 pl-3">
+            ${escapeHtml(substitutePlaceholders(sec.title, runningContext))}
+          </h3>
+        `;
+
+        sec.steps.forEach((step, stepIdx) => {
+          const cardDiv = document.createElement('div');
+          const typeStyle = {
+            desk: 'border-l-4 border-orange-500 bg-white dark:bg-zinc-850',
+            computer: 'border-l-4 border-blue-500 bg-white dark:bg-zinc-850',
+            info: 'border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-900/40'
+          }[step.type || 'desk'];
+
+          const badgeStyle = {
+            desk: 'bg-orange-100 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300',
+            computer: 'bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300',
+            info: 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'
+          }[step.type || 'desk'];
+
+          let renderedBody = substitutePlaceholders(step.body, runningContext);
+          (templateData.images || []).forEach(img => {
+            const regex = new RegExp(`!\\[(.*?)\\]\\((?:images\\/)?${img.name}(?:\\s+"(.*?)")?\\)`, 'gi');
+            renderedBody = renderedBody.replace(regex, (m, alt, title) => `![${alt}](${img.url} "${title || ''}")`);
+          });
+
+          const bodyHtml = parseMarkdownSafe(renderedBody);
+          cardDiv.className = `rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4 ${typeStyle}`;
+          cardDiv.innerHTML = `
+            <div class="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <div class="flex items-center space-x-2">
+                <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${badgeStyle}">${step.type || 'desk'}</span>
+                <span class="font-bold text-sm text-zinc-900 dark:text-zinc-100">${escapeHtml(substitutePlaceholders(step.title || `Step ${stepIdx + 1}`, runningContext))}</span>
+              </div>
+              <span class="text-xs text-zinc-400 dark:text-zinc-500 font-mono">${stepIdx + 1} / ${sec.steps.length}</span>
+            </div>
+            <div class="prose-preview text-xs text-zinc-700 dark:text-zinc-300">${bodyHtml}</div>
+            ${(step.hints && step.hints.length) ? `
+              <div class="space-y-2 pt-2">
+                ${step.hints.map(h => `
+                  <details class="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl p-2.5 text-xs">
+                    <summary class="font-semibold text-amber-900 dark:text-amber-200 cursor-pointer select-none">💡 Hint: ${escapeHtml(substitutePlaceholders(h.label || 'Hint', runningContext))}</summary>
+                    <div class="mt-2 text-zinc-700 dark:text-zinc-300 prose-preview text-xs border-t border-amber-200/50 dark:border-amber-800/40 pt-2">${parseMarkdownSafe(substitutePlaceholders(h.text || '', runningContext))}</div>
+                  </details>
+                `).join('')}
+              </div>
+            ` : ''}
+            ${step.solution ? `
+              <details class="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-2.5 text-xs">
+                <summary class="font-semibold text-emerald-900 dark:text-emerald-200 cursor-pointer select-none">🔑 Solution Walkthrough</summary>
+                <div class="mt-2 text-zinc-700 dark:text-zinc-300 prose-preview text-xs border-t border-emerald-200/50 dark:border-emerald-800/40 pt-2">${parseMarkdownSafe(substitutePlaceholders(step.solution, runningContext))}</div>
+              </details>
+            ` : ''}
+            ${step.checkpoint ? `
+              <div class="bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 space-y-2 mt-3">
+                <div class="flex items-center space-x-2 text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  <i class="ph ph-lock-key text-indigo-600 dark:text-indigo-400 text-sm"></i>
+                  <span>${escapeHtml(substitutePlaceholders(step.checkpoint.prompt || 'Enter the value to continue', runningContext))}</span>
+                </div>
+                <div class="flex items-center space-x-2 max-w-md">
+                  <input type="text" placeholder="${escapeHtml(substitutePlaceholders(step.checkpoint.placeholder || '', runningContext))}" class="flex-1 text-xs border border-zinc-300 dark:border-zinc-600 rounded-lg px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-mono">
+                  <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs">Submit</button>
+                </div>
+              </div>
+            ` : ''}
+          `;
+
+          secDiv.appendChild(cardDiv);
+          if (step.checkpoint && step.checkpoint.capture) {
+            const capName = step.checkpoint.capture;
+            runningContext[capName] = step.checkpoint.mode === 'pattern'
+              ? (generateMaskExample(step.checkpoint.pattern) || 'CAPTURED_VALUE')
+              : substitutePlaceholders(step.checkpoint.answer || 'CAPTURED_VALUE', runningContext);
+          }
+        });
+
+        container.appendChild(secDiv);
+      });
+    }
+  </script>
+
+  <script>
+    function scheduleAutoSave() {
+      const indicator = document.getElementById('autoSaveIndicator');
+      const text = document.getElementById('autoSaveText');
+      if (indicator && text) {
+        text.innerText = "Saving...";
+        indicator.classList.remove('text-zinc-500');
+        indicator.classList.add('text-amber-600');
+      }
+
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        try {
+          if (window.localStorage) {
+            try {
+              window.localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(templateData));
+            } catch (quotaErr) {
+              // Graceful quota fallback: preserve all templates, sections, formulas, and mock heavy images
+              const lightweightData = JSON.parse(JSON.stringify(templateData));
+              if (lightweightData.images) {
+                lightweightData.images = lightweightData.images.map(img => ({
+                  ...img,
+                  url: img.url.length > 500 ? 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"/>' : img.url
+                }));
+              }
+              window.localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(lightweightData));
+            }
+          }
+          if (text) text.innerText = "Saved";
+          if (indicator) {
+            indicator.classList.remove('text-amber-600');
+            indicator.classList.add('text-zinc-500');
+          }
+        } catch (_) {}
+      }, 500);
+    }
+
+    function toggleAllSections(collapse) {
+      templateData.content.forEach(sec => {
+        sec.collapsed = collapse;
+        sec.steps.forEach(st => {
+          st.collapsed = collapse;
+          st.checkpointCollapsed = collapse;
+        });
+      });
+      renderBuilder();
+    }
+
+    function switchView(viewName) {
+      currentView = viewName;
+      ['builder', 'variables', 'dependencies', 'images', 'preview', 'validate'].forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        const nav = document.getElementById(`nav-${v}`);
+        if (v === viewName) {
+          el?.classList.remove('hidden');
+          nav?.classList.add('bg-brand-50', 'dark:bg-brand-500/10', 'text-brand-700', 'dark:text-brand-300', 'border', 'border-brand-200/60', 'dark:border-brand-500/20');
+          nav?.classList.remove('text-zinc-600', 'dark:text-zinc-400', 'hover:bg-zinc-50', 'dark:hover:bg-zinc-800');
+        } else {
+          el?.classList.add('hidden');
+          nav?.classList.remove('bg-brand-50', 'dark:bg-brand-500/10', 'text-brand-700', 'dark:text-brand-300', 'border', 'border-brand-200/60', 'dark:border-brand-500/20');
+          nav?.classList.add('text-zinc-600', 'dark:text-zinc-400', 'hover:bg-zinc-50', 'dark:hover:bg-zinc-800');
+        }
+      });
+
+      if (viewName === 'preview') renderParticipantPreview();
+      else if (viewName === 'validate') runFullValidation(false);
+      else if (viewName === 'variables') renderVariablesList();
+      else if (viewName === 'dependencies') renderDependencyGraph();
+      else if (viewName === 'images') renderImagesGrid();
+    }
+
+    function onMetadataChanged() {
+      templateData.title = document.getElementById('templateTitle').value;
+      templateData.description = document.getElementById('templateDescription').value;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        info: 'bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900'
+      };
+      toast.className = `${colors[type] || colors.info} px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `<i class="ph-bold ${type === 'success' ? 'ph-check-circle' : type === 'error' ? 'ph-warning-circle' : 'ph-info'} text-sm"></i><span>${msg}</span>`;
+      container.appendChild(toast);
+      
+      requestAnimationFrame(() => toast.classList.remove('translate-y-2', 'opacity-0'));
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function toggleDropdown(id) {
+      document.getElementById(id)?.classList.toggle('hidden');
+    }
+
+    window.addEventListener('click', (e) => {
+      if (!e.target.closest('#presetDropdownContainer')) document.getElementById('presetMenu')?.classList.add('hidden');
+      if (!e.target.closest('#exportDropdownContainer')) document.getElementById('exportMenu')?.classList.add('hidden');
+      if (!e.target.closest('.transfer-menu') && !e.target.closest('[data-action="toggle-transfer-menu"]')) {
+        document.querySelectorAll('.transfer-menu').forEach(menu => menu.classList.add('hidden'));
+      }
+    });
+
+    // Content Mutators
+    function updateSectionTitle(sIdx, val) {
+      templateData.content[sIdx].title = val;
+      renderOutline();
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function toggleSectionCollapse(sIdx) {
+      templateData.content[sIdx].collapsed = !templateData.content[sIdx].collapsed;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function toggleStepCollapse(sIdx, stepIdx) {
+      const step = templateData.content[sIdx].steps[stepIdx];
+      step.collapsed = !step.collapsed;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function toggleCheckpointCollapse(sIdx, stepIdx) {
+      const step = templateData.content[sIdx].steps[stepIdx];
+      step.checkpointCollapsed = !step.checkpointCollapsed;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function moveSection(sIdx, dir) {
+      const target = sIdx + dir;
+      if (target < 0 || target >= templateData.content.length) return;
+      const tmp = templateData.content[sIdx];
+      templateData.content[sIdx] = templateData.content[target];
+      templateData.content[target] = tmp;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function deleteSection(sIdx) {
+      if (templateData.content.length <= 1) {
+        showToast('Templates must keep at least one section', 'error');
+        return;
+      }
+      templateData.content.splice(sIdx, 1);
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function addNewSection() {
+      templateData.content.push({
+        title: `Section ${templateData.content.length + 1} · New Tasks`,
+        collapsed: false,
+        steps: [
+          {
+            type: "desk",
+            title: "Task 1",
+            collapsed: false,
+            checkpointCollapsed: false,
+            body: "Perform the hands-on instruction.",
+            hints: [],
+            solution: "",
+            checkpoint: null
+          }
+        ]
+      });
+      renderBuilder();
+      switchView('builder');
+      scheduleAutoSave();
+    }
+    function addNewStep(sIdx, type = 'desk') {
+      templateData.content[sIdx].steps.push({
+        type: type,
+        title: `New Step`,
+        collapsed: false,
+        checkpointCollapsed: false,
+        body: type === 'info' ? 'Read this background briefing.' : 'Carry out the imperative task.',
+        hints: [],
+        solution: "",
+        checkpoint: null
+      });
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function updateStepTitle(sIdx, stepIdx, val) {
+      templateData.content[sIdx].steps[stepIdx].title = val;
+      renderOutline();
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function updateStepBody(sIdx, stepIdx, val) {
+      templateData.content[sIdx].steps[stepIdx].body = val;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function changeStepType(sIdx, stepIdx, newType) {
+      const step = templateData.content[sIdx].steps[stepIdx];
+      step.type = newType;
+      if (newType === 'info') {
+        step.hints = [];
+        step.solution = "";
+        step.checkpoint = null;
+      }
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function moveStep(sIdx, stepIdx, dir) {
+      const sec = templateData.content[sIdx];
+      const target = stepIdx + dir;
+      if (target < 0 || target >= sec.steps.length) return;
+      const tmp = sec.steps[stepIdx];
+      sec.steps[stepIdx] = sec.steps[target];
+      sec.steps[target] = tmp;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function deleteStep(sIdx, stepIdx) {
+      templateData.content[sIdx].steps.splice(stepIdx, 1);
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function addHint(sIdx, stepIdx) {
+      const step = templateData.content[sIdx].steps[stepIdx];
+      if (!step.hints) step.hints = [];
+      step.hints.push({ label: "Question label?", text: "Guidance explanation." });
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function updateHint(sIdx, stepIdx, hIdx, field, val) {
+      templateData.content[sIdx].steps[stepIdx].hints[hIdx][field] = val;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function deleteHint(sIdx, stepIdx, hIdx) {
+      templateData.content[sIdx].steps[stepIdx].hints.splice(hIdx, 1);
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function updateSolution(sIdx, stepIdx, val) {
+      templateData.content[sIdx].steps[stepIdx].solution = val;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function initCheckpoint(sIdx, stepIdx) {
+      templateData.content[sIdx].steps[stepIdx].checkpoint = {
+        prompt: "Enter the value to continue",
+        placeholder: "",
+        mode: "exact",
+        answer: "",
+        answers: [],
+        pattern: "",
+        capture: ""
+      };
+      templateData.content[sIdx].steps[stepIdx].checkpointCollapsed = false;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function removeCheckpoint(sIdx, stepIdx) {
+      templateData.content[sIdx].steps[stepIdx].checkpoint = null;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function updateCheckpoint(sIdx, stepIdx, field, val) {
+      templateData.content[sIdx].steps[stepIdx].checkpoint[field] = val;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function updateCheckpointMode(sIdx, stepIdx, mode) {
+      templateData.content[sIdx].steps[stepIdx].checkpoint.mode = mode;
+      renderBuilder();
+      scheduleAutoSave();
+    }
+    function updateCheckpointAlternatives(sIdx, stepIdx, val) {
+      const alts = val.split('|').map(s => s.trim()).filter(Boolean);
+      templateData.content[sIdx].steps[stepIdx].checkpoint.answers = alts;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+    function updateCheckpointPattern(sIdx, stepIdx, val) {
+      templateData.content[sIdx].steps[stepIdx].checkpoint.pattern = val;
+      runFullValidation(false);
+      scheduleAutoSave();
+    }
+
+    // Variables CRUD
+    function renderVariablesList() {
+      const container = document.getElementById('variablesListContainer');
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (templateData.variables.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-xs text-zinc-400 dark:text-zinc-500">No formula variables declared. Click "Add Formula" to create one.</div>`;
+        return;
+      }
+
+      templateData.variables.forEach((v, idx) => {
+        let sampleVal = "";
+        try {
+          const sampleCtx = buildVariablesContextUpTo(idx, 1, "Sample", "Participant");
+          sampleVal = evaluateFormula(v.expression, sampleCtx);
+        } catch (err) {
+          sampleVal = `⟨error: ${err.message}⟩`;
+        }
+
+        const el = document.createElement('div');
+        el.className = "flex items-center gap-3 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-2.5 rounded-xl";
+        el.innerHTML = `
+          <div class="flex items-center space-x-1 shrink-0 font-mono text-xs">
+            <input type="text" value="${escapeHtml(v.name)}" class="font-bold text-brand-700 dark:text-brand-300 bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 w-36 uppercase" onchange="updateVariableName(${idx}, this.value)">
+            <span class="text-zinc-400">=</span>
+          </div>
+          <div class="flex-1">
+            <input type="text" value="${escapeHtml(v.expression)}" class="w-full font-mono text-xs bg-white dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-800 dark:text-zinc-200" onchange="updateVariableExpr(${idx}, this.value)">
+          </div>
+          <div class="w-36 text-right truncate text-[11px] font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-750 px-2.5 py-1 rounded-lg" title="Value for Seat 1">
+            → ${escapeHtml(String(sampleVal))}
+          </div>
+          <div class="flex items-center space-x-1 shrink-0">
+            <button onclick="moveVariable(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30"><i class="ph ph-caret-up"></i></button>
+            <button onclick="moveVariable(${idx}, 1)" ${idx === templateData.variables.length - 1 ? 'disabled' : ''} class="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 disabled:opacity-30"><i class="ph ph-caret-down"></i></button>
+            <button onclick="deleteVariable(${idx})" class="p-1 text-zinc-400 hover:text-rose-600"><i class="ph ph-trash"></i></button>
+          </div>
+        `;
+        container.appendChild(el);
+      });
+
+      updateBadges();
+    }
+
+    function addNewVariable() {
+      templateData.variables.push({ name: `VAR_${templateData.variables.length + 1}`, expression: "seat" });
+      renderVariablesList();
+      scheduleAutoSave();
+    }
+    function updateVariableName(idx, val) {
+      templateData.variables[idx].name = val.replace(/[^A-Za-z0-9_]/g, '_');
+      renderVariablesList();
+      scheduleAutoSave();
+    }
+    function updateVariableExpr(idx, val) {
+      templateData.variables[idx].expression = val;
+      renderVariablesList();
+      scheduleAutoSave();
+    }
+    function moveVariable(idx, dir) {
+      const target = idx + dir;
+      if (target < 0 || target >= templateData.variables.length) return;
+      const tmp = templateData.variables[idx];
+      templateData.variables[idx] = templateData.variables[target];
+      templateData.variables[target] = tmp;
+      renderVariablesList();
+      scheduleAutoSave();
+    }
+    function deleteVariable(idx) {
+      templateData.variables.splice(idx, 1);
+      renderVariablesList();
+      scheduleAutoSave();
+    }
+
+    // Modal Operations
+    function openImportModal() { document.getElementById('importModal')?.classList.remove('hidden'); }
+    function closeImportModal() { document.getElementById('importModal')?.classList.add('hidden'); }
+    function processImport() {
+      const txt = document.getElementById('importTextInput').value;
+      if (!txt.trim()) return;
+
+      try {
+        if (txt.trim().startsWith('{')) {
+          const parsed = JSON.parse(txt);
+          templateData = parsed;
+        } else {
+          templateData = parseMarkdown(txt);
+        }
+        renderBuilder();
+        renderVariablesList();
+        renderImagesGrid();
+        closeImportModal();
+        showToast('Template imported successfully!', 'success');
+        scheduleAutoSave();
+      } catch (err) {
+        showToast(`Import failed: ${err.message}`, 'error');
+      }
+    }
+
+    function handleImportFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        document.getElementById('importTextInput').value = evt.target.result;
+      };
+      reader.readAsText(file);
+    }
+
+    function exportMarkdownFile() {
+      const md = generateMarkdown();
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(templateData.title || 'template').toLowerCase().replace(/[^a-z0-9]/g, '-')}.md`;
+      a.click();
+      showToast('Exported Markdown file', 'success');
+    }
+
+    function exportJsonFile() {
+      const json = JSON.stringify(templateData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(templateData.title || 'template').toLowerCase().replace(/[^a-z0-9]/g, '-')}.json`;
+      a.click();
+      showToast('Exported JSON file', 'success');
+    }
+
+    function copyMarkdownToClipboard() {
+      copySnippet(generateMarkdown());
+      showToast('Copied template Markdown to clipboard', 'success');
+    }
+
+    function copySnippet(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('Copied to clipboard', 'info');
+        }).catch(() => {
+          fallbackCopyText(text);
+        });
+      } else {
+        fallbackCopyText(text);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied to clipboard', 'info');
+      } catch (_) {
+        showToast('Failed to copy to clipboard', 'error');
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeImportModal();
+        closeTokenModal();
+        document.getElementById('presetMenu')?.classList.add('hidden');
+        document.getElementById('exportMenu')?.classList.add('hidden');
+        document.querySelectorAll('.transfer-menu').forEach(menu => menu.classList.add('hidden'));
+      }
+    });
+
+    // Token Cheatsheet / Inserter
+    function openTokenCheatsheet(cb = null) {
+      tokenSelectCallback = cb;
+      document.getElementById('tokenModal')?.classList.remove('hidden');
+
+      const builtins = ['SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME'];
+      document.getElementById('builtinTokensGrid').innerHTML = builtins.map(t => `
+        <button onclick="handleTokenSelect('${t}')" class="text-left p-2.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-brand-50 dark:hover:bg-brand-950/40 hover:border-brand-300 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-mono font-bold text-brand-700 dark:text-brand-300">
+          {{ ${t} }}
+        </button>
+      `).join('');
+
+      document.getElementById('varTokensGrid').innerHTML = (templateData.variables || []).map(v => `
+        <button onclick="handleTokenSelect('${v.name}')" class="text-left p-2.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-brand-50 dark:hover:bg-brand-950/40 hover:border-brand-300 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-mono font-bold text-brand-700 dark:text-brand-300">
+          {{ ${v.name} }}
+        </button>
+      `).join('');
+
+      const captures = [];
+      templateData.content.forEach(sec => sec.steps.forEach(st => {
+        if (st.checkpoint && st.checkpoint.capture) captures.push(st.checkpoint.capture);
+      }));
+
+      document.getElementById('captureTokensGrid').innerHTML = captures.length === 0 
+        ? '<div class="text-[11px] text-zinc-400 dark:text-zinc-500 col-span-2">No checkpoint captures yet.</div>'
+        : captures.map(c => `
+          <button onclick="handleTokenSelect('${c}')" class="text-left p-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800/60 rounded-lg text-xs font-mono font-bold text-indigo-900 dark:text-indigo-300">
+            {{ ${c} }}
+          </button>
+        `).join('');
+    }
+
+    function closeTokenModal() {
+      document.getElementById('tokenModal')?.classList.add('hidden');
+      tokenSelectCallback = null;
+    }
+
+    function handleTokenSelect(token) {
+      if (tokenSelectCallback) {
+        tokenSelectCallback(token);
+      } else {
+        copySnippet(`{{ ${token} }}`);
+      }
+    }
+
+    function insertPlaceholderToBody(sIdx, stepIdx) {
+      openTokenCheatsheet((token) => {
+        const txt = document.getElementById(`step-body-${sIdx}-${stepIdx}`);
+        if (txt) {
+          const start = txt.selectionStart || txt.value.length;
+          const end = txt.selectionEnd || txt.value.length;
+          const ins = `{{ ${token} }}`;
+          txt.value = txt.value.substring(0, start) + ins + txt.value.substring(end);
+          txt.selectionStart = txt.selectionEnd = start + ins.length;
+          txt.focus();
+          templateData.content[sIdx].steps[stepIdx].body = txt.value;
+        }
+        closeTokenModal();
+        showToast(`Inserted {{ ${token} }}`, 'success');
+        scheduleAutoSave();
+      });
+    }
+
+    function openPhotoInsertPicker(sIdx, stepIdx) {
+      if ((templateData.images || []).length === 0) {
+        showToast('Upload or generate an image in the Library tab first', 'info');
+        switchView('images');
+        return;
+      }
+      
+      const insertImageSnippet = (img) => {
+        const snippet = `\n![${img.alt || img.name}](${img.name})\n`;
+        const txt = document.getElementById(`step-body-${sIdx}-${stepIdx}`);
+        if (txt) {
+          const start = txt.selectionStart || txt.value.length;
+          const end = txt.selectionEnd || txt.value.length;
+          txt.value = txt.value.substring(0, start) + snippet + txt.value.substring(end);
+          txt.focus();
+          templateData.content[sIdx].steps[stepIdx].body = txt.value;
+          runFullValidation(false);
+          scheduleAutoSave();
+        }
+        showToast(`Inserted ![${img.name}]`, 'success');
+      };
+
+      if (templateData.images.length === 1) {
+        insertImageSnippet(templateData.images[0]);
+        return;
+      }
+
+      // If multiple images are available, prompt choice via quick dialog
+      const choices = templateData.images.map((img, i) => `${i + 1}: ${img.name}`).join('\n');
+      const selection = prompt(`Select an image to insert (1-${templateData.images.length}):\n${choices}`, "1");
+      const chosenIdx = parseInt(selection, 10) - 1;
+      if (!isNaN(chosenIdx) && templateData.images[chosenIdx]) {
+        insertImageSnippet(templateData.images[chosenIdx]);
+      }
+    }
+
+    function updateBadges() {
+      document.getElementById('varCountBadge').innerText = (templateData.variables || []).length;
+      document.getElementById('imgCountBadge').innerText = (templateData.images || []).length;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+
+  <script>
+    function loadExample(type) {
+      if (type === 'skeleton') {
+        templateData = createBlankTemplate();
+        showToast('Loaded Minimal Starter Skeleton', 'info');
+      } else if (type === 'network') {
+        templateData = {
+          title: "Switch & Host Addressing — Bench Lab",
+          description: "Cable a bench, assign a static IP, verify connectivity. 60 min, 24 seats.",
+          variables: [
+            { name: "PORT_NUM", expression: "seat" },
+            { name: "SEAT_TAG", expression: "'S' + pad(seat, 2)" },
+            { name: "VLAN", expression: "10 + seat" },
+            { name: "HOST_IP", expression: "'10.0.0.' + (100 + seat)" },
+            { name: "HOST_CIDR", expression: "HOST_IP + '/24'" },
+            { name: "GATEWAY_IP", expression: "'192.168.1.' + (100 + seat)" },
+            { name: "SUBNET", expression: "'255.255.255.0'" },
+            { name: "POD", expression: "ceil(seat / 4)" }
+          ],
+          images: [],
+          content: [
+            {
+              title: "Section 1 · Briefing",
+              collapsed: false,
+              steps: [
+                {
+                  type: "info",
+                  title: "Welcome & Topology",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Welcome {{ FIRST_NAME }} — you are seat **{{ SEAT_ID }}** in pod **{{ POD }}**.\nIn this exercise you will configure switch port {{ PORT_NUM }} and assign static addressing.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: null
+                }
+              ]
+            },
+            {
+              title: "Section 2 · Cabling & Bench Verification",
+              collapsed: false,
+              steps: [
+                {
+                  type: "desk",
+                  title: "Connect the patch cable",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Connect the cable tagged **{{ SEAT_TAG }}** to port **{{ PORT_NUM }}** on the rack unit.",
+                  hints: [
+                    { label: "Where is the port?", text: "Port number matches your seat number {{ PORT_NUM }}." }
+                  ],
+                  solution: "Plug cable {{ SEAT_TAG }} directly into port {{ PORT_NUM }}.",
+                  checkpoint: {
+                    prompt: "How many link LEDs are lit?",
+                    placeholder: "0 or 1",
+                    mode: "exact",
+                    answer: "1",
+                    answers: ["one"],
+                    pattern: "",
+                    capture: ""
+                  }
+                }
+              ]
+            },
+            {
+              title: "Section 3 · Configuration & Verification",
+              collapsed: false,
+              steps: [
+                {
+                  type: "computer",
+                  title: "Apply workstation IP address",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Configure static IP **{{ HOST_IP }}** on your NIC.\n\n| Setting | Value |\n| --- | --- |\n| IP Address | `{{ HOST_IP }}` |\n| Gateway | `{{ GATEWAY_IP }}` |\n| VLAN | `{{ VLAN }}` |",
+                  hints: [
+                    { label: "Command helper", text: "Run `ip addr add {{ HOST_CIDR }} dev eth0`." }
+                  ],
+                  solution: "Host IP is calculated as 10.0.0.(100 + {{ SEAT_ID }}) = {{ HOST_IP }}.",
+                  checkpoint: {
+                    prompt: "Enter the host IPv4 assigned to your machine",
+                    placeholder: "e.g. 10.0.0.1XX",
+                    mode: "exact",
+                    answer: "{{ HOST_IP }}",
+                    answers: ["{{ HOST_CIDR }}"],
+                    pattern: "",
+                    capture: ""
+                  }
+                }
+              ]
+            }
+          ]
+        };
+        showToast('Loaded Network Bench Lab', 'info');
+      } else if (type === 'provisioning') {
+        templateData = {
+          title: "Camera Provisioning — Unbox to Online",
+          description: "Unbox camera, record serials & MACs, claim into console and verify stream. 45 min.",
+          variables: [
+            { name: "BENCH", expression: "'B' + pad(seat, 2)" },
+            { name: "DEVICE_NAME", expression: "'cam-' + slug(last_name) + '-' + pad(seat, 2)" },
+            { name: "SITE", expression: "'Training Floor ' + ceil(seat / 10)" }
+          ],
+          images: [],
+          content: [
+            {
+              title: "Section 1 · Record Identifiers",
+              collapsed: false,
+              steps: [
+                {
+                  type: "desk",
+                  title: "Record the serial number",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Unbox the camera at bench **{{ BENCH }}**. Locate the serial number on the underside label.",
+                  hints: [
+                    { label: "Where is the label?", text: "The label with the QR code on the base of the unit." }
+                  ],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Enter the serial number printed on the label",
+                    placeholder: "e.g. ABCD.1234.WXYZ",
+                    mode: "pattern",
+                    answer: "",
+                    answers: [],
+                    pattern: "XXXX.XXXX.XXXX",
+                    capture: "SERIAL"
+                  }
+                },
+                {
+                  type: "desk",
+                  title: "Record the MAC address",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Read the MAC address located below the serial on the same label.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Enter the MAC address",
+                    placeholder: "e.g. A1:B2:C3:D4:E5:F6",
+                    mode: "pattern",
+                    answer: "",
+                    answers: [],
+                    pattern: "XX:XX:XX:XX:XX:XX",
+                    capture: "MAC"
+                  }
+                }
+              ]
+            },
+            {
+              title: "Section 2 · Claim & Verify",
+              collapsed: false,
+              steps: [
+                {
+                  type: "computer",
+                  title: "Claim device into console",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Add serial **{{ SERIAL }}** under site **{{ SITE }}** with name **{{ DEVICE_NAME }}**.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Type the device name exactly as claimed",
+                    placeholder: "cam-...",
+                    mode: "exact",
+                    answer: "{{ DEVICE_NAME }}",
+                    answers: [],
+                    pattern: "",
+                    capture: ""
+                  }
+                },
+                {
+                  type: "computer",
+                  title: "Confirm hardware identity",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Verify serial **{{ SERIAL }}** matches the hardware overview page.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Confirm the serial number displayed",
+                    placeholder: "the serial recorded earlier",
+                    mode: "exact",
+                    answer: "{{ SERIAL }}",
+                    answers: [],
+                    pattern: "",
+                    capture: ""
+                  }
+                }
+              ]
+            }
+          ]
+        };
+        showToast('Loaded Device Provisioning Lab', 'info');
+      } else if (type === 'onboarding') {
+        templateData = {
+          title: "Developer Onboarding — First Pull Request",
+          description: "Create your dev account, clone repository and open PR. Self-paced, 90 min.",
+          variables: [
+            { name: "USERNAME", expression: "slug(first_name) + '.' + slug(last_name)" },
+            { name: "EMAIL", expression: "USERNAME + '@lab.example'" },
+            { name: "INITIALS", expression: "initials(first_name + ' ' + last_name)" },
+            { name: "BRANCH", expression: "'onboarding/' + slug(last_name) + '-' + pad(seat, 2)" },
+            { name: "TICKET", expression: "'ONB-' + pad(seat, 4)" }
+          ],
+          images: [],
+          content: [
+            {
+              title: "Section 1 · Account Setup",
+              collapsed: false,
+              steps: [
+                {
+                  type: "info",
+                  title: "Your identity",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Hi {{ FIRST_NAME }}. Your assigned credentials for this training:\n\n| Item | Value |\n| --- | --- |\n| Username | `{{ USERNAME }}` |\n| Email | `{{ EMAIL }}` |\n| Branch | `{{ BRANCH }}` |",
+                  hints: [],
+                  solution: "",
+                  checkpoint: null
+                },
+                {
+                  type: "computer",
+                  title: "Create lab account",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Register using `{{ USERNAME }}`. Enter the verification code sent to your inbox.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Enter the six-digit verification code",
+                    placeholder: "e.g. 482913",
+                    mode: "pattern",
+                    answer: "",
+                    answers: [],
+                    pattern: "999999",
+                    capture: "AUTH_CODE"
+                  }
+                }
+              ]
+            },
+            {
+              title: "Section 2 · Code Submission",
+              collapsed: false,
+              steps: [
+                {
+                  type: "computer",
+                  title: "Commit and extract hash",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Commit file `contributors/{{ USERNAME }}.md` on branch `{{ BRANCH }}` with message `{{ TICKET }}: onboard {{ USERNAME }}`.",
+                  hints: [
+                    { label: "How to get short hash?", text: "Run `git log --oneline -1`." }
+                  ],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Short hash of your commit (7 hex chars)",
+                    placeholder: "e.g. a1b2c3d",
+                    mode: "pattern",
+                    answer: "",
+                    answers: [],
+                    pattern: "xxxxxxx",
+                    capture: "COMMIT"
+                  }
+                },
+                {
+                  type: "computer",
+                  title: "Confirm commit on pull request",
+                  collapsed: false,
+                  checkpointCollapsed: false,
+                  body: "Open your PR on git. Confirm your commit appears in the timeline.",
+                  hints: [],
+                  solution: "",
+                  checkpoint: {
+                    prompt: "Verify the short hash in the PR Commits tab",
+                    placeholder: "the commit hash",
+                    mode: "exact",
+                    answer: "{{ COMMIT }}",
+                    answers: [],
+                    pattern: "",
+                    capture: ""
+                  }
+                }
+              ]
+            }
+          ]
+        };
+        showToast('Loaded Software Onboarding Lab', 'info');
+      }
+
+      renderBuilder();
+      renderVariablesList();
+      renderImagesGrid();
+      switchView('builder');
+      scheduleAutoSave();
+    }
+
+    // App Initialization on Load
+    window.addEventListener('load', () => {
+      initTheme();
+
+      try {
+        const savedDraft = window.localStorage?.getItem('vlabs_studio_persistent_draft') 
+                        || window.sessionStorage?.getItem('vlabs_studio_draft');
+        if (savedDraft) {
+          const parsed = JSON.parse(savedDraft);
+          if (parsed && parsed.title) {
+            templateData = parsed;
+          }
+        }
+      } catch (_) {}
+
+      renderBuilder();
+      renderVariablesList();
+      renderImagesGrid();
+      runFullValidation(false);
+    });
+  </script>
+</body>
+</html>
