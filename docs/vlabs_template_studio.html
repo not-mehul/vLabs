@@ -136,12 +136,6 @@
         <span id="autoSaveText">Saved</span>
       </div>
 
-      <!-- Theme Toggle Button -->
-      <button id="themeToggleBtn" onclick="toggleDarkMode()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs" title="Toggle color theme">
-        <i id="themeIcon" class="ph ph-moon text-sm text-zinc-500 dark:text-zinc-400"></i>
-        <span id="themeText">Theme</span>
-      </button>
-
       <!-- Starter presets -->
       <div class="relative inline-block text-left" id="presetDropdownContainer">
         <button id="presetBtn" onclick="toggleDropdown('presetMenu')" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs">
@@ -264,15 +258,26 @@
         </div>
       </div>
 
-      <!-- Quick Helper Token Picker footer -->
-      <div id="sidebarFooter" class="p-3 bg-zinc-50 dark:bg-surface-900 border-t border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 text-[11px] leading-relaxed shrink-0">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
-            <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i> Tokens
-          </span>
-          <button onclick="openTokenCheatsheet()" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Inspect</button>
+      <!-- Sidebar Bottom Area: Tokens & Settings Button -->
+      <div id="sidebarBottomSection" class="shrink-0 flex flex-col bg-zinc-50 dark:bg-surface-900 border-t border-zinc-200 dark:border-zinc-800">
+        <!-- Quick Helper Token Picker footer -->
+        <div id="sidebarFooter" class="p-3 text-zinc-500 dark:text-zinc-400 text-[11px] leading-relaxed">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+              <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i> Tokens
+            </span>
+            <button onclick="openTokenCheatsheet()" class="text-brand-600 dark:text-brand-400 hover:underline font-semibold">Inspect</button>
+          </div>
+          <p class="text-zinc-500 dark:text-zinc-400 text-[10px]">Insert <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ SEAT_ID }}</code>, <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ FIRST_NAME }}</code>, or variables.</p>
         </div>
-        <p class="text-zinc-500 dark:text-zinc-400 text-[10px]">Insert <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ SEAT_ID }}</code>, <code class="text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/10 px-1 py-0.2 rounded font-mono">{{ FIRST_NAME }}</code>, or variables.</p>
+
+        <!-- Dedicated Settings Button on bottom of sidebar -->
+        <div class="p-2 border-t border-zinc-200/80 dark:border-zinc-800/80">
+          <button onclick="openSettingsModal()" id="sidebarSettingsBtn" class="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition" title="Studio Settings">
+            <i class="ph ph-gear text-base shrink-0 text-zinc-500 dark:text-zinc-400"></i>
+            <span class="sidebar-text flex-1 text-left">Settings</span>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -288,7 +293,13 @@
         <div class="bg-white dark:bg-surface-850 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 p-5 shadow-xs space-y-4">
           <div class="flex items-start justify-between">
             <div class="space-y-1 flex-1 pr-4">
-              <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Template Title *</label>
+              <div class="flex items-center justify-between">
+                <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Template Title *</label>
+                <button type="button" onclick="triggerAiPolish('templateTitle', 'title')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/50 transition">
+                  <i class="ph ph-sparkle text-purple-500"></i>
+                  <span>Polish</span>
+                </button>
+              </div>
               <input type="text" id="templateTitle" placeholder="e.g. Switch Bench Lab" 
                 class="w-full text-lg font-bold text-zinc-900 dark:text-zinc-100 bg-transparent border-0 border-b border-zinc-200 dark:border-zinc-700 focus:border-brand-600 focus:ring-0 px-0 py-1 transition placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
                 oninput="onMetadataChanged()">
@@ -303,7 +314,13 @@
             </div>
           </div>
           <div>
-            <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider mb-1">Description (Optional, ≤ 1000 characters)</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-bold uppercase text-zinc-400 dark:text-zinc-500 tracking-wider">Description (Optional, ≤ 1000 characters)</label>
+              <button type="button" onclick="triggerAiPolish('templateDescription', 'description')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/50 transition">
+                <i class="ph ph-sparkle text-purple-500"></i>
+                <span>Polish</span>
+              </button>
+            </div>
             <textarea id="templateDescription" rows="2" placeholder="One-line summary shown in the template list..." 
               class="w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-zinc-400"
               oninput="onMetadataChanged()"></textarea>
@@ -592,91 +609,234 @@
     </div>
   </div>
 
+  <!-- In-App Image Picker Modal (Zero prompt() or alert()) -->
+  <div id="imagePickerModal" class="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-850 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <i class="ph-bold ph-image text-brand-600 dark:text-brand-400"></i> Insert Image from Library
+        </h3>
+        <button onclick="closeImagePickerModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+      <p class="text-xs text-zinc-500 dark:text-zinc-400">Click any library image below to insert into the step body markdown:</p>
+      
+      <div id="imagePickerGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1"></div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+        <button type="button" onclick="closeImagePickerModal(); switchView('images');" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
+          <i class="ph ph-upload-simple"></i> Upload or generate in Library →
+        </button>
+        <button type="button" onclick="closeImagePickerModal()" class="px-4 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-semibold">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-850 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <i class="ph-bold ph-gear text-brand-600 dark:text-brand-400"></i> Studio Settings
+        </h3>
+        <button onclick="closeSettingsModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+
+      <!-- Appearance -->
+      <div class="space-y-2">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Appearance</label>
+        <div class="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 flex items-center justify-between">
+          <div>
+            <div class="text-xs font-semibold text-zinc-800 dark:text-zinc-100">Theme</div>
+            <div class="text-[11px] text-zinc-500 dark:text-zinc-400">Light or Dark mode</div>
+          </div>
+          <button id="settingsThemeToggleBtn" onclick="toggleDarkMode()" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-750 transition shadow-2xs">
+            <i id="settingsThemeIcon" class="ph ph-moon text-sm text-zinc-500 dark:text-zinc-400"></i>
+            <span id="settingsThemeText">Dark Mode</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Provider & Model Configuration -->
+      <div class="space-y-3 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+        <div class="flex items-center justify-between">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">AI Assistant Configuration</label>
+          <button type="button" onclick="testAiConnection()" id="testAiBtn" class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/50 border border-brand-200 dark:border-brand-800/60 transition">
+            <i class="ph ph-plugs-connected text-sm"></i>
+            <span>Test Connection</span>
+          </button>
+        </div>
+
+        <div class="p-4 bg-zinc-50/80 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 space-y-3.5">
+          <!-- Provider Selector -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">Provider</label>
+              <select id="settingsAiProvider" onchange="onProviderChanged()" class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-zinc-800 dark:text-zinc-200 font-medium">
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="custom">Custom / Compatible Endpoint</option>
+              </select>
+            </div>
+
+            <!-- Model Selector / Input -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Model</label>
+                <button type="button" onclick="fetchLiveModels()" id="fetchModelsBtn" class="text-[10px] text-brand-600 dark:text-brand-400 hover:underline font-semibold flex items-center gap-0.5">
+                  <i class="ph ph-arrows-clockwise text-[10px]"></i> Refresh
+                </button>
+              </div>
+              <div id="modelSelectContainer">
+                <select id="settingsAiModel" class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-zinc-800 dark:text-zinc-200 font-mono"></select>
+              </div>
+              <input type="text" id="settingsAiCustomModel" placeholder="e.g. llama-3.3-70b" class="hidden w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-zinc-800 dark:text-zinc-200 font-mono">
+            </div>
+          </div>
+
+          <!-- API Key -->
+          <div>
+            <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">API Key</label>
+            <input type="password" id="settingsAiApiKey" placeholder="sk-... or AIza..." 
+              class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-zinc-800 dark:text-zinc-200 font-mono">
+          </div>
+
+          <!-- Custom Base Endpoint (if custom / proxy) -->
+          <div id="customEndpointRow" class="hidden">
+            <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">Base Endpoint URL</label>
+            <input type="text" id="settingsCustomApiUrl" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1" 
+              class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-zinc-800 dark:text-zinc-200 font-mono">
+          </div>
+
+          <!-- Test Result Banner -->
+          <div id="aiTestResult" class="hidden p-2.5 rounded-lg text-xs"></div>
+
+          <!-- System Prompt -->
+          <div>
+            <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">Polish System Directive</label>
+            <textarea id="settingsAiSystemPrompt" rows="3" 
+              class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-200 leading-relaxed font-mono text-[11px]"
+              placeholder="You are an expert technical curriculum writer..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editor Defaults -->
+      <div class="space-y-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Editor Defaults</label>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80">
+            <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">New Step Type</label>
+            <select id="settingsDefaultStepType" class="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-1.5 text-zinc-800 dark:text-zinc-200">
+              <option value="desk">Hands-On (desk)</option>
+              <option value="computer">Workstation (computer)</option>
+              <option value="info">Read (info)</option>
+            </select>
+          </div>
+          <div class="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 flex flex-col justify-between">
+            <label class="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Saved Draft</label>
+            <button onclick="clearSavedDraft()" class="text-left text-rose-600 dark:text-rose-400 text-xs font-semibold hover:underline">Clear Local Storage</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+        <button onclick="closeSettingsModal()" class="px-4 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-semibold">Cancel</button>
+        <button onclick="saveAppSettings()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Polish Review & Diff Modal -->
+  <div id="aiPolishModal" class="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-850 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <i class="ph-bold ph-sparkle text-purple-600 dark:text-purple-400"></i> AI Polish Suggestions
+        </h3>
+        <button onclick="closeAiPolishModal()" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+
+      <!-- Scope note -->
+      <div id="aiPolishScopeBanner" class="text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
+        <span id="aiPolishScopeText">Polishing entire text block</span>
+        <span class="text-[10px] font-mono text-purple-600 dark:text-purple-400">vLabs 1.4 Tone & Clarity</span>
+      </div>
+
+      <!-- Custom instruction override -->
+      <div class="space-y-1">
+        <label class="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Optional refinement instruction:</label>
+        <div class="flex gap-2">
+          <input type="text" id="aiCustomInstruction" placeholder="e.g. Make it more concise, check Markdown syntax, imperative tone..." 
+            class="flex-1 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-zinc-800 dark:text-zinc-200">
+          <button onclick="reRunPolishWithInstruction()" id="aiRetryBtn" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1">
+            <i class="ph ph-arrows-clockwise"></i> Re-polish
+          </button>
+        </div>
+      </div>
+
+      <!-- Diff / Comparison -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block font-bold text-zinc-500 dark:text-zinc-400 uppercase text-[10px] mb-1">Original Text</label>
+          <div id="aiOriginalPreview" class="p-3 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl h-44 overflow-y-auto font-mono text-[11px] whitespace-pre-wrap text-zinc-600 dark:text-zinc-400"></div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-bold text-purple-600 dark:text-purple-400 uppercase text-[10px]">Polished Result</label>
+            <span id="aiPolishLoadingStatus" class="hidden text-[10px] font-semibold text-purple-600 animate-pulse flex items-center gap-1">
+              <i class="ph ph-circle-notch animate-spin"></i> Polishing...
+            </span>
+          </div>
+          <textarea id="aiPolishedTextarea" class="w-full p-3 bg-white dark:bg-zinc-800 border border-purple-300 dark:border-purple-700 rounded-xl h-44 overflow-y-auto font-mono text-[11px] text-zinc-800 dark:text-zinc-100 focus:ring-1 focus:ring-purple-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+        <button onclick="closeAiPolishModal()" class="px-4 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-semibold">Discard</button>
+        <div class="flex space-x-2">
+          <button onclick="copySnippet(document.getElementById('aiPolishedTextarea').value)" class="px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">
+            <i class="ph ph-copy"></i> Copy
+          </button>
+          <button onclick="applyAiPolishedText()" id="aiApplyBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5">
+            <i class="ph-bold ph-check"></i> Accept & Replace
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
   <script>
-    // Robust, zero-dependency Markdown parser fallback ensuring offline reliability
-    function parseMarkdownSafe(md) {
-      if (typeof window.marked !== 'undefined' && typeof window.marked.parse === 'function') {
-        try {
-          return window.marked.parse(md);
-        } catch (_) {}
-      }
-      
-      // Built-in resilient GFM-compliant fallback
-      let html = escapeHtml(md || '');
-      // Fenced code blocks
-      html = html.replace(/```([\s\S]*?)```/g, (m, code) => `<pre><code>${code.trim()}</code></pre>`);
-      // Tables
-      html = html.replace(/(?:^|\n)\|([^\n]+)\|\r?\n\|[-:\s|]+\|\r?\n((?:\|[^\n]+\|\r?\n?)+)/g, (match, header, rows) => {
-        const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
-        const trs = rows.trim().split('\n').map(row => {
-          const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
-          return `<tr>${tds}</tr>`;
-        }).join('');
-        return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
-      });
-      // Inlines
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-brand-600 hover:underline">$1</a>');
-      html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="rounded-lg max-w-full my-2">');
-      html = html.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
-      return `<p>${html}</p>`;
-    }
-
-    // Primary template data model adhering strictly to vLabs v1.4.0 specification
+    // Global Core State Variables
     function createBlankTemplate() {
       return {
         title: "Untitled Lab",
         description: "",
-        variables: [
-          { name: "SEAT_TAG", expression: "'S' + pad(seat, 2)" }
-        ],
+        variables: [],
         images: [],
         content: [
           {
-            title: "Section 1 · Briefing",
+            title: "Section 1 · Overview",
             collapsed: false,
             steps: [
               {
                 type: "info",
-                title: "What you will do",
+                title: "Welcome & Briefing",
                 collapsed: false,
                 checkpointCollapsed: false,
-                body: "Welcome, {{ FIRST_NAME }}. You are on seat {{ SEAT_ID }} (tag **{{ SEAT_TAG }}**). Read through these instructions before beginning.",
+                body: "Welcome {{ FIRST_NAME }}. Read the briefing before proceeding to bench tasks.",
                 hints: [],
                 solution: "",
                 checkpoint: null
-              }
-            ]
-          },
-          {
-            title: "Section 2 · Core Task",
-            collapsed: false,
-            steps: [
-              {
-                type: "desk",
-                title: "Prepare your equipment",
-                collapsed: false,
-                checkpointCollapsed: false,
-                body: "Carry out the initial setup at your workstation and confirm your seat tag is displayed.",
-                hints: [
-                  { label: "Where do I look?", text: "Check the physical label tagged on the front panel." }
-                ],
-                solution: "Ensure you are viewing tag {{ SEAT_TAG }} corresponding to seat {{ SEAT_ID }}.",
-                checkpoint: {
-                  prompt: "Enter your seat tag to continue",
-                  placeholder: "e.g. S01",
-                  mode: "exact",
-                  answer: "{{ SEAT_TAG }}",
-                  answers: [],
-                  pattern: "",
-                  capture: ""
-                }
               }
             ]
           }
@@ -685,11 +845,483 @@
     }
 
     let templateData = createBlankTemplate();
-    let tokenSelectCallback = null;
-    let globalSearchQuery = "";
-    let autoSaveTimer = null;
     let currentView = 'builder';
+    let globalSearchQuery = '';
+    let autoSaveTimer = null;
     let isSidebarCollapsed = false;
+    let tokenSelectCallback = null;
+    let activeImageInsertContext = null;
+
+    // vLabs Formula Evaluation Engine with Sandbox Security
+    function evaluateFormula(expr, context = {}) {
+      if (!expr || !expr.trim()) return "";
+      const trimmed = expr.trim();
+
+      // Security Check: Deny prototype chain manipulation, reflection, and network/browser access
+      const forbiddenTokens = /\b(constructor|prototype|__proto__|window|document|fetch|XMLHttpRequest|eval|Function|globalThis|setTimeout|setInterval|location|alert|confirm|prompt)\b/i;
+      if (forbiddenTokens.test(trimmed)) {
+        throw new Error("Disallowed token in expression (security check)");
+      }
+
+      // Pure helper functions whitelisted per §4.3
+      const helpers = {
+        pad: (val, width, char = '0') => String(val ?? '').padStart(Number(width) || 0, String(char || '0')),
+        hex: (n) => {
+          const num = Number(n);
+          if (isNaN(num)) throw new Error(`hex() requires a number`);
+          return Math.floor(num).toString(16).toLowerCase();
+        },
+        floor: (n) => Math.floor(Number(n)),
+        ceil: (n) => Math.ceil(Number(n)),
+        round: (n) => Math.round(Number(n)),
+        abs: (n) => Math.abs(Number(n)),
+        mod: (a, b) => {
+          const m = Number(b);
+          if (m <= 0 || isNaN(m)) throw new Error(`mod divisor must be > 0`);
+          return ((Number(a) % m) + m) % m;
+        },
+        min: (...args) => Math.min(...args.map(Number)),
+        max: (...args) => Math.max(...args.map(Number)),
+        upper: (s) => String(s ?? '').toUpperCase(),
+        lower: (s) => String(s ?? '').toLowerCase(),
+        str: (v) => String(v ?? ''),
+        slug: (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''),
+        initials: (s) => String(s ?? '').trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).join('')
+      };
+
+      const scope = { ...helpers, ...context };
+      const keys = Object.keys(scope);
+      const vals = Object.values(scope);
+
+      try {
+        const fn = new Function(...keys, `"use strict"; return (${trimmed});`);
+        return fn(...vals);
+      } catch (err) {
+        throw new Error(err.message || 'Syntax error in expression');
+      }
+    }
+
+    function substitutePlaceholders(text, context = {}) {
+      if (!text) return "";
+      return String(text).replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, key) => {
+        if (key in context) {
+          return String(context[key]);
+        }
+        return match;
+      });
+    }
+
+    function generateMaskExample(pattern) {
+      if (!pattern) return "";
+      let out = "";
+      let starCount = 0;
+      for (let i = 0; i < pattern.length; i++) {
+        const ch = pattern[i];
+        if (ch === '\\') {
+          if (i + 1 < pattern.length) {
+            out += pattern[++i];
+          }
+          continue;
+        }
+        if (ch === '9') out += '7';
+        else if (ch === 'A') out += 'A';
+        else if (ch === 'a') out += 'a';
+        else if (ch === 'X') out += 'B';
+        else if (ch === 'x') out += 'b';
+        else if (ch === '?') out += '1';
+        else if (ch === '*') {
+          starCount++;
+          out += 'xyz';
+        } else {
+          out += ch;
+        }
+      }
+      return out;
+    }
+
+    // Zero-dependency resilient markdown renderer fallback
+    function parseMarkdownSafe(mdText) {
+      if (!mdText) return "";
+      if (typeof marked !== 'undefined' && marked && typeof marked.parse === 'function') {
+        try {
+          return marked.parse(mdText);
+        } catch (_) {}
+      }
+      // Simple fallback
+      return String(mdText)
+        .replace(/^### (.*$)/gim, '<h3 class="font-bold text-sm my-1">$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2 class="font-bold text-base my-1.5">$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1 class="font-bold text-lg my-2">$1</h1>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`([^`]+)`/gim, '<code class="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded font-mono">$1</code>')
+        .replace(/\n/gim, '<br>');
+    }
+  </script>
+
+  <script>
+    // Default Persistent Settings
+    const DEFAULT_SYSTEM_PROMPT = `You are an expert IT curriculum and lab manual editor following the vLabs 1.4.0 specification.
+Your goal is to polish, refine, and improve author text for technical clarity, imperative action tone, and correct Markdown structure.
+Rules:
+1. Preserve all placeholders like {{ SEAT_ID }}, {{ FIRST_NAME }}, {{ VARIABLE }}, and {{ CAPTURE }} exactly as written.
+2. Maintain technical accuracy (command lines, IP addresses, ports).
+3. Do not include introductory conversational text or explanations. Return ONLY the polished markdown/text replacement.`;
+
+    const PROVIDER_MODELS = {
+      gemini: [
+        { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Fast & Capable)' },
+        { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+        { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+      ],
+      openai: [
+        { id: 'gpt-4o', label: 'GPT-4o (Omni)' },
+        { id: 'gpt-4o-mini', label: 'GPT-4o Mini (Fast & Low Cost)' },
+        { id: 'gpt-4-turbo', label: 'GPT-4 Turbo' }
+      ],
+      anthropic: [
+        { id: 'claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet' },
+        { id: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet' },
+        { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku (Fast)' }
+      ]
+    };
+
+    let appSettings = {
+      theme: 'system',
+      aiProvider: 'gemini',
+      aiModel: 'gemini-3-flash-preview',
+      aiApiKey: '',
+      customApiUrl: '',
+      aiSystemPrompt: DEFAULT_SYSTEM_PROMPT,
+      defaultStepType: 'desk'
+    };
+
+    function loadAppSettings() {
+      try {
+        const saved = window.localStorage?.getItem('vlabs_studio_settings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          appSettings = { ...appSettings, ...parsed };
+        }
+      } catch (_) {}
+    }
+
+    function saveAppSettings() {
+      const provider = document.getElementById('settingsAiProvider').value;
+      const key = document.getElementById('settingsAiApiKey').value.trim();
+      const customUrl = document.getElementById('settingsCustomApiUrl').value.trim();
+      const prompt = document.getElementById('settingsAiSystemPrompt').value.trim();
+      const defStep = document.getElementById('settingsDefaultStepType').value;
+
+      let model;
+      if (provider === 'custom') {
+        model = document.getElementById('settingsAiCustomModel').value.trim() || 'custom-model';
+      } else {
+        model = document.getElementById('settingsAiModel').value;
+      }
+
+      appSettings.aiProvider = provider;
+      appSettings.aiModel = model;
+      appSettings.aiApiKey = key;
+      appSettings.customApiUrl = customUrl;
+      appSettings.aiSystemPrompt = prompt || DEFAULT_SYSTEM_PROMPT;
+      appSettings.defaultStepType = defStep;
+
+      try {
+        window.localStorage?.setItem('vlabs_studio_settings', JSON.stringify(appSettings));
+      } catch (_) {}
+
+      closeSettingsModal();
+      showToast('Settings saved', 'success');
+    }
+
+    function populateModelDropdown(provider, selectedModel) {
+      const select = document.getElementById('settingsAiModel');
+      const customInput = document.getElementById('settingsAiCustomModel');
+      const selectContainer = document.getElementById('modelSelectContainer');
+      const fetchBtn = document.getElementById('fetchModelsBtn');
+
+      if (!select) return;
+
+      if (provider === 'custom') {
+        selectContainer.classList.add('hidden');
+        customInput.classList.remove('hidden');
+        customInput.value = selectedModel || 'default';
+        if (fetchBtn) fetchBtn.classList.add('hidden');
+        return;
+      }
+
+      selectContainer.classList.remove('hidden');
+      customInput.classList.add('hidden');
+      if (fetchBtn) fetchBtn.classList.remove('hidden');
+
+      const models = PROVIDER_MODELS[provider] || [];
+      select.innerHTML = models.map(m => 
+        `<option value="${m.id}" ${m.id === selectedModel ? 'selected' : ''}>${m.label}</option>`
+      ).join('');
+
+      // If selectedModel is not in list (e.g. from live fetch), add it
+      if (selectedModel && !models.some(m => m.id === selectedModel)) {
+        const opt = document.createElement('option');
+        opt.value = selectedModel;
+        opt.textContent = selectedModel;
+        opt.selected = true;
+        select.prepend(opt);
+      }
+    }
+
+    function onProviderChanged() {
+      const provider = document.getElementById('settingsAiProvider').value;
+      const customRow = document.getElementById('customEndpointRow');
+      if (provider === 'custom') {
+        customRow.classList.remove('hidden');
+      } else {
+        customRow.classList.add('hidden');
+      }
+      populateModelDropdown(provider, null);
+    }
+
+    async function fetchLiveModels() {
+      const provider = document.getElementById('settingsAiProvider').value;
+      const apiKey = document.getElementById('settingsAiApiKey').value.trim();
+      const statusEl = document.getElementById('aiTestResult');
+
+      if (provider === 'custom') {
+        showToast('Specify the custom model identifier directly', 'info');
+        return;
+      }
+
+      if (!apiKey && provider !== 'gemini') {
+        showToast(`Enter an API key to query ${provider} models`, 'error');
+        return;
+      }
+
+      const fetchBtn = document.getElementById('fetchModelsBtn');
+      const originalText = fetchBtn.innerHTML;
+      fetchBtn.innerHTML = '<i class="ph ph-circle-notch animate-spin"></i> Fetching...';
+      fetchBtn.disabled = true;
+
+      try {
+        let fetchedList = [];
+
+        if (provider === 'gemini') {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          const data = await res.json();
+          fetchedList = (data.models || [])
+            .filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && m.name.includes('gemini'))
+            .map(m => ({ id: m.name.replace(/^models\//, ''), label: m.displayName || m.name.replace(/^models\//, '') }));
+        } else if (provider === 'openai') {
+          const res = await fetch('https://api.openai.com/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          const data = await res.json();
+          fetchedList = (data.data || [])
+            .filter(m => m.id.includes('gpt'))
+            .map(m => ({ id: m.id, label: m.id }))
+            .sort((a, b) => a.id.localeCompare(b.id));
+        } else if (provider === 'anthropic') {
+          showToast('Anthropic models configured with latest production models', 'info');
+          return;
+        }
+
+        if (fetchedList.length > 0) {
+          PROVIDER_MODELS[provider] = fetchedList;
+          populateModelDropdown(provider, fetchedList[0].id);
+          showToast(`Loaded ${fetchedList.length} models from ${provider}`, 'success');
+        } else {
+          showToast('No models returned from provider', 'info');
+        }
+      } catch (err) {
+        showToast(`Failed to fetch models: ${err.message}`, 'error');
+      } finally {
+        fetchBtn.innerHTML = originalText;
+        fetchBtn.disabled = false;
+      }
+    }
+
+    async function testAiConnection() {
+      const provider = document.getElementById('settingsAiProvider').value;
+      const apiKey = document.getElementById('settingsAiApiKey').value.trim();
+      const customUrl = document.getElementById('settingsCustomApiUrl').value.trim();
+      const model = provider === 'custom' 
+        ? document.getElementById('settingsAiCustomModel').value.trim() 
+        : document.getElementById('settingsAiModel').value;
+      const resultEl = document.getElementById('aiTestResult');
+      const testBtn = document.getElementById('testAiBtn');
+
+      resultEl.classList.remove('hidden', 'bg-emerald-50', 'text-emerald-800', 'border-emerald-200', 'bg-rose-50', 'text-rose-800', 'border-rose-200', 'dark:bg-emerald-950/40', 'dark:text-emerald-300', 'dark:border-emerald-800', 'dark:bg-rose-950/40', 'dark:text-rose-300', 'dark:border-rose-800');
+      resultEl.className = 'p-2.5 rounded-lg text-xs border bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center space-x-2';
+      resultEl.innerHTML = '<i class="ph ph-circle-notch animate-spin text-sm"></i><span>Testing connection to ' + provider + ' (' + model + ')...</span>';
+      testBtn.disabled = true;
+
+      const startTime = performance.now();
+
+      try {
+        const text = await executeProviderRequest({
+          provider,
+          model,
+          apiKey,
+          customUrl,
+          systemPrompt: 'Respond with exactly the single word: OK',
+          userPrompt: 'Ping'
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+
+        resultEl.className = 'p-2.5 rounded-lg text-xs border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 flex items-start space-x-2';
+        resultEl.innerHTML = `<i class="ph-bold ph-check-circle text-emerald-600 dark:text-emerald-400 text-sm mt-0.5 shrink-0"></i><div><b>Connected successfully</b> (${elapsed}ms)<div class="text-[11px] opacity-80 mt-0.5">Response: "${escapeHtml(text.substring(0, 60))}"</div></div>`;
+      } catch (err) {
+        resultEl.className = 'p-2.5 rounded-lg text-xs border bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800/60 flex items-start space-x-2';
+        resultEl.innerHTML = `<i class="ph-bold ph-x-circle text-rose-600 dark:text-rose-400 text-sm mt-0.5 shrink-0"></i><div><b>Connection failed:</b> ${escapeHtml(err.message)}</div>`;
+      } finally {
+        testBtn.disabled = false;
+      }
+    }
+
+    async function executeProviderRequest({ provider, model, apiKey, customUrl, systemPrompt, userPrompt }) {
+      if (provider === 'gemini') {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const payload = {
+          contents: [{ parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        };
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      } 
+      
+      else if (provider === 'openai') {
+        const url = 'https://api.openai.com/v1/chat/completions';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: model || 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content?.trim() || "";
+      }
+
+      else if (provider === 'anthropic') {
+        const url = 'https://api.anthropic.com/v1/messages';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: model || 'claude-3-7-sonnet-latest',
+            max_tokens: 1500,
+            system: systemPrompt,
+            messages: [
+              { role: 'user', content: userPrompt }
+            ]
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || `HTTP ${res.status}: Check Anthropic key & model`);
+        }
+        const data = await res.json();
+        return data.content?.[0]?.text?.trim() || "";
+      }
+
+      else if (provider === 'custom') {
+        const endpoint = customUrl.trim() || 'http://localhost:11434/v1/chat/completions';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            model: model || 'default',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ]
+          })
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        // Support OpenAI format or simple { text } format
+        return data.choices?.[0]?.message?.content?.trim() || data.text?.trim() || JSON.stringify(data);
+      }
+
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+
+    function openSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      if (!modal) return;
+
+      document.getElementById('settingsAiProvider').value = appSettings.aiProvider || 'gemini';
+      document.getElementById('settingsAiApiKey').value = appSettings.aiApiKey || '';
+      document.getElementById('settingsCustomApiUrl').value = appSettings.customApiUrl || '';
+      document.getElementById('settingsAiSystemPrompt').value = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+      document.getElementById('settingsDefaultStepType').value = appSettings.defaultStepType || 'desk';
+
+      onProviderChanged();
+
+      if (appSettings.aiProvider === 'custom') {
+        document.getElementById('settingsAiCustomModel').value = appSettings.aiModel || 'custom-model';
+      } else {
+        populateModelDropdown(appSettings.aiProvider, appSettings.aiModel);
+      }
+
+      const isDark = document.documentElement.classList.contains('dark');
+      const text = document.getElementById('settingsThemeText');
+      const icon = document.getElementById('settingsThemeIcon');
+      if (text) text.innerText = isDark ? 'Light Mode' : 'Dark Mode';
+      if (icon) icon.className = isDark ? 'ph ph-sun text-sm text-amber-400' : 'ph ph-moon text-sm text-zinc-500';
+
+      const resultEl = document.getElementById('aiTestResult');
+      if (resultEl) resultEl.classList.add('hidden');
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal')?.classList.add('hidden');
+    }
+
+    function clearSavedDraft() {
+      if (confirm('Clear the local autosaved draft? Unsaved changes will be cleared.')) {
+        try {
+          window.localStorage?.removeItem('vlabs_studio_persistent_draft');
+          showToast('Draft cache cleared', 'info');
+        } catch (_) {}
+      }
+    }
 
     // Reserved identifiers per vLabs 1.4 (§4.1)
     const RESERVED_NAMES = new Set([
@@ -701,31 +1333,39 @@
 
     // Theme Management
     function initTheme() {
-      const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const savedTheme = appSettings.theme || 'system';
+      let isDark = false;
+      if (savedTheme === 'dark') {
+        isDark = true;
+      } else if (savedTheme === 'light') {
+        isDark = false;
+      } else {
+        isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
       if (isDark) {
         document.documentElement.classList.add('dark');
-        updateThemeDisplay(true);
       } else {
         document.documentElement.classList.remove('dark');
-        updateThemeDisplay(false);
       }
+      updateThemeDisplay(isDark);
     }
 
     function toggleDarkMode() {
       const isDark = document.documentElement.classList.toggle('dark');
+      appSettings.theme = isDark ? 'dark' : 'light';
+      try {
+        window.localStorage?.setItem('vlabs_studio_settings', JSON.stringify(appSettings));
+      } catch (_) {}
       updateThemeDisplay(isDark);
       showToast(isDark ? 'Dark mode enabled' : 'Light mode enabled', 'info');
     }
 
     function updateThemeDisplay(isDark) {
-      const icon = document.getElementById('themeIcon');
-      const text = document.getElementById('themeText');
-      if (icon) {
-        icon.className = isDark ? 'ph ph-sun text-sm text-amber-400' : 'ph ph-moon text-sm text-zinc-500 dark:text-zinc-400';
-      }
-      if (text) {
-        text.innerText = isDark ? 'Light' : 'Dark';
-      }
+      const stText = document.getElementById('settingsThemeText');
+      const stIcon = document.getElementById('settingsThemeIcon');
+      if (stText) stText.innerText = isDark ? 'Light Mode' : 'Dark Mode';
+      if (stIcon) stIcon.className = isDark ? 'ph ph-sun text-sm text-amber-400' : 'ph ph-moon text-sm text-zinc-500';
     }
 
     // Sidebar Collapse Management
@@ -735,7 +1375,9 @@
       const texts = document.querySelectorAll('.sidebar-text');
       const labels = document.querySelectorAll('.sidebar-label');
       const search = document.querySelector('.sidebar-search');
+      const outlineContainer = document.getElementById('sidebarOutlineContainer');
       const footer = document.getElementById('sidebarFooter');
+      const settingsBtn = document.getElementById('sidebarSettingsBtn');
 
       if (isSidebarCollapsed) {
         sidebar.classList.remove('w-64');
@@ -743,7 +1385,11 @@
         texts.forEach(el => el.classList.add('hidden'));
         labels.forEach(el => el.classList.add('hidden'));
         if (search) search.classList.add('hidden');
+        if (outlineContainer) outlineContainer.classList.add('hidden');
         if (footer) footer.classList.add('hidden');
+        if (settingsBtn) {
+          settingsBtn.classList.add('justify-center', 'px-0');
+        }
         document.querySelectorAll('#sidebarWorkspacesContainer button').forEach(b => {
           b.classList.add('justify-center', 'px-0');
         });
@@ -753,7 +1399,11 @@
         texts.forEach(el => el.classList.remove('hidden'));
         labels.forEach(el => el.classList.remove('hidden'));
         if (search) search.classList.remove('hidden');
+        if (outlineContainer) outlineContainer.classList.remove('hidden');
         if (footer) footer.classList.remove('hidden');
+        if (settingsBtn) {
+          settingsBtn.classList.remove('justify-center', 'px-0');
+        }
         document.querySelectorAll('#sidebarWorkspacesContainer button').forEach(b => {
           b.classList.remove('justify-center', 'px-0');
         });
@@ -761,97 +1411,138 @@
     }
   </script>
 
+  <!-- AI Text Polishing Engine -->
   <script>
-    function vlabsPad(value, width, char = '0') {
-      let str = String(value ?? '');
-      while (str.length < width) str = char + str;
-      return str;
-    }
-    function vlabsHex(n) { return Math.floor(Number(n)).toString(16).toLowerCase(); }
-    function vlabsFloor(n) { return Math.floor(Number(n)); }
-    function vlabsCeil(n) { return Math.ceil(Number(n)); }
-    function vlabsRound(n) { return Math.round(Number(n)); }
-    function vlabsAbs(n) { return Math.abs(Number(n)); }
-    function vlabsMod(a, b) { const m = Number(a) % Number(b); return m < 0 ? m + Number(b) : m; }
-    function vlabsMin(...args) { return Math.min(...args.map(Number)); }
-    function vlabsMax(...args) { return Math.max(...args.map(Number)); }
-    function vlabsUpper(s) { return String(s ?? '').toUpperCase(); }
-    function vlabsLower(s) { return String(s ?? '').toLowerCase(); }
-    function vlabsStr(v) { return String(v ?? ''); }
-    function vlabsSlug(s) { return String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-    function vlabsInitials(s) {
-      return String(s ?? '')
-        .trim()
-        .split(/\s+/)
-        .map(w => w[0] ? w[0].toUpperCase() : '')
-        .join('');
+    let activePolishTarget = {
+      targetId: null,
+      contextType: 'body',
+      sIdx: null,
+      stepIdx: null,
+      selectionStart: 0,
+      selectionEnd: 0,
+      isSelection: false,
+      originalText: ""
+    };
+
+    function triggerAiPolish(targetId, contextType = 'body', sIdx = null, stepIdx = null) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+
+      const val = el.value || "";
+      const selStart = el.selectionStart || 0;
+      const selEnd = el.selectionEnd || 0;
+      const hasSelection = (selEnd > selStart) && (val.substring(selStart, selEnd).trim().length > 0);
+
+      const textToPolish = hasSelection ? val.substring(selStart, selEnd) : val;
+
+      if (!textToPolish.trim()) {
+        showToast('Please type or select text to polish first', 'info');
+        return;
+      }
+
+      activePolishTarget = {
+        targetId: targetId,
+        contextType: contextType,
+        sIdx: sIdx,
+        stepIdx: stepIdx,
+        selectionStart: hasSelection ? selStart : 0,
+        selectionEnd: hasSelection ? selEnd : val.length,
+        isSelection: hasSelection,
+        originalText: textToPolish
+      };
+
+      const modal = document.getElementById('aiPolishModal');
+      const origPreview = document.getElementById('aiOriginalPreview');
+      const polishedArea = document.getElementById('aiPolishedTextarea');
+      const scopeText = document.getElementById('aiPolishScopeText');
+
+      origPreview.innerText = textToPolish;
+      polishedArea.value = "Generating polished version...";
+      scopeText.innerText = hasSelection 
+        ? `Polishing selected segment (${textToPolish.length} chars)` 
+        : `Polishing entire ${contextType} (${textToPolish.length} chars)`;
+
+      modal.classList.remove('hidden');
+      executePolishRequest(textToPolish, "");
     }
 
-    function evaluateFormula(expr, context) {
+    async function executePolishRequest(text, customInstruction = "") {
+      const loading = document.getElementById('aiPolishLoadingStatus');
+      const applyBtn = document.getElementById('aiApplyBtn');
+      const retryBtn = document.getElementById('aiRetryBtn');
+      const polishedArea = document.getElementById('aiPolishedTextarea');
+
+      loading?.classList.remove('hidden');
+      if (applyBtn) applyBtn.disabled = true;
+      if (retryBtn) retryBtn.disabled = true;
+
       try {
-        const keys = Object.keys(context);
-        const vals = Object.values(context);
-        const helpers = {
-          pad: vlabsPad,
-          hex: vlabsHex,
-          floor: vlabsFloor,
-          ceil: vlabsCeil,
-          round: vlabsRound,
-          abs: vlabsAbs,
-          mod: vlabsMod,
-          min: vlabsMin,
-          max: vlabsMax,
-          upper: vlabsUpper,
-          lower: vlabsLower,
-          str: vlabsStr,
-          slug: vlabsSlug,
-          initials: vlabsInitials
-        };
-        const allKeys = [...Object.keys(helpers), ...keys];
-        const allVals = [...Object.values(helpers), ...vals];
-        const fn = new Function(...allKeys, `"use strict"; return (${expr});`);
-        return fn(...allVals);
-      } catch (err) {
-        throw new Error(err.message);
-      }
-    }
+        const baseSystemPrompt = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+        const promptDirective = customInstruction 
+          ? `${baseSystemPrompt}\nAuthor instruction: ${customInstruction}`
+          : baseSystemPrompt;
 
-    function substitutePlaceholders(str, context) {
-      if (!str) return "";
-      return str.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (match, p1) => {
-        if (context.hasOwnProperty(p1)) {
-          return context[p1];
-        }
-        return `⟨missing:${p1}⟩`;
-      });
-    }
+        const userPrompt = `Context: ${activePolishTarget.contextType} in a vLabs 1.4.0 manual.\nPolish and refine the following text while strictly preserving all placeholders and Markdown:\n\n${text}`;
 
-    function generateMaskExample(pattern) {
-      if (!pattern) return "";
-      let out = "";
-      for (let i = 0; i < pattern.length; i++) {
-        const ch = pattern[i];
-        if (ch === '\\' && i + 1 < pattern.length) {
-          out += pattern[++i];
-        } else if (ch === '9') {
-          out += "7";
-        } else if (ch === 'A') {
-          out += "B";
-        } else if (ch === 'a') {
-          out += "b";
-        } else if (ch === 'X') {
-          out += "K";
-        } else if (ch === 'x') {
-          out += "k";
-        } else if (ch === '?') {
-          out += "#";
-        } else if (ch === '*') {
-          out += "XYZ";
+        const polishedResult = await executeProviderRequest({
+          provider: appSettings.aiProvider || 'gemini',
+          model: appSettings.aiModel || 'gemini-3-flash-preview',
+          apiKey: appSettings.aiApiKey || '',
+          customUrl: appSettings.customApiUrl || '',
+          systemPrompt: promptDirective,
+          userPrompt: userPrompt
+        });
+
+        if (polishedResult) {
+          polishedArea.value = polishedResult;
         } else {
-          out += ch;
+          polishedArea.value = text;
+          showToast('No polished text received from model', 'info');
         }
+      } catch (err) {
+        console.error('Polish error:', err);
+        polishedArea.value = text.trim();
+        showToast(`AI request notice: ${err.message}. Check Settings → API Key if using custom credentials.`, 'error');
+      } finally {
+        loading?.classList.add('hidden');
+        if (applyBtn) applyBtn.disabled = false;
+        if (retryBtn) retryBtn.disabled = false;
       }
-      return out;
+    }
+
+    function reRunPolishWithInstruction() {
+      const customInstr = document.getElementById('aiCustomInstruction').value.trim();
+      executePolishRequest(activePolishTarget.originalText, customInstr);
+    }
+
+    function applyAiPolishedText() {
+      const newText = document.getElementById('aiPolishedTextarea').value;
+      const el = document.getElementById(activePolishTarget.targetId);
+
+      if (el) {
+        if (activePolishTarget.isSelection) {
+          const fullVal = el.value;
+          const before = fullVal.substring(0, activePolishTarget.selectionStart);
+          const after = fullVal.substring(activePolishTarget.selectionEnd);
+          el.value = before + newText + after;
+          el.selectionStart = activePolishTarget.selectionStart;
+          el.selectionEnd = activePolishTarget.selectionStart + newText.length;
+        } else {
+          el.value = newText;
+        }
+
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      closeAiPolishModal();
+      showToast('Polished text applied', 'success');
+      scheduleAutoSave();
+    }
+
+    function closeAiPolishModal() {
+      document.getElementById('aiPolishModal')?.classList.add('hidden');
+      document.getElementById('aiCustomInstruction').value = "";
     }
   </script>
 
@@ -954,6 +1645,11 @@
           </button>
           <button type="button" onclick="openPhotoInsertPicker(${sIdx}, ${stepIdx})" class="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-semibold text-[10px] transition" title="Insert Image from Library">
             <i class="ph ph-image"></i> + Image
+          </button>
+          <span class="w-px h-3.5 bg-zinc-300 dark:bg-zinc-700 mx-0.5"></span>
+          <!-- Polish Button in Toolbar -->
+          <button type="button" onclick="triggerAiPolish('${textareaId}', 'body', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 font-semibold text-[10px] transition flex items-center gap-1 shadow-2xs" title="Polish selected text or entire body">
+            <i class="ph ph-sparkle text-purple-500"></i> Polish
           </button>
         </div>
       `;
@@ -1181,21 +1877,26 @@
                 </button>
               </div>
               <div id="hints-list-${sIdx}-${stepIdx}" class="space-y-2">
-                ${(step.hints || []).map((hint, hIdx) => `
+                ${(step.hints || []).map((hint, hIdx) => {
+                  const hintTextId = `hint-text-${sIdx}-${stepIdx}-${hIdx}`;
+                  return `
                   <div class="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-3 space-y-2">
                     <div class="flex items-center justify-between gap-2">
                       <input type="text" value="${escapeHtml(hint.label || '')}" placeholder="Label (e.g. Which cable is mine?)" 
                         class="text-xs font-medium text-amber-950 dark:text-amber-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg px-2.5 py-1 flex-1"
                         data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="label">
+                      <button type="button" onclick="triggerAiPolish('${hintTextId}', 'hint')" class="text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-800/40 flex items-center gap-1">
+                        <i class="ph ph-sparkle text-purple-500"></i> Polish
+                      </button>
                       <button data-action="delete-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" class="text-zinc-400 hover:text-rose-600 text-xs">
                         <i class="ph ph-x pointer-events-none"></i>
                       </button>
                     </div>
-                    <textarea rows="2" placeholder="Hint walkthrough markdown text..." 
+                    <textarea id="${hintTextId}" rows="2" placeholder="Hint walkthrough markdown text..." 
                       class="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700/60 rounded-lg p-2 focus:ring-1 focus:ring-amber-500"
                       data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="text">${escapeHtml(hint.text || '')}</textarea>
                   </div>
-                `).join('')}
+                `}).join('')}
               </div>
             </div>
 
@@ -1205,9 +1906,14 @@
                 <span class="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
                   <i class="ph ph-key text-emerald-600 dark:text-emerald-400"></i> Walkthrough Solution (Optional)
                 </span>
-                <span class="text-[10px] text-zinc-400 dark:text-zinc-500">Revealed after taking hints</span>
+                <div class="flex items-center space-x-2">
+                  <button type="button" onclick="triggerAiPolish('solution-${sIdx}-${stepIdx}', 'solution')" class="text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-800/40 flex items-center gap-1">
+                    <i class="ph ph-sparkle text-purple-500"></i> Polish
+                  </button>
+                  <span class="text-[10px] text-zinc-400 dark:text-zinc-500">Revealed after taking hints</span>
+                </div>
               </div>
-              <textarea rows="2" placeholder="Multi-line solution revealed to participants..." 
+              <textarea id="solution-${sIdx}-${stepIdx}" rows="2" placeholder="Multi-line solution revealed to participants..." 
                 class="w-full text-xs text-zinc-800 dark:text-zinc-200 bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700 rounded-xl p-2.5 focus:ring-1 focus:ring-emerald-500"
                 data-action="update-solution" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}">${escapeHtml(step.solution || '')}</textarea>
             </div>
@@ -3006,6 +3712,9 @@
       if (e.key === 'Escape') {
         closeImportModal();
         closeTokenModal();
+        closeSettingsModal();
+        closeAiPolishModal();
+        closeImagePickerModal();
         document.getElementById('presetMenu')?.classList.add('hidden');
         document.getElementById('exportMenu')?.classList.add('hidden');
         document.querySelectorAll('.transfer-menu').forEach(menu => menu.classList.add('hidden'));
@@ -3081,34 +3790,54 @@
         switchView('images');
         return;
       }
-      
-      const insertImageSnippet = (img) => {
-        const snippet = `\n![${img.alt || img.name}](${img.name})\n`;
-        const txt = document.getElementById(`step-body-${sIdx}-${stepIdx}`);
-        if (txt) {
-          const start = txt.selectionStart || txt.value.length;
-          const end = txt.selectionEnd || txt.value.length;
-          txt.value = txt.value.substring(0, start) + snippet + txt.value.substring(end);
-          txt.focus();
-          templateData.content[sIdx].steps[stepIdx].body = txt.value;
-          runFullValidation(false);
-          scheduleAutoSave();
-        }
-        showToast(`Inserted ![${img.name}]`, 'success');
-      };
 
-      if (templateData.images.length === 1) {
-        insertImageSnippet(templateData.images[0]);
-        return;
+      activeImageInsertContext = { sIdx, stepIdx };
+      const grid = document.getElementById('imagePickerGrid');
+      if (!grid) return;
+
+      grid.innerHTML = templateData.images.map((img, i) => `
+        <button type="button" onclick="insertSelectedImage(${i})" class="flex flex-col items-center p-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/30 transition text-left group">
+          <div class="w-full h-20 bg-zinc-900 rounded-lg overflow-hidden flex items-center justify-center mb-1.5">
+            <img src="${img.url}" alt="${escapeHtml(img.alt)}" class="max-h-full max-w-full object-contain">
+          </div>
+          <span class="text-[11px] font-mono font-bold text-zinc-800 dark:text-zinc-200 truncate w-full group-hover:text-brand-600 dark:group-hover:text-brand-400">
+            ${escapeHtml(img.name)}
+          </span>
+          <span class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate w-full">
+            ${escapeHtml(img.alt || 'Asset')}
+          </span>
+        </button>
+      `).join('');
+
+      document.getElementById('imagePickerModal')?.classList.remove('hidden');
+    }
+
+    function insertSelectedImage(imgIdx) {
+      if (!activeImageInsertContext) return;
+      const { sIdx, stepIdx } = activeImageInsertContext;
+      const img = templateData.images[imgIdx];
+      if (!img) return;
+
+      const snippet = `\n![${img.alt || img.name}](${img.name})\n`;
+      const txt = document.getElementById(`step-body-${sIdx}-${stepIdx}`);
+      if (txt) {
+        const start = txt.selectionStart || txt.value.length;
+        const end = txt.selectionEnd || txt.value.length;
+        txt.value = txt.value.substring(0, start) + snippet + txt.value.substring(end);
+        txt.focus();
+        txt.setSelectionRange(start + snippet.length, start + snippet.length);
+        templateData.content[sIdx].steps[stepIdx].body = txt.value;
+        runFullValidation(false);
+        scheduleAutoSave();
       }
 
-      // If multiple images are available, prompt choice via quick dialog
-      const choices = templateData.images.map((img, i) => `${i + 1}: ${img.name}`).join('\n');
-      const selection = prompt(`Select an image to insert (1-${templateData.images.length}):\n${choices}`, "1");
-      const chosenIdx = parseInt(selection, 10) - 1;
-      if (!isNaN(chosenIdx) && templateData.images[chosenIdx]) {
-        insertImageSnippet(templateData.images[chosenIdx]);
-      }
+      closeImagePickerModal();
+      showToast(`Inserted ![${img.name}]`, 'success');
+    }
+
+    function closeImagePickerModal() {
+      document.getElementById('imagePickerModal')?.classList.add('hidden');
+      activeImageInsertContext = null;
     }
 
     function updateBadges() {
@@ -3424,7 +4153,18 @@
 
     // App Initialization on Load
     window.addEventListener('load', () => {
+      loadAppSettings();
       initTheme();
+
+      // Listen for AI provider selector changes
+      document.getElementById('settingsAiModel')?.addEventListener('change', (e) => {
+        const customRow = document.getElementById('customEndpointRow');
+        if (e.target.value === 'custom') {
+          customRow?.classList.remove('hidden');
+        } else {
+          customRow?.classList.add('hidden');
+        }
+      });
 
       try {
         const savedDraft = window.localStorage?.getItem('vlabs_studio_persistent_draft') 
