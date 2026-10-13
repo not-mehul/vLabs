@@ -602,25 +602,76 @@
 
   <!-- MODAL: Import Markdown -->
   <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header (Pinned) -->
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
         <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <i class="ph ph-upload-simple text-brand-600"></i> Import vLabs Markdown
+          <i class="ph-bold ph-upload-simple text-brand-600 dark:text-brand-400"></i> Import vLabs Template
         </h3>
-        <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg p-1">
           <i class="ph ph-x"></i>
         </button>
       </div>
-      <textarea id="importMarkdownTextarea" rows="12" placeholder="Paste your vLabs template markdown with front matter here..."
-        class="autogrow-textarea w-full font-mono text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-800 dark:text-slate-200 min-h-[14rem]"></textarea>
-      <div class="flex items-center justify-between">
-        <label class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold cursor-pointer">
-          Choose .md file
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        <!-- Primary Drag & Drop Zone -->
+        <div id="importDropZone" 
+             ondragover="handleImportDragOver(event)" 
+             ondragleave="handleImportDragLeave(event)" 
+             ondrop="handleImportDrop(event)"
+             onclick="document.getElementById('importFileInput').click()"
+             class="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50/50 dark:bg-surface-850/50 flex flex-col items-center justify-center">
           <input type="file" id="importFileInput" accept=".md,.markdown,.txt" class="hidden" onchange="handleImportFileSelect(event)">
-        </label>
-        <div class="flex items-center space-x-2">
-          <button onclick="closeImportModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-400 text-xs">Cancel</button>
-          <button onclick="executeImport()" class="px-4 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-semibold">Import Template</button>
+          <div class="w-12 h-12 rounded-xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl mb-2">
+            <i class="ph ph-file-arrow-up"></i>
+          </div>
+          <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">Drag & drop your Markdown template here, or <span class="text-brand-600 dark:text-brand-400 underline">browse</span></p>
+          <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Supports .md, .markdown, .txt (vLabs 1.4 compliant)</p>
+        </div>
+
+        <!-- Loaded File Summary Card -->
+        <div id="importLoadedFileCard" class="hidden bg-brand-50/60 dark:bg-brand-950/20 border border-brand-200/60 dark:border-brand-800/40 rounded-xl p-3 flex items-center justify-between">
+          <div class="flex items-center space-x-3 overflow-hidden">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center shrink-0">
+              <i class="ph-bold ph-file-text text-base"></i>
+            </div>
+            <div class="truncate">
+              <span id="importFileName" class="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">template.md</span>
+              <span id="importFileDetails" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">0 KB · Ready to import</span>
+            </div>
+          </div>
+          <button type="button" onclick="clearImportedFile()" class="p-1 text-slate-400 hover:text-rose-600 transition" title="Remove file">
+            <i class="ph ph-trash text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Collapsible Raw Paste Toggle -->
+        <div>
+          <button type="button" onclick="toggleRawPasteAccordion()" class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1">
+            <i id="rawPasteAccordionIcon" class="ph ph-caret-right text-xs"></i>
+            <span>Or paste raw Markdown text directly</span>
+          </button>
+          
+          <div id="rawPasteContainer" class="hidden mt-2">
+            <textarea id="importMarkdownTextarea" rows="6" 
+              placeholder="Paste raw vLabs template Markdown with front matter here..."
+              oninput="onImportTextareaInput()"
+              class="w-full font-mono text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-800 dark:text-slate-200 h-36 max-h-48 overflow-y-auto resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer (Pinned, Guaranteed Visibility) -->
+      <div class="flex items-center justify-between px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-surface-850/60 shrink-0">
+        <span id="importStatusText" class="text-[11px] text-slate-400 truncate max-w-xs">Select or drop a file to begin.</span>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button type="button" onclick="closeImportModal()" class="px-3.5 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium transition">
+            Cancel
+          </button>
+          <button type="button" id="executeImportBtn" onclick="executeImport()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed">
+            Import Template
+          </button>
         </div>
       </div>
     </div>
@@ -2705,34 +2756,119 @@
 
     function openImportModal() {
       const modal = document.getElementById('importModal');
-      const ta = document.getElementById('importMarkdownTextarea');
-      if (ta) ta.value = '';
+      clearImportedFile();
       modal?.classList.remove('hidden');
-      autoGrowAllTextareas(modal);
     }
 
     function closeImportModal() {
       document.getElementById('importModal')?.classList.add('hidden');
     }
 
+    function toggleRawPasteAccordion() {
+      const container = document.getElementById('rawPasteContainer');
+      const icon = document.getElementById('rawPasteAccordionIcon');
+      if (!container || !icon) return;
+      const isHidden = container.classList.toggle('hidden');
+      icon.className = isHidden ? 'ph ph-caret-right text-xs' : 'ph ph-caret-down text-xs';
+    }
+
+    function handleImportDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('importDropZone')?.classList.add('border-brand-500', 'bg-brand-50/40', 'dark:bg-brand-950/20');
+    }
+
+    function handleImportDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('importDropZone')?.classList.remove('border-brand-500', 'bg-brand-50/40', 'dark:bg-brand-950/20');
+    }
+
+    function handleImportDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleImportDragLeave(e);
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        processImportedFile(files[0]);
+      }
+    }
+
     function handleImportFileSelect(e) {
       const file = e.target.files?.[0];
+      if (file) {
+        processImportedFile(file);
+      }
+    }
+
+    let loadedImportRawContent = '';
+
+    function processImportedFile(file) {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (evt) => {
+        const text = evt.target?.result || '';
+        loadedImportRawContent = String(text);
+
+        // Update UI
+        const card = document.getElementById('importLoadedFileCard');
+        const nameEl = document.getElementById('importFileName');
+        const detailsEl = document.getElementById('importFileDetails');
+        const statusEl = document.getElementById('importStatusText');
         const ta = document.getElementById('importMarkdownTextarea');
-        if (ta) {
-          ta.value = evt.target.result || '';
-          autoGrowTextarea(ta);
+
+        if (ta) ta.value = loadedImportRawContent;
+
+        const sizeKb = (file.size / 1024).toFixed(1);
+        if (nameEl) nameEl.textContent = file.name;
+
+        // Quick structural inspection
+        try {
+          const inspected = parseMarkdown(loadedImportRawContent);
+          const secCount = inspected.content ? inspected.content.length : 0;
+          let stepCount = 0;
+          (inspected.content || []).forEach(s => stepCount += (s.steps ? s.steps.length : 0));
+          if (detailsEl) detailsEl.textContent = `${sizeKb} KB · "${inspected.title || 'Untitled'}" (${secCount} sections, ${stepCount} steps)`;
+          if (statusEl) statusEl.textContent = `Ready: ${secCount} sections, ${stepCount} steps detected`;
+        } catch (_) {
+          if (detailsEl) detailsEl.textContent = `${sizeKb} KB · Ready to import`;
+          if (statusEl) statusEl.textContent = `File ready for import.`;
         }
+
+        card?.classList.remove('hidden');
+        document.getElementById('executeImportBtn')?.removeAttribute('disabled');
       };
       reader.readAsText(file);
     }
 
+    function clearImportedFile() {
+      loadedImportRawContent = '';
+      const card = document.getElementById('importLoadedFileCard');
+      const fileInput = document.getElementById('importFileInput');
+      const ta = document.getElementById('importMarkdownTextarea');
+      const statusEl = document.getElementById('importStatusText');
+
+      if (card) card.classList.add('hidden');
+      if (fileInput) fileInput.value = '';
+      if (ta) ta.value = '';
+      if (statusEl) statusEl.textContent = 'Select or drop a file to begin.';
+    }
+
+    function onImportTextareaInput() {
+      const ta = document.getElementById('importMarkdownTextarea');
+      loadedImportRawContent = ta?.value || '';
+      const statusEl = document.getElementById('importStatusText');
+      if (loadedImportRawContent.trim()) {
+        if (statusEl) statusEl.textContent = 'Raw Markdown content entered.';
+      } else {
+        if (statusEl) statusEl.textContent = 'Select or drop a file to begin.';
+      }
+    }
+
     function executeImport() {
-      const text = document.getElementById('importMarkdownTextarea')?.value || '';
+      const text = loadedImportRawContent || document.getElementById('importMarkdownTextarea')?.value || '';
       if (!text.trim()) {
-        showToast('Please paste Markdown content or choose a file.', 'error');
+        showToast('Please drop a Markdown file or paste content.', 'error');
         return;
       }
       try {
