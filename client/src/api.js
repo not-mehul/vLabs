@@ -109,6 +109,24 @@ export const api = {
       token,
     }),
 
+  /* ---------------------------- Instructor accounts ------------------------ */
+
+  listInstructors: (token) => request('/auth/instructors', { token }),
+  /**
+   * Create an instructor. Signed in → pass `token`; from the unlinked page on
+   * the sign-in screen → pass `authorize: { username, password }` of an
+   * existing instructor instead.
+   */
+  createInstructor: (token, { username, password, authorize }) =>
+    request('/auth/instructors', {
+      method: 'POST',
+      body: { username, password: password || undefined, authorize },
+      token,
+    }),
+  resetInstructorPassword: (token, id) =>
+    request(`/auth/instructors/${id}/reset-password`, { method: 'POST', token }),
+  removeInstructor: (token, id) => request(`/auth/instructors/${id}`, { method: 'DELETE', token }),
+
   listTemplates: (token, { includeArchived = false } = {}) =>
     request(`/templates${includeArchived ? '?include_archived=1' : ''}`, { token }),
   templateFunctions: (token) => request('/templates/functions', { token }),
@@ -140,6 +158,16 @@ export const api = {
   exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),
   getParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { token }),
+  /** Exam sessions: mark a response correct / incorrect (null clears the mark). */
+  markResponse: (token, sessionId, participantId, key, correct) =>
+    request(`/sessions/${sessionId}/participants/${participantId}/marks/${key}`, {
+      method: 'PUT',
+      body: { correct },
+      token,
+    }),
+  /** Exam sessions: every participant's response to one question. */
+  questionResponses: (token, sessionId, key) =>
+    request(`/sessions/${sessionId}/questions/${key}`, { token }),
 
   /* -------------------------------- Images ------------------------------ */
 
@@ -210,6 +238,13 @@ export const api = {
     }),
   finish: (token) => request('/participant/finish', { method: 'POST', token }),
   status: (token) => request('/participant/status', { token }),
+
+  /* ------------------------------ Exam (participant) --------------------- */
+
+  exam: (token) => request('/participant/exam', { token }),
+  saveAnswer: (token, key, value) =>
+    request('/participant/exam/answer', { method: 'PUT', body: { key, value }, token }),
+  submitExam: (token) => request('/participant/exam/submit', { method: 'POST', token }),
 };
 
 /**

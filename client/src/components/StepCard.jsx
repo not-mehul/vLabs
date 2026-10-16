@@ -60,10 +60,22 @@ export default function StepCard({
       </div>
 
       {hints.length > 0 && (
-        <div className="card__hints">
+        <section className="card__hints" aria-label="Hints">
+          <div className="card__hints-head">
+            <span>
+              <Icon name="hint" size={15} /> {hints.length === 1 ? 'Hint' : 'Hints'}
+            </span>
+            <span className="card__hints-count">
+              {takenCount} / {hints.length} viewed
+            </span>
+          </div>
+          {hints.length > 1 && (
+            <p className="card__hints-note">Open any hint you need, in any order.</p>
+          )}
           {hints.map((h, i) => (
             <HintBox
               key={i}
+              number={i + 1}
               label={h.label}
               text={h.text}
               taken={h.taken || openedLocal.has(i)}
@@ -73,7 +85,7 @@ export default function StepCard({
               }}
             />
           ))}
-        </div>
+        </section>
       )}
 
       {!isInfo && step.has_solution && (

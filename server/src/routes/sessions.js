@@ -4,7 +4,13 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
-import { isSectionCleared, stepHasCheckpoint, checkpointMode } from '../lib/templating.js';
+import {
+  isSectionCleared,
+  stepHasCheckpoint,
+  checkpointMode,
+  injectImages,
+} from '../lib/templating.js';
+import { imageUrlMap } from '../lib/images.js';
 import { labProgress } from '../lib/labProgress.js';
 import {
   examParticipantView,
@@ -59,6 +65,16 @@ const q = {
 };
 
 const isExam = (row) => row.kind === 'exam';
+
+/** Resolve library image names in exam prompts/options for the instructor's view. */
+function withImages(question) {
+  const images = imageUrlMap();
+  return {
+    ...question,
+    prompt: injectImages(question.prompt, images),
+    options: (question.options || []).map((o) => injectImages(o, images)),
+  };
+}
 
 /** Generate a 6-digit code not currently used by an active session. */
 function generateRoomCode() {
@@ -354,7 +370,9 @@ router.get('/:id/participants/:pid', (req, res) => {
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
   const content = JSON.parse(row.content);
-  res.json(isExam(row) ? examParticipantDetail(p, content) : participantDetail(p, content));
+  if (!isExam(row)) return res.json(participantDetail(p, content));
+  const detail = examParticipantDetail(p, content);
+  res.json({ ...detail, questions: detail.questions.map(withImages) });
 });
 
 /**
@@ -401,7 +419,7 @@ router.get('/:id/questions/:key', (req, res) => {
     String(req.params.key),
   );
   if (!out) throw httpError(404, 'Unknown question');
-  res.json(out);
+  res.json(withImages(out));
 });
 
 /** Monitor data for an EXAM session. */

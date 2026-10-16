@@ -84,7 +84,8 @@ export default function Templates() {
         <div>
           <h1>Templates</h1>
           <p className="muted">
-            Master lab manuals with per-seat variables. Shared by all instructors.
+            Lab manuals (authored in vLabs Template Studio and imported here) and exams. Shared by
+            all instructors.
           </p>
         </div>
         <div className="page-head__actions">
@@ -94,11 +95,14 @@ export default function Templates() {
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
             </button>
           )}
+          <button className="btn btn--ghost" onClick={() => navigate('/instructor/templates/new')}>
+            <Icon name="upload" size={16} /> Import lab
+          </button>
           <button
             className="btn btn--primary"
-            onClick={() => navigate('/instructor/templates/new')}
+            onClick={() => navigate('/instructor/templates/new-exam')}
           >
-            <Icon name="plus" size={16} /> New template
+            <Icon name="plus" size={16} /> New exam
           </button>
         </div>
       </div>
@@ -130,7 +134,9 @@ export default function Templates() {
                 <tr>
                   <th>Title</th>
                   <th className="col--sm">Sections</th>
-                  <th className="col--sm">Steps</th>
+                  <th className="col--sm" title="Steps (labs) or questions (exams)">
+                    Items
+                  </th>
                   <th className="col--md">Version</th>
                   <th>Sessions</th>
                   <th className="col--lg">Updated</th>
@@ -145,13 +151,22 @@ export default function Templates() {
                     <tr key={t.id} className={archived ? 'row--archived' : ''}>
                       <td>
                         <div className="table__primary">
+                          <span className={`kind kind--${t.kind || 'lab'}`}>
+                            {t.kind === 'exam' ? 'Exam' : 'Lab'}
+                          </span>
                           {t.title}
                           {archived && <span className="tag tag--archived">Archived</span>}
                         </div>
                         {t.description && <div className="muted small">{t.description}</div>}
                       </td>
                       <td className="col--sm">{t.section_count}</td>
-                      <td className="col--sm">{t.step_count}</td>
+                      <td className="col--sm">
+                        {t.kind === 'exam' ? (
+                          <span title={`${t.total_points} points`}>{t.question_count} q</span>
+                        ) : (
+                          t.step_count
+                        )}
+                      </td>
                       <td className="col--md">v{t.version}</td>
                       <td className="muted">
                         {t.session_count}

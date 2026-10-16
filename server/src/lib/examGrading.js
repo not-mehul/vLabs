@@ -128,11 +128,15 @@ export function examParticipantDetail(p, content) {
 
 /** Class-wide statistics per question (answered / correct / awaiting marking). */
 export function examQuestionStats(participants, content) {
-  const graded = participants.map((p) => gradeParticipant(p, content));
+  const perParticipant = participants.map((p) => gradeParticipant(p, content));
   return listQuestions(content).map(({ key, si, number, q }, i) => {
-    const rows = graded.map((g) => g[i]);
+    const rows = perParticipant.map((g) => g[i]);
     const answered = rows.filter((r) => r.answered).length;
     const correct = rows.filter((r) => r.correct === true).length;
+    const pending = rows.filter((r) => r.pending).length;
+    // Responses with a verdict (automatic or marked); pending ones are excluded
+    // from the correct rate until marked.
+    const graded = answered - pending;
     return {
       key,
       number,
@@ -146,8 +150,9 @@ export function examQuestionStats(participants, content) {
       expected: describeExpected(q),
       answered,
       correct,
-      pending: rows.filter((r) => r.pending).length,
-      correct_pct: answered ? Math.round((correct / answered) * 100) : 0,
+      pending,
+      graded,
+      correct_pct: graded ? Math.round((correct / graded) * 100) : 0,
     };
   });
 }
@@ -166,6 +171,8 @@ export function examQuestionResponses(participants, content, key) {
     type_label: QUESTION_TYPES[entry.q.type].label,
     prompt: entry.q.prompt,
     options: QUESTION_TYPES[entry.q.type].hasOptions ? entry.q.options : [],
+    correct_option:
+      entry.q.type === 'single' || entry.q.type === 'multiple' ? entry.q.correct : null,
     points: entry.q.points,
     manual: isManualQuestion(entry.q),
     expected: describeExpected(entry.q),

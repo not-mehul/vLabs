@@ -2,12 +2,21 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, copyToClipboard } from '../api.js';
 import { downloadFile } from '../lib/files.js';
-import { slug, fmtDuration, participantsToCsv, attemptsToCsv } from '../lib/format.js';
+import {
+  slug,
+  fmtDuration,
+  participantsToCsv,
+  attemptsToCsv,
+  examResultsToCsv,
+  examKeyToCsv,
+  examLogToCsv,
+} from '../lib/format.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { useCountdown } from '../hooks/useCountdown.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
+import ExamMonitor from '../components/ExamMonitor.jsx';
 
 /** Highlight seats that appear stuck (long time on a section). */
 function stuckClass(seconds) {
@@ -56,9 +65,11 @@ function StatusPill({ p }) {
 }
 
 /**
- * Where the class is right now: one card per section (seats currently on it,
- * seats already past it) plus a final "Complete" card. Reads left to right as
- * the lab does, so a pile-up on one card is obvious at a glance.
+ * How far the class has got: one card per section (seats whose furthest
+ * section it is, seats that have completed it) plus a final "Complete" card.
+ * Seats are placed by their furthest section, so a participant going back to
+ * review doesn't show up as stuck on an earlier one. Optional / wrap-up
+ * sections are tagged and don't count towards progress.
  */
 function SectionFlow({ data }) {
   const total = data.participants.length;
@@ -66,7 +77,7 @@ function SectionFlow({ data }) {
   return (
     <div className="panel">
       <div className="panel__head">
-        <h2 className="panel__title">Where everyone is</h2>
+        <h2 className="panel__title">Where everyone got to</h2>
         <span className="muted small">
           {total} registered · {data.complete_count} complete
         </span>
@@ -74,13 +85,14 @@ function SectionFlow({ data }) {
       <ol className="flow" aria-label="Seats per section">
         {data.section_distribution.map((s) => (
           <li
-            className={`flow__card ${s.seats_here ? 'flow__card--busy' : ''}`}
+            className={`flow__card ${s.seats_here ? 'flow__card--busy' : ''} ${s.optional ? 'flow__card--optional' : ''}`}
             key={s.index}
-            title={`${s.seats_here} here · ${s.seats_past} past`}
+            title={`${s.seats_here} got this far · ${s.seats_past} completed${s.optional ? ' · optional: not counted in progress' : ''}`}
           >
             <div className="flow__top">
               <span className="dist__index">{s.index + 1}</span>
               <span className="flow__title">{s.title}</span>
+              {s.optional && <span className="tag tag--optional">optional</span>}
             </div>
             <div className="flow__num">
               {s.seats_here}
@@ -102,7 +114,7 @@ function SectionFlow({ data }) {
               ) : (
                 ' · no checkpoint'
               )}{' '}
-              · {s.seats_past} past
+              · {s.seats_past} done
             </div>
           </li>
         ))}
@@ -128,7 +140,7 @@ function SectionFlow({ data }) {
 }
 
 /** Slide-over with one participant's answers, attempts, hints and timings. Live-refreshes. */
-function ParticipantDrawer({ sessionId, participantId, sectionCount, onClose }) {
+function ParticipantDrawer({ sessionId, participantId, onClose }) {
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
@@ -175,7 +187,7 @@ function ParticipantDrawer({ sessionId, participantId, sectionCount, onClose }) 
           {d ? (
             <div>
               <div className="drawer__title">
-                <span className="mono seat-num">{d.seat_number}</span>
+                <span className="seat-num">{d.seat_number}</span>
                 <h2>{d.name}</h2>
                 <StatusPill p={d} />
               </div>
@@ -205,7 +217,7 @@ function ParticipantDrawer({ sessionId, participantId, sectionCount, onClose }) 
               <div className="stat">
                 <span className="stat__num">
                   {d.completed_sections}
-                  <span className="muted">/{sectionCount}</span>
+                  <span className="muted">/{d.counting_sections}</span>
                 </span>
                 <span className="stat__label">Sections</span>
               </div>
@@ -221,6 +233,24 @@ function ParticipantDrawer({ sessionId, participantId, sectionCount, onClose }) 
               </div>
             </div>
 
+            {!d.complete && (
+              <p className="drawer__where" role="status">
+                <Icon name="eye" size={14} /> Currently viewing{' '}
+                <strong>
+                  Section {d.current_section + 1}
+                  {d.section_times[d.current_section]
+                    ? ` · ${d.section_times[d.current_section].title}`
+                    : ''}
+                </strong>
+                {d.reviewing && (
+                  <span className="muted">
+                    {' '}
+                    — reviewing; furthest reached is Section {d.furthest_section + 1}
+                  </span>
+                )}
+              </p>
+            )}
+
             <section className="drawer__section">
               <h3>Time per section</h3>
               <ul className="timebars">
@@ -229,14 +259,17 @@ function ParticipantDrawer({ sessionId, participantId, sectionCount, onClose }) 
                     key={s.index}
                     className={`timebars__row ${s.current ? 'timebars__row--current' : ''}`}
                   >
-                    <span className="dist__index">{s.index + 1}</span>
+                    <span className={`dist__index ${s.done ? 'dist__index--done' : ''}`}>
+                      {s.done ? <Icon name="check" size={12} /> : s.index + 1}
+                    </span>
                     <span className="timebars__title" title={s.title}>
                       {s.title}
-                      {s.current && <span className="muted small"> · now</span>}
+                      {s.optional && <span className="muted small"> · optional</span>}
+                      {s.current && <span className="muted small"> · viewing now</span>}
                     </span>
                     <span className="timebars__bar" aria-hidden="true">
                       <span
-                        className={`timebars__fill ${s.cleared || s.index < d.max_section ? '' : 'timebars__fill--open'}`}
+                        className={`timebars__fill ${s.done ? '' : 'timebars__fill--open'}`}
                         style={{ width: `${Math.round((s.seconds / maxSectionSeconds) * 100)}%` }}
                       />
                     </span>
@@ -408,9 +441,13 @@ export default function SessionMonitor() {
     act((t) => api.pushTemplate(t, id), {
       confirmText:
         `Push template v${data.latest_template_version} to this live session?\n\n` +
-        'Participants will see the updated manual within a few seconds. Progress is kept, ' +
-        'but if sections or checkpoints were added, removed or reordered, some participants ' +
-        'may move forwards or backwards to match the new structure.',
+        (data.kind === 'exam'
+          ? 'Participants will see the updated exam within a few seconds. Saved answers are ' +
+            'kept by question position, so only push corrections that do not add, remove or ' +
+            'reorder questions.'
+          : 'Participants will see the updated manual within a few seconds. Progress is kept, ' +
+            'but if sections or checkpoints were added, removed or reordered, some participants ' +
+            'may move forwards or backwards to match the new structure.'),
       okMessage: `Session updated to template v${data.latest_template_version}.`,
     });
 
@@ -431,7 +468,13 @@ export default function SessionMonitor() {
     try {
       const doc = await call((t) => api.exportSession(t, id));
       const base = slug(doc.session.title, 'session');
-      if (format === 'csv') {
+      if (format === 'exam-results') {
+        downloadFile(`${base}-results.csv`, examResultsToCsv(doc), 'text/csv');
+      } else if (format === 'exam-key') {
+        downloadFile(`${base}-answer-key.csv`, examKeyToCsv(doc), 'text/csv');
+      } else if (format === 'exam-log') {
+        downloadFile(`${base}-answer-log.csv`, examLogToCsv(doc), 'text/csv');
+      } else if (format === 'csv') {
         downloadFile(`${base}-participants.csv`, participantsToCsv(doc), 'text/csv');
       } else if (format === 'attempts') {
         downloadFile(`${base}-attempts.csv`, attemptsToCsv(doc), 'text/csv');
@@ -452,12 +495,12 @@ export default function SessionMonitor() {
   }
 
   const active = data.status === 'active';
+  const isExam = data.kind === 'exam';
   const activeSeats = data.participants.filter((p) => p.seconds_since_seen < 90).length;
-  const avgProgress = data.participants.length
-    ? Math.round(
-        data.participants.reduce((a, p) => a + p.progress_pct, 0) / data.participants.length,
-      )
-    : 0;
+  const avg = (field) =>
+    data.participants.length
+      ? Math.round(data.participants.reduce((a, p) => a + p[field], 0) / data.participants.length)
+      : 0;
 
   return (
     <PortalShell>
@@ -476,7 +519,11 @@ export default function SessionMonitor() {
             ) : (
               data.template_title
             )}{' '}
-            · v{data.template_version} · {data.section_count} sections
+            · v{data.template_version} ·{' '}
+            {isExam
+              ? `${data.question_count} questions · ${data.total_points} points`
+              : `${data.section_count} sections`}
+            {isExam && <span className="tag tag--exam">exam</span>}
             {!data.template_exists && (
               <span
                 className="tag tag--archived"
@@ -515,14 +562,38 @@ export default function SessionMonitor() {
           <span className="stat__num">{data.participants.length}</span>
           <span className="stat__label">Registered</span>
         </div>
-        <div className="stat">
-          <span className="stat__num">{activeSeats}</span>
-          <span className="stat__label">Active now</span>
-        </div>
-        <div className="stat">
-          <span className="stat__num">{avgProgress}%</span>
-          <span className="stat__label">Avg progress</span>
-        </div>
+        {isExam ? (
+          <>
+            <div className="stat">
+              <span className="stat__num">
+                {data.submitted_count}
+                <span className="muted">/{data.participants.length}</span>
+              </span>
+              <span className="stat__label">Submitted</span>
+            </div>
+            <div className="stat" title="Provisional while answers still need marking">
+              <span className="stat__num">{avg('score_pct')}%</span>
+              <span className="stat__label">Avg score</span>
+            </div>
+            <div className="stat">
+              <span className={`stat__num ${data.pending_count ? 'text-warn' : ''}`}>
+                {data.pending_count}
+              </span>
+              <span className="stat__label">To mark</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="stat">
+              <span className="stat__num">{activeSeats}</span>
+              <span className="stat__label">Active now</span>
+            </div>
+            <div className="stat">
+              <span className="stat__num">{avg('progress_pct')}%</span>
+              <span className="stat__label">Avg progress</span>
+            </div>
+          </>
+        )}
         <div className="stat">
           <span className={`stat__num ${remaining === 'expired' ? 'text-warn' : ''}`}>
             {active ? remaining || '—' : '—'}
@@ -540,22 +611,53 @@ export default function SessionMonitor() {
               </button>
             </>
           )}
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={() => exportData('csv')}
-            disabled={busy}
-            title="One row per participant: progress, time per section, every checkpoint's answer and wrong attempts, hints, solutions"
-          >
-            <Icon name="download" size={16} /> CSV
-          </button>
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={() => exportData('attempts')}
-            disabled={busy}
-            title="One row per checkpoint submission (correct and incorrect), in time order"
-          >
-            <Icon name="download" size={16} /> Attempts CSV
-          </button>
+          {isExam ? (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => exportData('exam-results')}
+                disabled={busy}
+                title="One row per participant: score, and every response with its result"
+              >
+                <Icon name="download" size={16} /> Results CSV
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => exportData('exam-key')}
+                disabled={busy}
+                title="Every question with its expected answer"
+              >
+                <Icon name="download" size={16} /> Answer key
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => exportData('exam-log')}
+                disabled={busy}
+                title="Every answer change across the class, in time order"
+              >
+                <Icon name="download" size={16} /> Answer log
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => exportData('csv')}
+                disabled={busy}
+                title="One row per participant: progress, time per section, every checkpoint's answer and wrong attempts, hints, solutions"
+              >
+                <Icon name="download" size={16} /> CSV
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => exportData('attempts')}
+                disabled={busy}
+                title="One row per checkpoint submission (correct and incorrect), in time order"
+              >
+                <Icon name="download" size={16} /> Attempts CSV
+              </button>
+            </>
+          )}
           <button
             className="btn btn--ghost btn--sm"
             onClick={() => exportData('json')}
@@ -582,110 +684,122 @@ export default function SessionMonitor() {
         </div>
       )}
 
-      <SectionFlow data={data} />
+      {isExam ? (
+        <ExamMonitor data={data} sessionId={id} onChanged={refresh} />
+      ) : (
+        <>
+          <SectionFlow data={data} />
 
-      <div className="panel">
-        <div className="panel__head">
-          <h2 className="panel__title">Participants</h2>
-          <span className="muted small">
-            {data.complete_count} of {data.participants.length} complete · click a row for answers,
-            attempts, hints and timings
-          </span>
-        </div>
-        {data.participants.length === 0 ? (
-          <p className="muted">No participants have joined yet. Share code {data.room_code}.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table table--clickable">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Participant</th>
-                  <th>Section</th>
-                  <th className="col--sm">Progress</th>
-                  <th>Time on section</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.participants.map((p) => (
-                  <tr
-                    key={p.id}
-                    tabIndex={0}
-                    className={`${p.complete ? 'row--done' : stuckClass(p.seconds_on_current_section)} ${
-                      selected === p.id ? 'row--selected' : ''
-                    }`}
-                    onClick={() => setSelected(p.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelected(p.id);
-                      }
-                    }}
-                    aria-label={`Open details for ${p.name}`}
-                  >
-                    <td className="mono seat-num">{p.seat_number}</td>
-                    <td className="table__primary">{p.name}</td>
-                    <td>
-                      {p.complete ? (
-                        <span className="muted">Done</span>
-                      ) : (
-                        <>
-                          <span className="section-cell__num">
-                            {p.current_section + 1}
-                            <span className="muted"> / {data.section_count}</span>
-                          </span>
-                          <span className="section-cell__title muted small">
-                            {data.section_distribution[p.current_section]?.title}
-                          </span>
-                        </>
-                      )}
-                    </td>
-                    <td className="col--sm">
-                      <div className="progress-cell">
-                        <div
-                          className="minibar"
-                          role="progressbar"
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={p.progress_pct}
-                          title={`${p.completed_sections}/${data.section_count} sections`}
+          <div className="panel">
+            <div className="panel__head">
+              <h2 className="panel__title">Participants</h2>
+              <span className="muted small">
+                {data.complete_count} of {data.participants.length} complete · click a row for
+                answers, attempts, hints and timings
+              </span>
+            </div>
+            {data.participants.length === 0 ? (
+              <p className="muted">No participants have joined yet. Share code {data.room_code}.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="table table--clickable">
+                  <thead>
+                    <tr>
+                      <th className="col--seat">#</th>
+                      <th>Participant</th>
+                      <th title="Furthest section reached">Section</th>
+                      <th className="col--sm">Progress</th>
+                      <th title="Time spent on the furthest section">Time on section</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.participants.map((p) => (
+                      <tr
+                        key={p.id}
+                        tabIndex={0}
+                        className={`${p.complete ? 'row--done' : stuckClass(p.seconds_on_furthest_section)} ${
+                          selected === p.id ? 'row--selected' : ''
+                        }`}
+                        onClick={() => setSelected(p.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelected(p.id);
+                          }
+                        }}
+                        aria-label={`Open details for ${p.name}`}
+                      >
+                        <td className="col--seat">
+                          <span className="seat-num">{p.seat_number}</span>
+                        </td>
+                        <td className="table__primary">{p.name}</td>
+                        <td>
+                          {p.complete ? (
+                            <span className="muted">Done</span>
+                          ) : (
+                            <>
+                              <span className="section-cell__num">
+                                {p.furthest_section + 1}
+                                <span className="muted"> / {data.section_count}</span>
+                              </span>
+                              <span className="section-cell__title muted small">
+                                {data.section_distribution[p.furthest_section]?.title}
+                              </span>
+                            </>
+                          )}
+                        </td>
+                        <td className="col--sm">
+                          <div className="progress-cell">
+                            <div
+                              className="minibar"
+                              role="progressbar"
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={p.progress_pct}
+                              title={`${p.completed_sections}/${p.counting_sections} sections`}
+                            >
+                              <div
+                                className="minibar__fill"
+                                style={{ width: `${p.progress_pct}%` }}
+                              />
+                            </div>
+                            <span className="muted small">{p.progress_pct}%</span>
+                          </div>
+                        </td>
+                        <td
+                          className={
+                            !p.complete && p.seconds_on_furthest_section >= 15 * 60
+                              ? 'text-warn'
+                              : ''
+                          }
                         >
-                          <div className="minibar__fill" style={{ width: `${p.progress_pct}%` }} />
-                        </div>
-                        <span className="muted small">{p.progress_pct}%</span>
-                      </div>
-                    </td>
-                    <td
-                      className={
-                        !p.complete && p.seconds_on_current_section >= 15 * 60 ? 'text-warn' : ''
-                      }
-                    >
-                      {p.complete ? '—' : fmtDuration(p.seconds_on_current_section)}
-                    </td>
-                    <td>
-                      <StatusPill p={p} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {p.complete ? '—' : fmtDuration(p.seconds_on_furthest_section)}
+                        </td>
+                        <td>
+                          <StatusPill p={p} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="muted small legend">
+              <span className="dot dot--slow" /> 8+ min on a section ·{' '}
+              <span className="dot dot--stuck" /> 15+ min (may need help) ·{' '}
+              <span className="dot dot--live" /> complete
+            </p>
           </div>
-        )}
-        <p className="muted small legend">
-          <span className="dot dot--slow" /> 8+ min on a section ·{' '}
-          <span className="dot dot--stuck" /> 15+ min (may need help) ·{' '}
-          <span className="dot dot--live" /> complete
-        </p>
-      </div>
 
-      {selected != null && (
-        <ParticipantDrawer
-          sessionId={id}
-          participantId={selected}
-          sectionCount={data.section_count}
-          onClose={() => setSelected(null)}
-        />
+          {selected != null && (
+            <ParticipantDrawer
+              sessionId={id}
+              participantId={selected}
+              onClose={() => setSelected(null)}
+            />
+          )}
+        </>
       )}
     </PortalShell>
   );

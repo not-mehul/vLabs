@@ -66,11 +66,21 @@ function CreateSession({ templates, onCreated }) {
               onChange={(e) => setTemplateId(e.target.value)}
             >
               <option value="">Select…</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title} · v{t.version}
-                </option>
-              ))}
+              {[
+                ['lab', 'Labs'],
+                ['exam', 'Exams'],
+              ].map(([kind, label]) => {
+                const group = templates.filter((t) => (t.kind || 'lab') === kind);
+                return group.length ? (
+                  <optgroup key={kind} label={label}>
+                    {group.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} · v{t.version}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null;
+              })}
             </select>
           </label>
           <label className="field">
@@ -177,7 +187,7 @@ export default function Dashboard() {
     <PortalShell>
       <div className="page-head">
         <h1>Sessions</h1>
-        <p className="muted">Launch live labs and monitor participants in real time.</p>
+        <p className="muted">Launch live labs and exams and monitor participants in real time.</p>
       </div>
 
       <CreateSession
@@ -229,7 +239,10 @@ export default function Dashboard() {
                 {sessions.map((s) => (
                   <tr key={s.id}>
                     <td className="mono">{s.room_code}</td>
-                    <td>{s.title}</td>
+                    <td>
+                      {s.title}
+                      {s.kind === 'exam' && <span className="tag tag--exam">exam</span>}
+                    </td>
                     <td className="muted col--md">
                       {s.template_title}
                       <span className="small"> · v{s.template_version}</span>
