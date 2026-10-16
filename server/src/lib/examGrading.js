@@ -1,3 +1,4 @@
+import db from '../db/index.js';
 import { nowIso, secondsBetween } from './time.js';
 import {
   listQuestions,
@@ -25,6 +26,32 @@ export function parseObject(json) {
   } catch {
     return {};
   }
+}
+
+const eventsOf = db.prepare(
+  `SELECT question_key AS k, response AS a, at FROM exam_answer_events
+    WHERE participant_id = ? ORDER BY id`,
+);
+const eventsOfSession = db.prepare(
+  `SELECT e.question_key AS k, e.response AS a, e.at, p.seat_number, p.first_name, p.last_name
+     FROM exam_answer_events e JOIN participants p ON p.id = e.participant_id
+    WHERE p.session_id = ? ORDER BY e.at, p.seat_number, e.id`,
+);
+
+/** Every answer change for one participant, oldest first: { k, a, at }. */
+export function answerHistory(participantId) {
+  return eventsOf.all(participantId);
+}
+
+/** Every answer change across a session, in time order (for exports). */
+export function sessionAnswerLog(sessionId) {
+  return eventsOfSession.all(sessionId).map((e) => ({
+    at: e.at,
+    number: e.seat_number,
+    name: `${e.first_name} ${e.last_name}`.trim(),
+    question: e.k,
+    response: e.a,
+  }));
 }
 
 export function parseArray(json) {
@@ -106,7 +133,7 @@ export function examParticipantView(p, content) {
  */
 export function examParticipantDetail(p, content) {
   const view = examParticipantView(p, content);
-  const history = parseArray(p.answer_log);
+  const history = answerHistory(p.id);
   const questions = listQuestions(content);
   const graded = gradeParticipant(p, content);
   return {

@@ -356,7 +356,12 @@ export default function ExamEditor({ id, initial }) {
     setError('');
     setErrorDetails([]);
     try {
-      const payload = { ...normaliseExam(tpl), kind: 'exam' };
+      const payload = {
+        ...normaliseExam(tpl),
+        kind: 'exam',
+        // Refused with VERSION_CONFLICT if a colleague saved in the meantime.
+        expected_version: isNew ? undefined : meta.version,
+      };
       const saved = isNew
         ? await call((t) => api.createTemplate(t, payload))
         : await call((t) => api.updateTemplate(t, id, payload));

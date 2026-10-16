@@ -350,3 +350,85 @@ test('the exam Markdown format round-trips and rejects unknown types', async () 
   assert.equal(fenced.content.length, 1);
   assert.match(fenced.content[0].questions[0].prompt, /# not a section/);
 });
+
+test('an exam seat is bound to its device: rejoining by name needs the resume key', async () => {
+  const first = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: roomCode, first_name: 'Cara', last_name: 'Key' },
+  });
+  assert.equal(first.status, 200);
+  const key = first.data.resume_key;
+  assert.ok(key && key.length >= 20, 'exam joins hand out a resume key');
+
+  // Someone else typing the same name on another device is refused…
+  const thief = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: roomCode, first_name: 'cara', last_name: 'KEY' },
+  });
+  assert.equal(thief.status, 409);
+  assert.equal(thief.data.code, 'SEAT_TAKEN');
+
+  // …while the original device resumes with its key.
+  const again = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: roomCode, first_name: 'Cara', last_name: 'Key', resume_key: key },
+  });
+  assert.equal(again.status, 200);
+  assert.equal(again.data.resumed, true);
+  assert.equal(again.data.seat_number, first.data.seat_number);
+
+  // The instructor releases the seat: the old device is signed out and the
+  // next join (any device) takes the seat over with a fresh key.
+  const detail = await call(`/api/sessions/${sessionId}`, { token });
+  const cara = detail.data.participants.find((p) => p.name === 'Cara Key');
+  const rel = await call(`/api/sessions/${sessionId}/participants/${cara.id}/release`, {
+    method: 'POST',
+    token,
+  });
+  assert.equal(rel.status, 200);
+  const old = await call('/api/participant/exam', { token: again.data.token });
+  assert.equal(old.status, 401);
+  assert.equal(old.data.code, 'SEAT_RELEASED');
+  const moved = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: roomCode, first_name: 'Cara', last_name: 'Key' },
+  });
+  assert.equal(moved.status, 200);
+  assert.notEqual(moved.data.resume_key, key);
+  assert.equal((await call('/api/participant/exam', { token: moved.data.token })).status, 200);
+});
+
+test('the instructor can reopen a submission and remove a participant', async () => {
+  const detail = await call(`/api/sessions/${sessionId}`, { token });
+  const ada = detail.data.participants.find((p) => p.name === 'Ada Lovelace');
+  assert.equal(ada.submitted, true);
+  const reopen = await call(`/api/sessions/${sessionId}/participants/${ada.id}/reopen`, {
+    method: 'POST',
+    token,
+  });
+  assert.equal(reopen.status, 200);
+  const after = await call(`/api/sessions/${sessionId}/participants/${ada.id}`, { token });
+  assert.equal(after.data.submitted, false);
+  assert.equal(after.data.answered, 6, 'answers are kept');
+
+  const cara = detail.data.participants.find((p) => p.name === 'Cara Key');
+  const del = await call(`/api/sessions/${sessionId}/participants/${cara.id}`, {
+    method: 'DELETE',
+    token,
+  });
+  assert.equal(del.status, 204);
+  const gone = await call(`/api/sessions/${sessionId}`, { token });
+  assert.equal(
+    gone.data.participants.some((p) => p.name === 'Cara Key'),
+    false,
+  );
+});
+
+test('answer history lives in its own table, one small row per change', async () => {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM exam_answer_events').get().n;
+  assert.ok(n >= 9);
+  const row = db.prepare("SELECT answer_log FROM participants WHERE first_name = 'Ada'").get();
+  assert.equal(row.answer_log, '[]', 'the participants row no longer carries the log');
+  const st = await call('/api/participant/status', { token: ada });
+  assert.ok(Date.parse(st.data.server_time) > 0, 'status reports server time');
+});

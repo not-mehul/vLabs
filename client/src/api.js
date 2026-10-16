@@ -11,6 +11,7 @@
 
 const INSTRUCTOR_KEY = 'vlabs.instructor.token';
 const PARTICIPANT_KEY = 'vlabs.participant.session';
+const RESUME_KEYS = 'vlabs.resume';
 
 export class ApiError extends Error {
   constructor(message, status, code, details) {
@@ -98,6 +99,49 @@ export const participantSession = {
   },
 };
 
+/**
+ * Exam seats are bound to the device that joined them: the server hands out a
+ * resume key per seat, kept here per room code + name (a shared iPad may hold
+ * several students' seats) and NOT cleared on Exit, so a participant who exits
+ * can come back on the same device. Without it a rejoin by name is refused
+ * until the instructor releases the seat.
+ */
+const seatId = (roomCode, first, last) =>
+  `${roomCode}:${`${first} ${last}`.trim().replace(/\s+/g, ' ').toLowerCase()}`;
+
+export const resumeKeys = {
+  get(roomCode, first, last) {
+    try {
+      return (
+        JSON.parse(localStorage.getItem(RESUME_KEYS) || '{}')[seatId(roomCode, first, last)] || ''
+      );
+    } catch {
+      return '';
+    }
+  },
+  set(roomCode, first, last, key) {
+    try {
+      const all = JSON.parse(localStorage.getItem(RESUME_KEYS) || '{}');
+      delete all[seatId(roomCode, first, last)]; // re-insert as newest
+      all[seatId(roomCode, first, last)] = key;
+      // Keep the map small: room codes are recycled, old entries are useless.
+      const entries = Object.entries(all).slice(-50);
+      localStorage.setItem(RESUME_KEYS, JSON.stringify(Object.fromEntries(entries)));
+    } catch {
+      /* storage unavailable: the seat can still be released by the instructor */
+    }
+  },
+};
+
+/**
+ * Milliseconds to add to Date.now() to get the server's clock, from a response
+ * carrying `server_time`. Keeps countdowns right on devices whose clock is off.
+ */
+export function clockOffset(serverTime) {
+  const t = Date.parse(serverTime || '');
+  return Number.isNaN(t) ? 0 : t - Date.now();
+}
+
 export const api = {
   login: (username, password) =>
     request('/auth/login', { method: 'POST', body: { username, password } }),
@@ -168,6 +212,20 @@ export const api = {
   /** Exam sessions: every participant's response to one question. */
   questionResponses: (token, sessionId, key) =>
     request(`/sessions/${sessionId}/questions/${key}`, { token }),
+  removeParticipant: (token, sessionId, participantId) =>
+    request(`/sessions/${sessionId}/participants/${participantId}`, { method: 'DELETE', token }),
+  /** Exams: let the seat be resumed on another device (signs out the current one). */
+  releaseSeat: (token, sessionId, participantId) =>
+    request(`/sessions/${sessionId}/participants/${participantId}/release`, {
+      method: 'POST',
+      token,
+    }),
+  /** Exams: undo a submission. */
+  reopenExam: (token, sessionId, participantId) =>
+    request(`/sessions/${sessionId}/participants/${participantId}/reopen`, {
+      method: 'POST',
+      token,
+    }),
 
   /* -------------------------------- Images ------------------------------ */
 
@@ -206,11 +264,19 @@ export const api = {
 
   /* ------------------------------ Participant --------------------------- */
 
-  join: (roomCode, firstName, lastName) =>
-    request('/participant/join', {
+  join: async (roomCode, firstName, lastName) => {
+    const res = await request('/participant/join', {
       method: 'POST',
-      body: { room_code: roomCode, first_name: firstName, last_name: lastName },
-    }),
+      body: {
+        room_code: roomCode,
+        first_name: firstName,
+        last_name: lastName,
+        resume_key: resumeKeys.get(roomCode, firstName, lastName) || undefined,
+      },
+    });
+    if (res?.resume_key) resumeKeys.set(roomCode, firstName, lastName, res.resume_key);
+    return res;
+  },
   content: (token) => request('/participant/content', { token }),
   submitCheckpoint: (token, sectionIndex, stepIndex, answer) =>
     request('/participant/checkpoint', {
@@ -245,6 +311,22 @@ export const api = {
   saveAnswer: (token, key, value) =>
     request('/participant/exam/answer', { method: 'PUT', body: { key, value }, token }),
   submitExam: (token) => request('/participant/exam/submit', { method: 'POST', token }),
+  /**
+   * Fire-and-forget save that survives the page closing (fetch keepalive):
+   * used to flush a typed answer still waiting for its debounce on pagehide.
+   */
+  saveAnswerOnExit: (token, key, value) => {
+    try {
+      fetch('/api/participant/exam/answer', {
+        method: 'PUT',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ key, value }),
+      }).catch(() => {});
+    } catch {
+      /* best effort */
+    }
+  },
 };
 
 /**

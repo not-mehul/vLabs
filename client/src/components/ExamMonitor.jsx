@@ -164,7 +164,7 @@ function usePolled(loader) {
 }
 
 /** One participant's whole exam: every question, their response, verdicts, marks. */
-function ParticipantExamDrawer({ sessionId, participantId, onClose, onChanged }) {
+function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onChanged }) {
   const { call } = useInstructorApi();
   const loader = useCallback(
     () => call((t) => api.getParticipant(t, sessionId, participantId)),
@@ -182,6 +182,34 @@ function ParticipantExamDrawer({ sessionId, participantId, onClose, onChanged })
       onChanged();
     } finally {
       setBusy('');
+    }
+  }
+
+  const [actionError, setActionError] = useState('');
+
+  /** Seat-level actions (reopen / move device / remove), each confirmed first. */
+  async function seatAction(kind) {
+    const name = d?.name || 'this participant';
+    const prompts = {
+      reopen: `Reopen ${name}'s exam? They can change answers again until they resubmit.`,
+      release: `Let ${name} continue on another device?\n\nTheir current device is signed out; the next time they join with the same name, on any device, they get their seat and answers back.`,
+      remove: `Remove ${name} from this session?\n\nTheir answers and marks are deleted. This cannot be undone.`,
+    };
+    if (!window.confirm(prompts[kind])) return;
+    setActionError('');
+    try {
+      if (kind === 'reopen') await call((t) => api.reopenExam(t, sessionId, participantId));
+      if (kind === 'release') await call((t) => api.releaseSeat(t, sessionId, participantId));
+      if (kind === 'remove') {
+        await call((t) => api.removeParticipant(t, sessionId, participantId));
+        onChanged();
+        onClose();
+        return;
+      }
+      await reload();
+      onChanged();
+    } catch (err) {
+      setActionError(err.message);
     }
   }
 
@@ -242,6 +270,27 @@ function ParticipantExamDrawer({ sessionId, participantId, onClose, onChanged })
               <span className="stat__label">{d.submitted ? 'Time taken' : 'Elapsed'}</span>
             </div>
           </div>
+
+          <div className="drawer__actions">
+            {active && d.submitted && (
+              <button className="btn btn--sm btn--ghost" onClick={() => seatAction('reopen')}>
+                <Icon name="undo" size={14} /> Reopen exam
+              </button>
+            )}
+            {active && (
+              <button
+                className="btn btn--sm btn--ghost"
+                onClick={() => seatAction('release')}
+                title="Their device died or they need to switch devices: lets them rejoin elsewhere"
+              >
+                <Icon name="refresh" size={14} /> Move to another device
+              </button>
+            )}
+            <button className="btn btn--sm btn--danger-ghost" onClick={() => seatAction('remove')}>
+              <Icon name="trash" size={14} /> Remove
+            </button>
+          </div>
+          {actionError && <p className="form__error">{actionError}</p>}
 
           <div className="segmented" role="group" aria-label="Filter questions">
             {[
@@ -590,6 +639,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
         <ParticipantExamDrawer
           sessionId={sessionId}
           participantId={participant}
+          active={data.status === 'active'}
           onClose={closeP}
           onChanged={onChanged}
         />

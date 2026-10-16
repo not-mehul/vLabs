@@ -19,7 +19,7 @@ import {
   examQuestionResponses,
   gradeParticipant,
   parseObject,
-  parseArray,
+  sessionAnswerLog,
 } from '../lib/examGrading.js';
 import { listQuestions, totalPoints, describeExpected } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
@@ -62,7 +62,24 @@ const q = {
   extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?'),
   remove: db.prepare('DELETE FROM sessions WHERE id = ?'),
   setGrades: db.prepare('UPDATE participants SET grades = ? WHERE id = ?'),
+  removeParticipant: db.prepare('DELETE FROM participants WHERE id = ? AND session_id = ?'),
+  // Unbinds the exam seat from its device and signs that device out; the next
+  // join with the same name (on any device) takes the seat over.
+  releaseSeat: db.prepare(
+    'UPDATE participants SET resume_hash = NULL, token_version = token_version + 1 WHERE id = ?',
+  ),
+  reopenExam: db.prepare(
+    'UPDATE participants SET submitted_at = NULL, completed_at = NULL, finished_at = NULL WHERE id = ?',
+  ),
 };
+
+/** The participant :pid of an owned session, or 404. */
+function participantOr404(req, row) {
+  const pid = Number(req.params.pid);
+  const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
+  if (!p) throw httpError(404, 'Participant not found');
+  return p;
+}
 
 const isExam = (row) => row.kind === 'exam';
 
@@ -302,6 +319,8 @@ function summarise(row) {
     expires_at: row.expires_at,
     created_at: row.created_at,
     ended_at: row.ended_at,
+    // Lets the monitor's countdown correct for the instructor device's clock.
+    server_time: nowIso(),
   };
 }
 
@@ -407,6 +426,58 @@ router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   });
   const fresh = q.participant.get(p.id, row.id);
   res.json(gradeParticipant(fresh, content).find((g) => g.key === key));
+});
+
+/**
+ * DELETE /api/sessions/:id/participants/:pid — remove a participant (e.g. a
+ * duplicate or mistyped registration). Their device is signed out at its next
+ * request (SEAT_REMOVED) and their data is deleted. Seat numbers are never
+ * reused within a session.
+ */
+router.delete('/:id/participants/:pid', (req, res) => {
+  const row = ownedOr404(req);
+  const p = participantOr404(req, row);
+  q.removeParticipant.run(p.id, row.id);
+  log.warn('participant.removed', {
+    session: row.id,
+    participant: p.id,
+    seat: p.seat_number,
+    instructor: req.instructor.id,
+  });
+  res.status(204).end();
+});
+
+/**
+ * POST /api/sessions/:id/participants/:pid/release — EXAM sessions: let this
+ * seat be resumed on another device (a dead battery, a closed private tab).
+ * Signs out the current device; answers are kept.
+ */
+router.post('/:id/participants/:pid/release', (req, res) => {
+  const row = ownedOr404(req);
+  if (!isExam(row)) throw httpError(409, 'Lab seats can always be resumed by name');
+  const p = participantOr404(req, row);
+  q.releaseSeat.run(p.id);
+  log.info('participant.released', {
+    session: row.id,
+    participant: p.id,
+    instructor: req.instructor.id,
+  });
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/sessions/:id/participants/:pid/reopen — EXAM sessions: undo a
+ * submission (e.g. submitted by mistake) so the participant can keep
+ * answering. Only while the session is live.
+ */
+router.post('/:id/participants/:pid/reopen', (req, res) => {
+  const row = ownedOr404(req);
+  if (!isExam(row)) throw httpError(409, 'Only exam submissions can be reopened');
+  if (sessionStatus(row) !== 'active') throw httpError(409, 'The session is no longer active');
+  const p = participantOr404(req, row);
+  q.reopenExam.run(p.id);
+  log.info('exam.reopened', { session: row.id, participant: p.id, instructor: req.instructor.id });
+  res.json({ ok: true });
 });
 
 /** GET /api/sessions/:id/questions/:key — EXAM sessions: every response to one question. */
@@ -760,19 +831,7 @@ function examExport(row) {
       })),
     };
   });
-  const answerLog = [];
-  for (const p of rows) {
-    for (const e of parseArray(p.answer_log)) {
-      answerLog.push({
-        at: e.at,
-        number: p.seat_number,
-        name: `${p.first_name} ${p.last_name}`.trim(),
-        question: e.k,
-        response: e.a,
-      });
-    }
-  }
-  answerLog.sort((a, b) => String(a.at).localeCompare(String(b.at)) || a.number - b.number);
+  const answerLog = sessionAnswerLog(row.id);
   return {
     exported_at: nowIso(),
     session: {

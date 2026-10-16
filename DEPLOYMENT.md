@@ -125,7 +125,12 @@ matters to you.
 1. Open the address on your laptop → _Instructor sign in_ → `instructor` +
    the password printed by the installer (also in `/etc/vlabs/vlabs.env`).
 2. **Account → Change password** (the banner nags until you do).
-3. Extra instructors (there is no UI for this yet):
+3. Extra instructors: **Instructors** in the portal (add, reset a password,
+   remove), or the unlinked page `https://vlabs.local/instructor/add` (also a
+   faint link under the sign-in form), where an existing instructor's
+   credentials authorise the new account. Every instructor can manage
+   accounts — there are no admin roles, so only give accounts to people you
+   would trust with all of them. CLI fallback (e.g. if everyone is locked out):
    ```bash
    sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors create alice
    sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors reset-password alice
@@ -156,6 +161,14 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
   or JSON if you want the analytics; sessions stay on the dashboard regardless.
 - **Shared devices:** have participants use _Exit_ (or reset the kiosk) so the
   next cohort doesn't see a _Resume_ banner for someone else's seat.
+- **Exams:** each exam seat is bound to the device that joined it. If a
+  student's device dies or they must switch, open them in the monitor →
+  **Move to another device**, then they join again with the same name and get
+  their answers back. **Reopen exam** undoes an accidental submission (while
+  the session is live); **Remove** deletes a mistaken registration. Answers
+  save as they go, so ending the session never loses submitted or unsubmitted
+  work. Mark short/long answers from the **Questions** table (one question,
+  every student) or per student; export **Results CSV** when done.
 
 ### 1.7 Backups, updates, housekeeping
 
@@ -195,8 +208,9 @@ afterwards with the two commands from §1.3.
 | Symptom                                                                        | Likely cause → fix                                                                                                                                                                         |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Certificate warning on a device                                                | Root cert not installed or not _fully trusted_ (iOS needs the extra step) → 1.4. Or the device uses the IP and the IP isn't in the cert → re-run `install.sh` with `VLABS_EXTRA_ADDRESSES` |
-| `vlabs.local` doesn't resolve on some devices | No mDNS on that device/network → use `https://<pi-ip>` (already in the cert), or set a DNS entry on the router |
-| Pi got a new IP and `https://<ip>` warns or fails | `sudo /opt/vlabs/deploy/pi/render-caddy.sh`, then set a DHCP reservation |
+| `vlabs.local` doesn't resolve on some devices                                  | No mDNS on that device/network → use `https://<pi-ip>` (already in the cert), or set a DNS entry on the router                                                                             |
+| Pi got a new IP and `https://<ip>` warns or fails                              | Refreshed automatically at boot (`vlabs-caddy-refresh.service`); mid-session run `sudo /opt/vlabs/deploy/pi/render-caddy.sh`. A DHCP reservation avoids it                                 |
+| "This name is already taking the exam on another device"                       | Exam seats are device-bound → monitor → student → **Move to another device**, then rejoin                                                                                                  |
 | Phones can't reach the Pi but the laptop can                                   | Guest Wi-Fi client isolation → same VLAN, or the Pi hotspot                                                                                                                                |
 | Countdown says "expired" immediately / wrong by hours; or cert "not yet valid" | Pi clock wrong (no NTP) → `timedatectl`, fix NTP or add an RTC                                                                                                                             |
 | "Too many join attempts" for the whole class                                   | Wrong code typed en masse counts as failures (20 per IP / 5 min). Wait 5 min; double-check the code on the projector. (Caddy forwards real client IPs, so this is per device, not per NAT) |
@@ -295,15 +309,15 @@ Budget ≈ VPS €5–12 + domain + ~€1 object storage per month.
 
 Prioritised; none block the Pi pilot.
 
-1. **Instructor management UI (admin role).** Today new instructors and
-   password resets go through the CLI. An `is_admin` flag, `POST/DELETE
-/api/auth/instructors`, and a small Admin page would let the partner
-   self-serve. Estimate: a day.
+1. **Admin role.** Instructor management is in the portal (1.5.0) but every
+   instructor can manage every account. An `is_admin` flag gating
+   `/api/auth/instructors` would matter once instructors are not all trusted
+   equally. Half a day.
 2. **Data retention job.** Auto-delete sessions (and participants) older than
    N days; keep template audit. A `sessionLifecycle` addition plus a config
    knob. Half a day.
-3. **Server time in `/status`.** Lets the client correct for device-clock
-   skew in the countdown (matters on the Pi more than the cloud). An hour.
+3. ~~Server time in `/status`~~ — done in 1.5.1 (countdowns correct for
+   device clock skew).
 4. **Password reset without the CLI.** Either email-based (adds SMTP) or an
    admin-issued one-time reset code. Depends on (1).
 5. **Partner branding knobs** (name, logo, accent colour) via env/config if

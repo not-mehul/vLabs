@@ -221,6 +221,17 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const existing = loadOr404(req);
+    // Optimistic concurrency: templates are shared, so an editor sends the
+    // version it loaded and a save over someone else's newer save is refused
+    // instead of silently discarding their change.
+    const expected = req.body?.expected_version;
+    if (expected !== undefined && expected !== null && Number(expected) !== existing.version) {
+      throw httpError(
+        409,
+        `This template was changed by someone else (now v${existing.version}, you loaded v${expected}). Reload it and apply your edits again.`,
+        'VERSION_CONFLICT',
+      );
+    }
     const clean = validateFor(kindOf(existing), req.body);
     q.update.run(
       clean.title,

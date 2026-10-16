@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { api, ApiError, participantSession } from '../api.js';
+import { api, ApiError, participantSession, clockOffset } from '../api.js';
 import { useCountdown } from '../hooks/useCountdown.js';
 import StepCard from '../components/StepCard.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -33,10 +33,13 @@ export default function Lab() {
   const [liveExpiry, setLiveExpiry] = useState(null);
   const [remoteFinished, setRemoteFinished] = useState(false);
   const [updatedNotice, setUpdatedNotice] = useState(false);
+  const [offsetMs, setOffsetMs] = useState(0);
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
   const versionRef = useRef(null);
-  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at);
+  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
+    offsetMs,
+  });
 
   useEffect(() => {
     if (!token) navigate('/', { replace: true });
@@ -48,6 +51,7 @@ export default function Lab() {
       const res = await api.content(token);
       setData(res);
       setLiveExpiry(res.expires_at);
+      setOffsetMs(clockOffset(res.server_time));
       setError('');
       // Keep the persisted session's expiry fresh so resume shows the right time.
       participantSession.set({
@@ -93,6 +97,7 @@ export default function Lab() {
     try {
       const res = await api.status(token);
       setLiveExpiry(res.expires_at);
+      setOffsetMs(clockOffset(res.server_time));
       if (res.finished) setRemoteFinished(true);
       setError('');
       if (versionRef.current !== null && res.template_version !== versionRef.current) {

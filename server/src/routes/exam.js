@@ -31,13 +31,27 @@ router.use((req, res, next) => {
   res.status(409).json({ error: 'This session is not an exam', code: 'WRONG_KIND' });
 });
 
-const MAX_LOG = 1000;
+/** History rows kept per question per seat (oldest dropped beyond this). */
+const MAX_EVENTS_PER_QUESTION = 200;
+const TOUCH_EVERY_MS = 10_000;
 
 const q = {
-  saveAnswers: db.prepare(
-    'UPDATE participants SET answers = ?, answer_log = ?, last_seen_at = ? WHERE id = ?',
+  byId: db.prepare('SELECT * FROM participants WHERE id = ?'),
+  saveAnswers: db.prepare('UPDATE participants SET answers = ?, last_seen_at = ? WHERE id = ?'),
+  // Presence heartbeat, at most every TOUCH_EVERY_MS (each write is an fsync).
+  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ? AND last_seen_at < ?'),
+  logEvent: db.prepare(
+    'INSERT INTO exam_answer_events (participant_id, question_key, response, at) VALUES (?, ?, ?, ?)',
   ),
-  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?'),
+  trimEvents: db.prepare(
+    `DELETE FROM exam_answer_events
+      WHERE participant_id = ? AND question_key = ? AND id NOT IN (
+        SELECT id FROM exam_answer_events WHERE participant_id = ? AND question_key = ?
+         ORDER BY id DESC LIMIT ${MAX_EVENTS_PER_QUESTION})`,
+  ),
+  countEvents: db.prepare(
+    'SELECT COUNT(*) AS n FROM exam_answer_events WHERE participant_id = ? AND question_key = ?',
+  ),
   submit: db.prepare(
     `UPDATE participants SET submitted_at = ?, completed_at = COALESCE(completed_at, ?),
             finished_at = COALESCE(finished_at, ?), last_seen_at = ?
@@ -53,14 +67,18 @@ const parseObject = (json) => {
     return {};
   }
 };
-const parseArray = (json) => {
-  try {
-    const v = JSON.parse(json || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
+function touch(id, now) {
+  q.touch.run(now, id, new Date(Date.parse(now) - TOUCH_EVERY_MS).toISOString());
+}
+
+/** Store one answer change: latest value on the seat, history as one small row. */
+const recordAnswer = db.transaction((p, answers, key, response, now) => {
+  q.saveAnswers.run(JSON.stringify(answers), now, p.id);
+  q.logEvent.run(p.id, key, response, now);
+  if (q.countEvents.get(p.id, key).n > MAX_EVENTS_PER_QUESTION) {
+    q.trimEvents.run(p.id, key, p.id, key);
   }
-};
+});
 
 function noStore(res) {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -87,7 +105,8 @@ router.get(
     const content = JSON.parse(req.session.content || '[]');
     const questions = listQuestions(content);
     const images = imageUrlMap();
-    q.touch.run(nowIso(), p.id);
+    const now = nowIso();
+    touch(p.id, now);
 
     let n = 0;
     const sections = content.map((sec, si) => ({
@@ -114,6 +133,7 @@ router.get(
       last_name: p.last_name,
       title: req.session.title,
       expires_at: req.session.expires_at,
+      server_time: now,
       template_version: req.session.template_version,
       question_count: questions.length,
       submitted: Boolean(p.submitted_at),
@@ -134,7 +154,8 @@ router.put(
   '/answer',
   actionLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    // Re-read: the guard loaded the row before the async rate limiter ran.
+    const p = q.byId.get(req.participant.id) || req.participant;
     if (p.submitted_at) throw httpError(409, 'This exam has already been submitted', 'SUBMITTED');
     const key = String(req.body?.key ?? '');
     const content = JSON.parse(req.session.content || '[]');
@@ -154,14 +175,12 @@ router.put(
     else delete answers[key];
     const now = nowIso();
     if (before === JSON.stringify(answers[key] ?? null)) {
-      q.touch.run(now, p.id);
+      touch(p.id, now);
       noStore(res);
       return res.json({ ok: true, saved_at: now });
     }
 
-    const log_ = parseArray(p.answer_log);
-    log_.push({ k: key, a: describeResponse(entry.q, value).slice(0, 500), at: now });
-    q.saveAnswers.run(JSON.stringify(answers), JSON.stringify(log_.slice(-MAX_LOG)), now, p.id);
+    recordAnswer(p, answers, key, describeResponse(entry.q, value).slice(0, 500), now);
     noStore(res);
     res.json({ ok: true, saved_at: now });
   }),
@@ -173,7 +192,7 @@ router.put(
  * participant is not shown a score.
  */
 router.post('/submit', actionLimiter, (req, res) => {
-  const p = req.participant;
+  const p = q.byId.get(req.participant.id) || req.participant;
   const now = nowIso();
   const { changes } = q.submit.run(now, now, now, now, p.id);
   if (changes) {

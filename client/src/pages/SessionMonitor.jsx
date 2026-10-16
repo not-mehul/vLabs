@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api, copyToClipboard } from '../api.js';
+import { api, copyToClipboard, clockOffset } from '../api.js';
 import { downloadFile } from '../lib/files.js';
 import {
   slug,
@@ -140,7 +140,7 @@ function SectionFlow({ data }) {
 }
 
 /** Slide-over with one participant's answers, attempts, hints and timings. Live-refreshes. */
-function ParticipantDrawer({ sessionId, participantId, onClose }) {
+function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
@@ -178,6 +178,22 @@ function ParticipantDrawer({ sessionId, participantId, onClose }) {
   }, [onClose]);
 
   const maxSectionSeconds = d ? Math.max(1, ...d.section_times.map((s) => s.seconds)) : 1;
+
+  async function remove() {
+    if (
+      !window.confirm(
+        `Remove ${d?.name || 'this participant'} from this session?\n\nTheir progress, answers and timings are deleted. This cannot be undone.`,
+      )
+    )
+      return;
+    try {
+      await call((t) => api.removeParticipant(t, sessionId, participantId));
+      onRemoved();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   return (
     <div className="drawer-root">
@@ -231,6 +247,12 @@ function ParticipantDrawer({ sessionId, participantId, onClose }) {
                 </span>
                 <span className="stat__label">Wrong attempts</span>
               </div>
+            </div>
+
+            <div className="drawer__actions">
+              <button className="btn btn--sm btn--danger-ghost" onClick={remove}>
+                <Icon name="trash" size={14} /> Remove participant
+              </button>
             </div>
 
             {!d.complete && (
@@ -392,8 +414,10 @@ export default function SessionMonitor() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState(null); // participant id open in the drawer
+  const offsetMs = useMemo(() => clockOffset(data?.server_time), [data?.server_time]);
   const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null, {
     hours: true,
+    offsetMs,
   });
 
   const refresh = useCallback(async () => {
@@ -794,6 +818,7 @@ export default function SessionMonitor() {
               sessionId={id}
               participantId={selected}
               onClose={() => setSelected(null)}
+              onRemoved={refresh}
             />
           )}
         </>

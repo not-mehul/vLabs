@@ -53,8 +53,11 @@ bold "4/5  Refresh systemd units (in case they changed)"
 install -m 0644 deploy/pi/vlabs.service /etc/systemd/system/vlabs.service
 install -m 0644 deploy/pi/vlabs-backup.service /etc/systemd/system/vlabs-backup.service
 install -m 0644 deploy/pi/vlabs-backup.timer /etc/systemd/system/vlabs-backup.timer
-sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd/system/vlabs-backup.service
+install -m 0644 deploy/pi/vlabs-caddy-refresh.service /etc/systemd/system/vlabs-caddy-refresh.service
+sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd/system/vlabs-backup.service \
+  /etc/systemd/system/vlabs-caddy-refresh.service
 systemctl daemon-reload
+systemctl enable vlabs-caddy-refresh.service >/dev/null 2>&1 || true
 
 bold "5/5  Restart + health check"
 systemctl restart vlabs

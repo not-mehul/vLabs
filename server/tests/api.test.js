@@ -877,8 +877,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 5: examination mode)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 5);
+test('database schema version is recorded (migration 6: exam answer events, seat resume keys)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 6);
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()
@@ -887,4 +887,29 @@ test('database schema version is recorded (migration 5: examination mode)', () =
     assert.ok(cols.includes(c), c);
   }
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());
+});
+
+test('template saves refuse to overwrite a newer version (optimistic concurrency)', async () => {
+  const created = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: tinyTemplate('Concurrency'),
+  });
+  const id = created.data.id;
+  const ok = await call(`/api/templates/${id}`, {
+    method: 'PUT',
+    token: instructorToken,
+    body: { ...tinyTemplate('Concurrency (A)'), expected_version: 1 },
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.version, 2);
+  const stale = await call(`/api/templates/${id}`, {
+    method: 'PUT',
+    token: instructorToken,
+    body: { ...tinyTemplate('Concurrency (B)'), expected_version: 1 },
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.data.code, 'VERSION_CONFLICT');
+  const current = await call(`/api/templates/${id}`, { token: instructorToken });
+  assert.equal(current.data.title, 'Concurrency (A)', 'the newer save survived');
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { api, ApiError, participantSession } from '../api.js';
+import { api, ApiError, participantSession, clockOffset } from '../api.js';
 import { useCountdown } from '../hooks/useCountdown.js';
 import ExamQuestion from '../components/ExamQuestion.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -35,9 +35,12 @@ export default function Exam() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [liveExpiry, setLiveExpiry] = useState(null);
+  const [offsetMs, setOffsetMs] = useState(0);
   const timers = useRef({});
   const pending = useRef({}); // key → latest unsaved value
-  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at);
+  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
+    offsetMs,
+  });
 
   useEffect(() => {
     if (!token) navigate('/', { replace: true });
@@ -65,6 +68,7 @@ export default function Exam() {
       const res = await api.exam(token);
       setData(res);
       setLiveExpiry(res.expires_at);
+      setOffsetMs(clockOffset(res.server_time));
       setSubmitted(res.submitted);
       // Keep anything typed but not yet saved.
       setAnswers({ ...res.answers, ...pending.current });
@@ -91,6 +95,7 @@ export default function Exam() {
       try {
         const st = await api.status(token);
         setLiveExpiry(st.expires_at);
+        setOffsetMs(clockOffset(st.server_time));
         if (st.submitted) setSubmitted(true);
         if (data && st.template_version !== data.template_version) load();
       } catch (err) {
@@ -135,11 +140,26 @@ export default function Exam() {
     [save],
   );
 
-  // Flush pending typed answers when leaving the page.
+  // Flush typed answers still waiting for their debounce when the tab is
+  // hidden or closed (keepalive requests outlive the page), and on unmount.
   useEffect(() => {
+    if (!token) return undefined;
     const t = timers.current;
-    return () => Object.values(t).forEach(clearTimeout);
-  }, []);
+    const flushOnExit = () => {
+      for (const [k, v] of Object.entries(pending.current)) {
+        clearTimeout(t[k]);
+        api.saveAnswerOnExit(token, k, v);
+      }
+    };
+    const onVisibility = () => document.visibilityState === 'hidden' && flushOnExit();
+    window.addEventListener('pagehide', flushOnExit);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushOnExit);
+      document.removeEventListener('visibilitychange', onVisibility);
+      Object.values(t).forEach(clearTimeout);
+    };
+  }, [token]);
 
   async function flushAll() {
     const entries = Object.entries(pending.current);

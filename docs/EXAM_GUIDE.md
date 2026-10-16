@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.5.0**.
+Applies to vLabs **1.5.1**.
 
 ---
 
@@ -87,6 +87,14 @@ In two or three sentences, explain why networks are split into VLANs.
 - Answers **save automatically** (choices immediately, typed answers after a
   short pause or when the field loses focus) and can be changed until the
   exam is submitted. Leaving and rejoining with the same name resumes.
+- Each exam seat is **bound to the device that joined it**. Rejoining with
+  the same name on that device resumes; on any other device it is refused
+  ("already taking the exam on another device") so nobody can open a
+  classmate's exam by typing their name. If a device dies, the instructor uses
+  **Move to another device** in the monitor; the student then joins again on
+  any device and gets their answers back (the old device is signed out).
+- A typed answer still waiting to autosave is sent when the tab is hidden or
+  closed.
 - **Submit** locks the exam; the participant sees a confirmation, never a
   score or the correct answers. When the session ends or expires, saved
   answers are kept.
@@ -103,6 +111,10 @@ The exam monitor shows:
   the options (correct and chosen highlighted), their response, the expected
   answer, the verdict, the history of changes to that answer, and
   **Correct / Incorrect / Clear** buttons.
+
+Seat actions in the participant panel: **Reopen exam** (undo a submission
+while the session is live), **Move to another device** (above) and
+**Remove** (deletes a mistaken registration and its answers).
 
 A manual mark overrides the automatic verdict for that response; **Clear**
 returns to it. Marks can be given during or after the session and record who

@@ -97,9 +97,11 @@ const config = {
     participantTtl: process.env.JWT_PARTICIPANT_TTL || '12h',
   },
 
-  // Comma separated list of allowed CORS origins. Defaults to the Vite dev
-  // server. Use "*" only for throwaway demos.
-  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173')
+  // Comma separated list of allowed CORS origins. Unset: the Vite dev server
+  // in development, none in production (the SPA is same-origin there). Set but
+  // empty (as install.sh writes it) means none — `||` used to turn that into
+  // the dev origin. Use "*" only for throwaway demos.
+  corsOrigins: (process.env.CORS_ORIGINS ?? (env === 'production' ? '' : 'http://localhost:5173'))
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean),

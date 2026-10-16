@@ -140,6 +140,8 @@ export default function LabEditor({ id, initial }) {
         description: tpl.description,
         variables: tpl.variables,
         content: tpl.content,
+        // Refused with VERSION_CONFLICT if a colleague saved in the meantime.
+        expected_version: isNew ? undefined : meta.version,
       };
       const saved = isNew
         ? await call((t) => api.createTemplate(t, payload))

@@ -43,6 +43,7 @@ Participant registration (the default landing page) is in
 - [Highlights](#highlights)
 - [Authoring templates → docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md)
 - [Exams → docs/EXAM_GUIDE.md](docs/EXAM_GUIDE.md)
+- [Production readiness audit → docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Quick start (local dev on a Mac)](#quick-start-local-dev-on-a-mac)
@@ -460,12 +461,12 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 
 ### Public
 
-| Method | Path                | Description                                                                         |
-| ------ | ------------------- | ----------------------------------------------------------------------------------- |
-| `GET`  | `/health`           | Liveness; runs a DB query, `503` if it fails                                        |
-| `POST` | `/auth/login`       | `{ username, password }` → `{ token, instructor }` (`must_change_password` flag)    |
-| `POST` | `/participant/join` | `{ room_code, first_name, last_name }` → `{ token, resumed, seat_number, session }` |
-| `GET`  | `/images/:id/:name` | Serve a library image (the random id is the capability; cacheable)                  |
+| Method | Path                | Description                                                                                                                                                                                                                    |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/health`           | Liveness; runs a DB query, `503` if it fails                                                                                                                                                                                   |
+| `POST` | `/auth/login`       | `{ username, password }` → `{ token, instructor }` (`must_change_password` flag)                                                                                                                                               |
+| `POST` | `/participant/join` | `{ room_code, first_name, last_name, resume_key? }` → `{ token, resumed, seat_number, session, resume_key }`. Exam seats are bound to the joining device by `resume_key`; rejoining an exam name without it → `409 SEAT_TAKEN` |
+| `GET`  | `/images/:id/:name` | Serve a library image (the random id is the capability; cacheable)                                                                                                                                                             |
 
 ### Instructor (Bearer instructor token)
 
@@ -481,7 +482,7 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 | `GET`    | `/templates/functions`                       | Formula helper names                                                                                                                                                                                                                                                                                      |
 | `POST`   | `/templates`                                 | Create (validated; `400` with `details[]`). `kind: 'exam'` creates an exam (fixed at creation)                                                                                                                                                                                                            |
 | `GET`    | `/templates/:id`                             | Full template                                                                                                                                                                                                                                                                                             |
-| `PUT`    | `/templates/:id`                             | Update → new version; running sessions unaffected                                                                                                                                                                                                                                                         |
+| `PUT`    | `/templates/:id`                             | Update → new version; running sessions unaffected. Optional `expected_version` → `409 VERSION_CONFLICT` if someone saved in between                                                                                                                                                                       |
 | `DELETE` | `/templates/:id`                             | **Archive** (`204`)                                                                                                                                                                                                                                                                                       |
 | `DELETE` | `/templates/:id?permanent=1`                 | Permanently delete; `409` while sessions are active                                                                                                                                                                                                                                                       |
 | `POST`   | `/templates/:id/restore`                     | Un-archive                                                                                                                                                                                                                                                                                                |
@@ -498,6 +499,9 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 | `GET`    | `/sessions/:id/participants/:pid`            | One participant in depth: checkpoints with accepted answer + wrong attempts, hints opened, solutions revealed, time per section                                                                                                                                                                           |
 | `PUT`    | `/sessions/:id/participants/:pid/marks/:key` | Exams: `{ correct: true \| false \| null }` — mark a response by hand (null clears)                                                                                                                                                                                                                       |
 | `GET`    | `/sessions/:id/questions/:key`               | Exams: every participant's response to one question                                                                                                                                                                                                                                                       |
+| `DELETE` | `/sessions/:id/participants/:pid`            | Remove a participant (their device is signed out with `SEAT_REMOVED`)                                                                                                                                                                                                                                     |
+| `POST`   | `/sessions/:id/participants/:pid/release`    | Exams: let the seat be resumed on another device (signs out the current one with `SEAT_RELEASED`)                                                                                                                                                                                                         |
+| `POST`   | `/sessions/:id/participants/:pid/reopen`     | Exams: undo a submission while the session is live                                                                                                                                                                                                                                                        |
 | `GET`    | `/images`                                    | Image library listing                                                                                                                                                                                                                                                                                     |
 | `POST`   | `/images?name=…[&replace=1]`                 | Upload one image as the raw body (type sniffed; PNG/JPEG/GIF/WebP ≤ 3 MB); `409 IMAGE_EXISTS` unless `replace`                                                                                                                                                                                            |
 | `GET`    | `/images/:id/references`                     | Templates / active sessions using the image                                                                                                                                                                                                                                                               |
@@ -519,8 +523,8 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 | `POST` | `/participant/exam/submit` | Exams: hand in (idempotent); locks responses                                                                                                              |
 
 Participant error codes: `SESSION_ENDED`, `SESSION_EXPIRED`, `SEAT_REMOVED`,
-`WRONG_KIND` (lab route on an exam session or vice versa), `SUBMITTED`.
-Instructor: `TOKEN_REVOKED`.
+`SEAT_RELEASED`, `SEAT_TAKEN`, `WRONG_KIND` (lab route on an exam session or
+vice versa), `SUBMITTED`. Instructor: `TOKEN_REVOKED`, `VERSION_CONFLICT`.
 
 Rate limits (per minute unless noted): API 300 per identity/IP; join 20 failed
 per IP / 5 min and 300 total per IP / 5 min; login 10 failed per IP / 15 min;

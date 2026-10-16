@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import db from '../db/index.js';
 import { requireParticipant } from '../middleware/auth.js';
 import {
@@ -44,7 +45,11 @@ const q = {
        (session_id, seat_number, first_name, last_name, name_key, section_entered_at, joined_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
-  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ?'),
+  // Presence heartbeat, written at most every TOUCH_EVERY_MS per seat: with
+  // synchronous=FULL every write is an fsync, and status polls would otherwise
+  // add a write per seat every 15 s for no information gain.
+  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ? AND last_seen_at < ?'),
+  setResume: db.prepare('UPDATE participants SET resume_hash = ? WHERE id = ?'),
   setCheckpoints: db.prepare(
     `UPDATE participants
         SET completed_checkpoints = ?, captured_values = ?, checkpoint_log = ?, last_seen_at = ?
@@ -86,6 +91,31 @@ function loadManual(session) {
 function noStore(res) {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
+}
+
+const TOUCH_EVERY_MS = 10_000;
+
+/** Record presence (throttled; see q.touch). */
+function touchSeat(id, now = nowIso()) {
+  q.touch.run(now, id, new Date(Date.parse(now) - TOUCH_EVERY_MS).toISOString());
+}
+
+/**
+ * The participant row as it is NOW. req.participant was loaded by the auth
+ * guard before the (async) rate limiter ran; handlers that read-modify-write
+ * JSON columns re-read it so two near-simultaneous requests from one seat can
+ * never overwrite each other's change.
+ */
+const fresh = (req) => q.byId.get(req.participant.id) || req.participant;
+
+/* Exam seats are bound to the device that joined via a random resume key. */
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+const newResumeKey = () => crypto.randomBytes(18).toString('base64url');
+function resumeKeyMatches(key, hash) {
+  if (!key || !hash) return false;
+  const a = Buffer.from(sha256(key), 'hex');
+  const b = Buffer.from(String(hash), 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 const parseIndex = (v) => {
@@ -174,11 +204,34 @@ function requireReachableStep(sections, si, sti, completed) {
 
 // Assign the next seat number atomically inside a transaction so concurrent
 // joins can never collide on a number.
-const registerParticipant = db.transaction((session, firstName, lastName, nameKey) => {
+//
+// Resuming by name: lab seats resume on name alone (a documented trade-off —
+// a lab seat holds nothing worth stealing). EXAM seats are bound to the device
+// that took them by a resume key the client keeps in localStorage; rejoining
+// that name without the key is refused until the instructor releases the
+// seat (POST /sessions/:id/participants/:pid/release).
+const registerParticipant = db.transaction((session, firstName, lastName, nameKey, resumeKey) => {
+  const exam = session.kind === 'exam';
   const existing = q.byName.get(session.id, nameKey);
   if (existing) {
-    q.touch.run(nowIso(), existing.id);
-    return { participant: existing, resumed: true };
+    let key = null;
+    if (exam) {
+      if (existing.resume_hash) {
+        if (!resumeKeyMatches(resumeKey, existing.resume_hash)) {
+          throw httpError(
+            409,
+            'This name is already taking the exam on another device. Ask your instructor to release your seat.',
+            'SEAT_TAKEN',
+          );
+        }
+        key = resumeKey;
+      } else {
+        key = newResumeKey();
+        q.setResume.run(sha256(key), existing.id);
+      }
+    }
+    touchSeat(existing.id);
+    return { participant: q.byId.get(existing.id), resumed: true, resumeKey: key };
   }
 
   const { maxSeat, count } = q.seatStats.get(session.id);
@@ -188,7 +241,12 @@ const registerParticipant = db.transaction((session, firstName, lastName, nameKe
   const seatNumber = maxSeat + 1;
   const now = nowIso();
   const info = q.insert.run(session.id, seatNumber, firstName, lastName, nameKey, now, now, now);
-  return { participant: q.byId.get(info.lastInsertRowid), resumed: false };
+  let key = null;
+  if (exam) {
+    key = newResumeKey();
+    q.setResume.run(sha256(key), info.lastInsertRowid);
+  }
+  return { participant: q.byId.get(info.lastInsertRowid), resumed: false, resumeKey: key };
 });
 
 /**
@@ -231,7 +289,18 @@ router.post(
     }
 
     const nameKey = `${firstName} ${lastName}`.toLowerCase();
-    const { participant, resumed } = registerParticipant(session, firstName, lastName, nameKey);
+    const resumeKeyIn =
+      typeof req.body?.resume_key === 'string' ? req.body.resume_key.slice(0, 100) : '';
+    let registered;
+    try {
+      registered = registerParticipant(session, firstName, lastName, nameKey, resumeKeyIn);
+    } catch (err) {
+      if (err.code === 'SEAT_TAKEN') {
+        log.warn('participant.resume.refused', { session: session.id, ip: req.ip });
+      }
+      throw err;
+    }
+    const { participant, resumed, resumeKey } = registered;
 
     const sections = JSON.parse(session.content || '[]');
     const token = signParticipantToken(participant, session);
@@ -244,6 +313,8 @@ router.post(
     res.json({
       token,
       resumed,
+      // Exam seats only: keep this on the device to resume the same seat later.
+      resume_key: resumeKey,
       seat_number: participant.seat_number,
       first_name: participant.first_name,
       last_name: participant.last_name,
@@ -292,7 +363,7 @@ router.get(
     const completed = completedSetOf(p);
     const unlockedSection = computeUnlockedSection(sections, completed);
 
-    q.touch.run(nowIso(), p.id);
+    touchSeat(p.id);
 
     const hintsTaken = new Set(JSON.parse(p.hints_taken || '[]'));
     const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
@@ -356,6 +427,8 @@ router.get(
       completed: progress.complete,
       finished: Boolean(p.finished_at),
       expires_at: req.session.expires_at,
+      // Lets the client correct its countdown for device clock skew.
+      server_time: nowIso(),
       template_version: req.session.template_version,
       sections: rendered,
     });
@@ -375,7 +448,7 @@ router.post(
   '/checkpoint',
   checkpointLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    const p = fresh(req);
     const si = parseIndex(req.body?.section_index);
     const sti = parseIndex(req.body?.step_index);
     const answer = req.body?.answer;
@@ -451,7 +524,7 @@ router.post(
   '/progress',
   actionLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    const p = fresh(req);
     const si = parseIndex(req.body?.section_index);
     const { sections } = loadManual(req.session);
     if (Number.isNaN(si) || si >= sections.length) throw httpError(400, 'Invalid section index');
@@ -470,7 +543,7 @@ router.post(
       p.section_entered_at = now;
       p.max_section = Math.max(p.max_section, si);
     } else {
-      q.touch.run(now, p.id);
+      touchSeat(p.id, now);
     }
     // Reaching a checkpoint-free last counting section is what completes such a manual.
     if (labProgress(sections, p, completed).complete) markCompleted(p, now);
@@ -489,7 +562,7 @@ router.post(
   '/hint',
   actionLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    const p = fresh(req);
     const si = parseIndex(req.body?.section_index);
     const sti = parseIndex(req.body?.step_index);
     const hi = parseIndex(req.body?.hint_index);
@@ -517,7 +590,7 @@ router.post(
   '/solution',
   contentLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    const p = fresh(req);
     const si = parseIndex(req.body?.section_index);
     const sti = parseIndex(req.body?.step_index);
     const { sections, variables } = loadManual(req.session);
@@ -556,7 +629,7 @@ router.post(
   '/finish',
   actionLimiter,
   asyncHandler(async (req, res) => {
-    const p = req.participant;
+    const p = fresh(req);
     const { sections } = loadManual(req.session);
     const completed = completedSetOf(p);
     // Require genuine completion: every counting section cleared and reached.
@@ -584,12 +657,14 @@ router.post(
  */
 router.get('/status', contentLimiter, (req, res) => {
   const p = req.participant;
-  q.touch.run(nowIso(), p.id);
+  const now = nowIso();
+  touchSeat(p.id, now);
   noStore(res);
   res.json({
     session_active: true,
     kind: req.session.kind || 'lab',
     expires_at: req.session.expires_at,
+    server_time: now,
     completed: Boolean(p.completed_at),
     finished: Boolean(p.finished_at),
     submitted: Boolean(p.submitted_at),

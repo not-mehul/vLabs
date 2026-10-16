@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.5.0). The first section is the original code
+Newest entry at the bottom (1.5.1). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -448,3 +448,35 @@ upgrade notes.
 `deploy/pi/update.sh` as usual — migration 5 runs on start. Existing labs keep
 working unchanged; give optional / wrap-up sections a title that says so if
 they should not count towards progress.
+
+## 1.5.1 — production readiness audit (2026-10-16)
+
+Full audit of architecture, security, data safety and operations; report in
+[docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md). Fixes:
+
+- **Dependencies**: `npm audit fix` (non-breaking) — server had a critical
+  (proxy-addr IP spoofing) and a high (compression DoS) advisory that would
+  also have failed CI's audit step.
+- **Exam seats are device-bound**: joining an exam hands out a resume key;
+  rejoining that name without it is refused (`SEAT_TAKEN`). Instructor **Move
+  to another device** releases the seat and signs the old device out
+  (`SEAT_RELEASED`, participant `token_version`).
+- **Exam answer history** moved from a JSON column rewritten on every
+  autosave to an append-only `exam_answer_events` table (SD-card wear;
+  migration 6 copies existing history).
+- **Instructor seat actions**: remove a participant (labs and exams), reopen a
+  submitted exam, move an exam seat to another device.
+- **Template saves** carry `expected_version`; a save over a colleague's newer
+  version is refused (`VERSION_CONFLICT`) instead of discarding it.
+- **Countdowns** correct for device clock skew (`server_time` in status,
+  content, exam and session detail).
+- **Exam autosave**: typed answers awaiting the debounce are flushed with
+  `fetch(keepalive)` when the tab is hidden or closed.
+- **Error boundary** around the app (no more blank page on a render error).
+- **Ops**: added the missing `vlabs-caddy-refresh.service` (boot-time
+  certificate IP refresh) to install/update/uninstall and CI; empty
+  `CORS_ORIGINS` now means none; presence writes throttled to one per 10 s per
+  seat; mutating participant handlers re-read the row before writing; CI also
+  runs on `smarty/**` pushes.
+- Docs: deployment runbook (instructor accounts, exam day, troubleshooting),
+  exam guide, README API.

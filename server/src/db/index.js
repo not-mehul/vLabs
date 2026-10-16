@@ -165,9 +165,10 @@ CREATE TABLE IF NOT EXISTS participants (
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
   -- Exam sessions only. answers: { "<section>.<question>": value } (latest
-  -- response per question); answer_log: every change, newest last, capped:
-  --   { k, a, at }; grades: instructor overrides { key: { correct: 0|1,
-  -- by, at } }; submitted_at: when the participant handed the exam in.
+  -- response per question); grades: instructor overrides { key: { correct:
+  -- 0|1, by, at } }; submitted_at: when the participant handed the exam in.
+  -- (answer_log is the pre-1.5.1 change log, superseded by
+  -- exam_answer_events and no longer written.)
   answers                TEXT NOT NULL DEFAULT '{}',
   answer_log             TEXT NOT NULL DEFAULT '[]',
   grades                 TEXT NOT NULL DEFAULT '{}',
@@ -179,9 +180,30 @@ CREATE TABLE IF NOT EXISTS participants (
   section_entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Exam seats: SHA-256 of the per-device resume key handed out at join. A
+  -- rejoin by name must present the key, so knowing a classmate's name is not
+  -- enough to open their exam. NULL = not bound (labs, or released by the
+  -- instructor so the next join on any device rebinds the seat).
+  resume_hash            TEXT,
+  -- Bumped when the instructor releases the seat; participant tokens carry it,
+  -- so the previous device is signed out.
+  token_version          INTEGER NOT NULL DEFAULT 0,
   UNIQUE (session_id, seat_number),
   UNIQUE (session_id, name_key)
 );
+
+-- Exam answer history, one small row per change (append-only). Kept out of the
+-- participants row so an autosave writes a few hundred bytes, not the whole
+-- history; long answers are logged truncated.
+CREATE TABLE IF NOT EXISTS exam_answer_events (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  participant_id  INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  question_key    TEXT NOT NULL,
+  response        TEXT NOT NULL DEFAULT '',
+  at              TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exam_answer_events_participant
+  ON exam_answer_events(participant_id, question_key);
 
 -- Instance-wide image library for template bodies. Markdown references an
 -- image by NAME (![caption](rack.png)); the server rewrites it to
@@ -317,6 +339,46 @@ const MIGRATIONS = [
       addColumnIfMissing('participants', 'answer_log', "TEXT NOT NULL DEFAULT '[]'");
       addColumnIfMissing('participants', 'grades', "TEXT NOT NULL DEFAULT '{}'");
       addColumnIfMissing('participants', 'submitted_at', 'TEXT');
+    },
+  },
+  {
+    version: 6,
+    name: 'exam answer events table, exam seat resume keys, participant token_version',
+    up() {
+      addColumnIfMissing('participants', 'resume_hash', 'TEXT');
+      addColumnIfMissing('participants', 'token_version', 'INTEGER NOT NULL DEFAULT 0');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS exam_answer_events (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          participant_id  INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+          question_key    TEXT NOT NULL,
+          response        TEXT NOT NULL DEFAULT '',
+          at              TEXT NOT NULL
+        );
+      `);
+      // Carry over any history written by 1.5.0 into the new table.
+      const rows = db
+        .prepare("SELECT id, answer_log FROM participants WHERE answer_log NOT IN ('', '[]')")
+        .all();
+      const insert = db.prepare(
+        'INSERT INTO exam_answer_events (participant_id, question_key, response, at) VALUES (?, ?, ?, ?)',
+      );
+      // One transaction: an interrupted upgrade re-runs this cleanly instead of
+      // copying the history twice.
+      db.transaction(() => {
+        for (const r of rows) {
+          let entries = [];
+          try {
+            entries = JSON.parse(r.answer_log);
+          } catch {
+            entries = [];
+          }
+          for (const e of Array.isArray(entries) ? entries : []) {
+            if (e && e.k) insert.run(r.id, String(e.k), String(e.a ?? ''), String(e.at ?? ''));
+          }
+        }
+        db.exec("UPDATE participants SET answer_log = '[]'");
+      })();
     },
   },
 ];
