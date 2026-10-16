@@ -25,6 +25,8 @@ process.env.JWT_INSTRUCTOR_SECRET = 'test-instructor-secret-0123456789abcdef';
 process.env.JWT_PARTICIPANT_SECRET = 'test-participant-secret-0123456789abcdef';
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'silent';
+const tmpAddresses = path.join(os.tmpdir(), `vlabs-addresses-${process.pid}-${Date.now()}.json`);
+process.env.VLABS_ADDRESSES_FILE = tmpAddresses;
 
 let server;
 let base;
@@ -1065,4 +1067,31 @@ test('section drawer: who is on a section, who completed it, timing and per-step
     (await call(`/api/sessions/${s.data.id}/sections/9`, { token: instructorToken })).status,
     404,
   );
+});
+
+test('the portal is told the current join addresses (follows the Pi across networks)', async () => {
+  assert.equal((await call('/api/server/addresses')).status, 401);
+  fs.rmSync(tmpAddresses, { force: true });
+  let r = await call('/api/server/addresses', { token: instructorToken });
+  assert.deepEqual(r.data, { urls: [], updated_at: null }, 'no file: nothing to show');
+
+  fs.writeFileSync(
+    tmpAddresses,
+    JSON.stringify({
+      updated_at: '2026-10-16T10:00:00Z',
+      urls: ['https://vlabs.local', 'https://10.0.0.23', 'javascript:alert(1)', 42],
+    }),
+  );
+  r = await call('/api/server/addresses', { token: instructorToken });
+  assert.deepEqual(r.data.urls, ['https://vlabs.local', 'https://10.0.0.23']);
+  assert.equal(r.data.updated_at, '2026-10-16T10:00:00Z');
+
+  // The Pi moved: render-caddy.sh rewrote the file; the next read follows it.
+  fs.writeFileSync(
+    tmpAddresses,
+    JSON.stringify({ urls: ['https://vlabs.local', 'https://172.16.4.9'] }),
+  );
+  r = await call('/api/server/addresses', { token: instructorToken });
+  assert.deepEqual(r.data.urls, ['https://vlabs.local', 'https://172.16.4.9']);
+  fs.rmSync(tmpAddresses, { force: true });
 });

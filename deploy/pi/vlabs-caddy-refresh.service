@@ -1,16 +1,22 @@
-# Re-render the Caddy site list at boot so a Pi that came up with a different
-# IP address (new network, DHCP lease change) serves a certificate covering the
-# new address. Names given to install.sh are kept (/etc/vlabs/caddy-sites.conf);
-# only the IP list is refreshed, and Caddy is reloaded only if it changed.
-#   sudo systemctl start vlabs-caddy-refresh   # run it now
+# Keep vLabs reachable on whatever network the Pi is plugged into.
+#
+# Renders the Caddy site list at boot and again every time the Pi's IPv4
+# addresses change (new network, Wi-Fi switch, new DHCP lease, cable pulled),
+# so the certificate always covers the current addresses and the portal shows
+# the current join addresses. Names given to install.sh are kept
+# (/etc/vlabs/caddy-sites.conf); Caddy is reloaded only when something changed.
+#   sudo systemctl status vlabs-caddy-refresh
+#   sudo journalctl -u vlabs-caddy-refresh -f
 [Unit]
-Description=Refresh vLabs Caddy sites for the current IP addresses
+Description=Keep vLabs' Caddy sites in step with the Pi's network addresses
 Wants=network-online.target
-After=network-online.target caddy.service
+After=network-online.target caddy.service avahi-daemon.service
 
 [Service]
-Type=oneshot
-ExecStart=/opt/vlabs/deploy/pi/render-caddy.sh
+Type=simple
+ExecStart=/opt/vlabs/deploy/pi/watch-network.sh
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

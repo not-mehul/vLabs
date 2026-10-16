@@ -26,9 +26,11 @@ partner, which reuses the same scripts on a small VPS.
 - **Boot from a USB SSD** if you can, or at least a high-endurance (A2) SD
   card. SQLite in WAL mode is robust, but an SD card and a power cut are the
   most likely way to lose a session's data. Use a decent PSU.
-- **Wire it to the switch** (Ethernet). Give it a **DHCP reservation** so its
-  IP never changes. The installer sets the hostname to `vlabs` so Avahi
-  advertises `vlabs.local`.
+- **Wire it to the switch** (Ethernet). The installer sets the hostname to
+  `vlabs` so Avahi advertises `vlabs.local`. Leave the Pi on DHCP (don't give
+  it a static IP on the Pi itself) so it can move between networks (1.2a). A
+  DHCP reservation on the router is still nice to have: it keeps the bare-IP
+  address the same from class to class on that network.
 - **Clock.** The Pi has no RTC (Pi 5: optional battery). Session expiry, the
   participant countdown _and certificate validity_ depend on the clock, so make
   sure it can reach NTP (the facility router usually serves it; or
@@ -48,6 +50,48 @@ Two questions decide the day:
    Windows 10+ do mDNS; locked-down corporate laptops sometimes don't. The
    fallback is the Pi's IP — pass it to the installer as an extra address so
    the certificate covers it too (`VLABS_EXTRA_ADDRESSES="192.168.1.50"`).
+
+### 1.2a Moving the Pi to another network
+
+**Plug it in and it adapts — no reboot, no command.** `vlabs-caddy-refresh`
+watches the Pi's network addresses. When the Pi gets a new address it does
+three things within a few seconds:
+
+- Adds the new address to Caddy's certificate and drops addresses the Pi no
+  longer has. Devices that already trust the root certificate need nothing.
+- Shows the current join addresses under the room code in the session
+  monitor, e.g. _Join at vlabs.local · 10.0.0.23_.
+- Includes the name Avahi actually published. If another device on the new
+  network already uses `vlabs.local`, Avahi renames the Pi to `vlabs-2.local`,
+  and the monitor shows that.
+
+The address changes in any of these cases:
+
+- you plug the Ethernet cable into a different network
+- you switch Wi-Fi networks
+- the DHCP server hands out a new lease
+- you unplug the cable
+
+The same happens at boot, so moving the Pi while it is off works too.
+`https://vlabs.local` keeps working on the new network as it is. Only the
+bare-IP address changes, and the monitor shows the new one.
+
+What still needs you:
+
+- **Wi-Fi networks need their password once.** Ethernet with DHCP is plug and
+  play. For Wi-Fi, connect the Pi once (`sudo nmcli device wifi connect
+"<SSID>" password "<password>"`, or Raspberry Pi Imager's Wi-Fi settings).
+  NetworkManager remembers every network it has joined and reconnects to
+  whichever is in range.
+- **A network with no DHCP server** (e.g. a laptop cabled straight to the Pi)
+  gives the Pi no address to serve on. Use a switch or router, or the Pi's own
+  hotspot (1.2).
+- **Guest Wi-Fi that isolates clients** blocks devices from reaching the Pi on
+  any network (1.2, question 1).
+
+Check it: `sudo journalctl -u vlabs-caddy-refresh -f` logs each change and the
+resulting site list. `cat /run/vlabs-net/addresses.json` shows what the portal
+displays.
 
 HTTPS is always on: Caddy issues certificates from its own root CA, and each
 device trusts that root **once** (1.4). There is no plain-HTTP mode on the Pi
@@ -210,18 +254,19 @@ afterwards with the two commands from §1.3.
 
 ### 1.8 Troubleshooting
 
-| Symptom                                                                        | Likely cause → fix                                                                                                                                                                         |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Certificate warning on a device                                                | Root cert not installed or not _fully trusted_ (iOS needs the extra step) → 1.4. Or the device uses the IP and the IP isn't in the cert → re-run `install.sh` with `VLABS_EXTRA_ADDRESSES` |
-| `vlabs.local` doesn't resolve on some devices                                  | No mDNS on that device/network → use `https://<pi-ip>` (already in the cert), or set a DNS entry on the router                                                                             |
-| Pi got a new IP and `https://<ip>` warns or fails                              | Refreshed automatically at boot (`vlabs-caddy-refresh.service`); mid-session run `sudo /opt/vlabs/deploy/pi/render-caddy.sh`. A DHCP reservation avoids it                                 |
-| "This name is already taking the exam on another device"                       | Exam seats are device-bound → monitor → student → **Move to another device**, then rejoin                                                                                                  |
-| Phones can't reach the Pi but the laptop can                                   | Guest Wi-Fi client isolation → same VLAN, or the Pi hotspot                                                                                                                                |
-| Countdown says "expired" immediately / wrong by hours; or cert "not yet valid" | Pi clock wrong (no NTP) → `timedatectl`, fix NTP or add an RTC                                                                                                                             |
-| "Too many join attempts" for the whole class                                   | Wrong code typed en masse counts as failures (20 per IP / 5 min). Wait 5 min; double-check the code on the projector. (Caddy forwards real client IPs, so this is per device, not per NAT) |
-| `systemctl status vlabs` restarts in a loop with FATAL about secrets/password  | `/etc/vlabs/vlabs.env` edited with a short/placeholder secret → generate real ones (`openssl rand -hex 32`)                                                                                |
-| 502 from Caddy                                                                 | Node not up → `journalctl -u vlabs -n 50`; `curl http://127.0.0.1:4000/api/health`                                                                                                         |
-| `update.sh` says "not a fast-forward"                                          | Local edits on the Pi → `git stash` or commit them, re-run                                                                                                                                 |
+| Symptom                                                                        | Likely cause → fix                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Certificate warning on a device                                                | Root cert not installed or not _fully trusted_ (iOS needs the extra step) → 1.4. Or the device uses the IP and the IP isn't in the cert → re-run `install.sh` with `VLABS_EXTRA_ADDRESSES`                 |
+| `vlabs.local` doesn't resolve on some devices                                  | No mDNS on that device/network → use `https://<pi-ip>` (already in the cert), or set a DNS entry on the router                                                                                             |
+| Pi got a new IP and `https://<ip>` warns or fails                              | Picked up automatically within a few seconds (1.2a). If not: `systemctl status vlabs-caddy-refresh`, `journalctl -u vlabs-caddy-refresh -n 50`; manual refresh `sudo /opt/vlabs/deploy/pi/render-caddy.sh` |
+| On a new network `vlabs.local` reaches a different device                      | The name was taken there; Avahi renamed the Pi (e.g. `vlabs-2.local`) → use the address shown under the room code in the monitor                                                                           |
+| "This name is already taking the exam on another device"                       | Exam seats are device-bound → monitor → student → **Move to another device**, then rejoin                                                                                                                  |
+| Phones can't reach the Pi but the laptop can                                   | Guest Wi-Fi client isolation → same VLAN, or the Pi hotspot                                                                                                                                                |
+| Countdown says "expired" immediately / wrong by hours; or cert "not yet valid" | Pi clock wrong (no NTP) → `timedatectl`, fix NTP or add an RTC                                                                                                                                             |
+| "Too many join attempts" for the whole class                                   | Wrong code typed en masse counts as failures (20 per IP / 5 min). Wait 5 min; double-check the code on the projector. (Caddy forwards real client IPs, so this is per device, not per NAT)                 |
+| `systemctl status vlabs` restarts in a loop with FATAL about secrets/password  | `/etc/vlabs/vlabs.env` edited with a short/placeholder secret → generate real ones (`openssl rand -hex 32`)                                                                                                |
+| 502 from Caddy                                                                 | Node not up → `journalctl -u vlabs -n 50`; `curl http://127.0.0.1:4000/api/health`                                                                                                                         |
+| `update.sh` says "not a fast-forward"                                          | Local edits on the Pi → `git stash` or commit them, re-run                                                                                                                                                 |
 
 ---
 

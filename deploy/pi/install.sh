@@ -13,7 +13,8 @@
 #   vlabs.service         Node 22 on 127.0.0.1:4000 (systemd, hardened)
 #   caddy.service         HTTPS on :443 with Caddy's internal CA, proxying to Node
 #   vlabs-backup.timer    nightly consistent SQLite backup
-#   vlabs-caddy-refresh   boot-time refresh of the certificate's IP list
+#   vlabs-caddy-refresh   keeps the certificate's IP list in step with the network
+#                         (boot + every address change: plug into any network)
 #
 # Non-interactive use: pre-set any of these in the environment.
 #   VLABS_HOSTNAME=vlabs            mDNS name → https://vlabs.local
@@ -61,7 +62,7 @@ bold "2/8  System packages (Node 22, Caddy, avahi, sqlite3 CLI)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-  ca-certificates curl gnupg git avahi-daemon sqlite3 \
+  ca-certificates curl gnupg git avahi-daemon iproute2 sqlite3 \
   debian-keyring debian-archive-keyring apt-transport-https >/dev/null
 
 if ! command -v node >/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]]; then
@@ -174,8 +175,8 @@ fi
 # ---------------------------------------------------------------------------
 bold "6/8  Caddy → /etc/caddy/Caddyfile"
 # The .local name, every IPv4 the Pi currently holds (so typing the bare IP
-# works on devices without mDNS), and any extra names given. Re-run
-# deploy/pi/render-caddy.sh if the IP changes — or give the Pi a DHCP reservation.
+# works on devices without mDNS), and any extra names given. From now on
+# vlabs-caddy-refresh re-renders this whenever the Pi's addresses change.
 "$REPO_DIR/deploy/pi/render-caddy.sh" "$VLABS_HOSTNAME" $VLABS_EXTRA_ADDRESSES
 
 # ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd
 systemctl daemon-reload
 systemctl enable --now caddy vlabs vlabs-backup.timer >/dev/null
 systemctl enable vlabs-caddy-refresh.service >/dev/null
-systemctl restart caddy vlabs
+systemctl restart caddy vlabs vlabs-caddy-refresh
 
 echo -n "  waiting for the API"
 for _ in $(seq 1 30); do
