@@ -1,0 +1,226 @@
+/**
+ * Markdown import/export for EXAM templates. Separate from the lab Markdown
+ * format (client/src/lib/templateFormat.js), which is unchanged.
+ *
+ *   ---
+ *   title: Network Fundamentals — Unit Test
+ *   description: 20 minutes, closed book
+ *   ---
+ *
+ *   # Part 1 · Addressing
+ *
+ *   ## [single] Which address is a valid private IPv4 address?
+ *   - [ ] 8.8.8.8
+ *   - [x] 192.168.1.20
+ *   - [ ] 172.32.0.1
+ *   > points: 2
+ *
+ *   ## [multiple] Select every protocol that runs over UDP.
+ *   - [x] DNS
+ *   - [ ] SSH
+ *   - [x] DHCP
+ *
+ *   ## [truefalse] A /24 network has 254 usable host addresses.
+ *   > answer: true
+ *
+ *   ## [short] What port does HTTPS use by default?
+ *   > accept: 443 | tcp/443
+ *
+ *   ## [long]
+ *   Explain, in a few sentences, why VLANs are used.
+ *   Any Markdown works here, including images: ![topology](topology.png)
+ *   > points: 5
+ *
+ * `# ` starts a section and `## [type]` a question. Text after the type and
+ * the lines below it form the prompt. Types: single (multiple choice, one
+ * answer), multiple (select all that apply), truefalse, short, long — plus
+ * the aliases in TYPE_ALIASES. Options are `- [ ]` / `- [x]` lines (x marks
+ * the correct ones). `> points: N` sets the weight (default 1); `> answer:`
+ * gives a true/false answer; `> accept:` lists accepted short answers
+ * separated by ` | ` (write `\|` for a literal pipe) — a short question
+ * without `> accept:` is marked by hand, as is every long question. Fenced
+ * code blocks are copied verbatim.
+ */
+
+import { normaliseExam, QUESTION_TYPES } from './exam-schema.js';
+
+export const TYPE_ALIASES = Object.freeze({
+  single: 'single',
+  mcq: 'single',
+  choice: 'single',
+  radio: 'single',
+  multiple: 'multiple',
+  multi: 'multiple',
+  checkbox: 'multiple',
+  checkboxes: 'multiple',
+  truefalse: 'truefalse',
+  'true-false': 'truefalse',
+  tf: 'truefalse',
+  short: 'short',
+  text: 'short',
+  'short-answer': 'short',
+  long: 'long',
+  essay: 'long',
+  'long-answer': 'long',
+});
+
+const OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
+const DIRECTIVE_RE = /^>\s*(points|answer|accept)\s*:\s*(.*)$/i;
+const FENCE_RE = /^\s*(```|~~~)/;
+
+const splitPipes = (s) =>
+  String(s)
+    .split(/(?<!\\)\|/)
+    .map((p) => p.replace(/\\\|/g, '|').trim())
+    .filter(Boolean);
+
+/** Parse exam Markdown into a canonical exam. Throws on an unusable file. */
+export function parseExamMarkdown(text) {
+  const lines = String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
+  const exam = { kind: 'exam', title: '', description: '', content: [] };
+  let i = 0;
+
+  if (lines[0]?.trim() === '---') {
+    i = 1;
+    while (i < lines.length && lines[i].trim() !== '---') {
+      const m = /^([A-Za-z_]+)\s*:\s*(.*)$/.exec(lines[i]);
+      if (m) {
+        const key = m[1].toLowerCase();
+        if (key === 'title') exam.title = m[2].trim();
+        else if (key === 'description') exam.description = m[2].trim();
+      }
+      i += 1;
+    }
+    i += 1; // closing ---
+  }
+
+  let section = null;
+  let q = null;
+  let body = [];
+  let heading = '';
+  let inFence = false;
+
+  const flush = () => {
+    if (!q) return;
+    q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
+    section.questions.push(q);
+    q = null;
+    body = [];
+    heading = '';
+  };
+
+  for (; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (FENCE_RE.test(line)) inFence = !inFence;
+    if (!inFence && /^#\s+/.test(line)) {
+      flush();
+      section = { title: line.replace(/^#\s+/, '').trim(), questions: [] };
+      exam.content.push(section);
+      continue;
+    }
+    if (!inFence && /^##\s+/.test(line)) {
+      flush();
+      if (!section) {
+        section = { title: 'Section 1', questions: [] };
+        exam.content.push(section);
+      }
+      const rest = line.replace(/^##\s+/, '');
+      const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+      const rawType = m ? m[1].trim().toLowerCase() : 'single';
+      const type = TYPE_ALIASES[rawType];
+      if (!type) throw new Error(`Unknown question type "[${m[1]}]" on line ${i + 1}`);
+      q = { type, points: 1, options: [], correct: type === 'multiple' ? [] : null, accepted: [] };
+      heading = m ? m[2] : rest;
+      continue;
+    }
+    if (!q) continue; // text outside a question (e.g. section intro) is ignored
+    if (!inFence) {
+      const opt = OPTION_RE.exec(line);
+      if (opt && QUESTION_TYPES[q.type].hasOptions) {
+        q.options.push(opt[2].trim());
+        if (opt[1].toLowerCase() === 'x') {
+          if (q.type === 'multiple') q.correct.push(q.options.length - 1);
+          else q.correct = q.options.length - 1;
+        }
+        continue;
+      }
+      const d = DIRECTIVE_RE.exec(line);
+      if (d) {
+        const key = d[1].toLowerCase();
+        if (key === 'points') q.points = Number(d[2]);
+        else if (key === 'answer') q.correct = d[2].trim();
+        else if (key === 'accept') q.accepted.push(...splitPipes(d[2]));
+        continue;
+      }
+    }
+    body.push(line);
+  }
+  flush();
+
+  if (!exam.content.length) throw new Error('No sections found (start one with "# Title")');
+  return normaliseExam(exam);
+}
+
+/** Serialise a canonical exam to the Markdown format above. */
+export function examToMarkdown(input) {
+  const exam = normaliseExam(input);
+  const out = ['---', `title: ${exam.title}`];
+  if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
+  out.push('---', '');
+  for (const sec of exam.content) {
+    out.push(`# ${sec.title}`, '');
+    for (const q of sec.questions) {
+      const prompt = q.prompt.trim();
+      const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
+      out.push(`## [${q.type}]${oneLine ? ` ${prompt}` : ''}`);
+      if (!oneLine && prompt) out.push(prompt);
+      if (QUESTION_TYPES[q.type].hasOptions) {
+        q.options.forEach((o, oi) => {
+          const on = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+          out.push(`- [${on ? 'x' : ' '}] ${o}`);
+        });
+      }
+      if (q.type === 'truefalse') out.push(`> answer: ${q.correct ? 'true' : 'false'}`);
+      if (q.type === 'short' && q.accepted.length) {
+        out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
+      }
+      if (q.points !== 1) out.push(`> points: ${q.points}`);
+      out.push('');
+    }
+  }
+  return `${out.join('\n').trimEnd()}\n`;
+}
+
+export const SAMPLE_EXAM_MARKDOWN = `---
+title: Network Fundamentals — Quiz (Sample)
+description: A short sample exam showing every question type.
+---
+
+# Part 1 · Addressing
+
+## [single] Which address is a valid private IPv4 address?
+- [ ] 8.8.8.8
+- [x] 192.168.1.20
+- [ ] 172.32.0.1
+> points: 2
+
+## [multiple] Select every protocol that normally runs over UDP.
+- [x] DNS
+- [ ] SSH
+- [x] DHCP
+- [ ] HTTPS
+
+## [truefalse] A /24 network has 254 usable host addresses.
+> answer: true
+
+# Part 2 · Short answers
+
+## [short] What TCP port does HTTPS use by default?
+> accept: 443 | tcp/443
+
+## [long]
+In two or three sentences, explain why networks are split into VLANs.
+> points: 5
+`;

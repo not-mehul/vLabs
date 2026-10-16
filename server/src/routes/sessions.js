@@ -5,6 +5,18 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
 import { isSectionCleared, stepHasCheckpoint, checkpointMode } from '../lib/templating.js';
+import { labProgress } from '../lib/labProgress.js';
+import {
+  examParticipantView,
+  examParticipantDetail,
+  examQuestionStats,
+  examQuestionResponses,
+  gradeParticipant,
+  parseObject,
+  parseArray,
+} from '../lib/examGrading.js';
+import { listQuestions, totalPoints, describeExpected } from '../../../shared/exam-schema.js';
+import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
 import { log } from '../lib/logger.js';
 
@@ -16,9 +28,9 @@ const q = {
   template: db.prepare('SELECT * FROM templates WHERE id = ?'),
   insert: db.prepare(
     `INSERT INTO sessions
-       (room_code, title, template_id, instructor_id, template_version, template_title,
+       (room_code, title, kind, template_id, instructor_id, template_version, template_title,
         content, variables, is_active, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
   ),
   byId: db.prepare('SELECT * FROM sessions WHERE id = ?'),
   // LEFT JOIN: the master template may have been archived or deleted since;
@@ -30,7 +42,7 @@ const q = {
       WHERE s.id = ? AND s.instructor_id = ?`,
   ),
   list: db.prepare(
-    `SELECT s.id, s.room_code, s.title, s.template_id, s.template_title, s.template_version,
+    `SELECT s.id, s.room_code, s.title, s.kind, s.template_id, s.template_title, s.template_version,
             s.is_active, s.expires_at, s.created_at, s.ended_at,
             t.version AS latest_template_version,
             (SELECT COUNT(*) FROM participants p WHERE p.session_id = s.id) AS participant_count
@@ -43,7 +55,10 @@ const q = {
   terminate: db.prepare('UPDATE sessions SET is_active = 0, ended_at = ? WHERE id = ?'),
   extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?'),
   remove: db.prepare('DELETE FROM sessions WHERE id = ?'),
+  setGrades: db.prepare('UPDATE participants SET grades = ? WHERE id = ?'),
 };
+
+const isExam = (row) => row.kind === 'exam';
 
 /** Generate a 6-digit code not currently used by an active session. */
 function generateRoomCode() {
@@ -107,43 +122,46 @@ function sectionTimesView(p, sectionCount, now) {
   return out;
 }
 
-/** Build the analytics view for one participant. */
+/**
+ * Build the analytics view for one LAB participant.
+ *
+ * The monitor tracks each seat by its FURTHEST section (a monotonic high-water
+ * mark): a participant who goes back to review an earlier section is still
+ * shown where they got to, and sections they moved past stay completed. Their
+ * exact current location (current_section / reviewing) is still reported, and
+ * the participant drawer shows it. Optional / wrap-up sections are flagged and
+ * excluded from progress (see lib/labProgress.js).
+ */
 function participantView(p, sections) {
   const now = nowIso();
   const completed = new Set(JSON.parse(p.completed_checkpoints));
   const sectionCount = sections.length;
-  // Completed = sections the participant has navigated past (monotonic high-
-  // water mark), plus the final section once it is cleared/reached. This avoids
-  // crediting not-yet-visited sections that happen to have no checkpoint.
-  const furthest = p.max_section;
-  let completedSections = Math.min(furthest, sectionCount);
-  if (
-    sectionCount > 0 &&
-    furthest >= sectionCount - 1 &&
-    isSectionCleared(sections[sectionCount - 1], sectionCount - 1, completed)
-  ) {
-    completedSections = sectionCount;
-  }
-  // "Complete" is recorded server-side the moment the manual is cleared, so a
+  const progress = labProgress(sections, p, completed);
+  // "Complete" is recorded server-side the moment the lab is cleared, so a
   // participant who keeps reviewing (never presses Finish) still counts and
   // their clock stays stopped. Rows from before migration 4 fall back to the
-  // cleared-everything computation.
-  const completedAt =
-    p.completed_at ||
-    (completedSections === sectionCount && sectionCount > 0 ? p.finished_at || null : null);
-  const complete = Boolean(completedAt) || (sectionCount > 0 && completedSections === sectionCount);
+  // computed state.
+  const complete = progress.complete;
+  const completedAt = p.completed_at || (complete ? p.finished_at || null : null);
   const finished = Boolean(p.finished_at);
   const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
   const clockEnd = completedAt || (complete ? now : null);
+  const sectionSeconds = sectionTimesView(p, sectionCount, now);
   return {
     id: p.id,
     seat_number: p.seat_number,
     first_name: p.first_name,
     last_name: p.last_name,
     name: `${p.first_name} ${p.last_name}`.trim(),
+    // Where they got to (what the monitor shows)…
+    furthest_section: progress.furthest,
+    // …and exactly where they are right now (participant drawer only).
     current_section: p.current_section,
+    reviewing: !complete && p.current_section < progress.furthest,
     max_section: p.max_section,
-    completed_sections: completedSections,
+    completed_sections: progress.completedCounting,
+    counting_sections: progress.countingTotal,
+    sections_done: progress.done,
     completed_checkpoints: [...completed],
     captured: safeObject(p.captured_values),
     hints_taken: JSON.parse(p.hints_taken || '[]').length,
@@ -155,9 +173,11 @@ function participantView(p, sections) {
     finished_at: p.finished_at,
     status: complete ? 'finished' : secondsSinceSeen < 90 ? 'active' : 'idle',
     seconds_on_current_section: complete ? 0 : secondsBetween(p.section_entered_at, now),
+    // Accumulated time on the furthest section (all visits, incl. the open one).
+    seconds_on_furthest_section: complete ? 0 : sectionSeconds[progress.furthest] || 0,
     total_seconds: secondsBetween(p.joined_at, clockEnd || now),
-    section_seconds: sectionTimesView(p, sectionCount, now),
-    progress_pct: sectionCount > 0 ? Math.round((completedSections / sectionCount) * 100) : 0,
+    section_seconds: sectionSeconds,
+    progress_pct: progress.progressPct,
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsSinceSeen,
@@ -238,7 +258,11 @@ function participantDetail(p, sections) {
     index: i,
     title: sec.title || `Section ${i + 1}`,
     seconds: view.section_seconds[i] || 0,
+    // Exact location: the section on screen right now (even when reviewing).
     current: !view.complete && p.current_section === i,
+    furthest: i === view.furthest_section,
+    optional: isOptionalSection(sec),
+    done: view.sections_done[i],
     cleared: isSectionCleared(sec, i, new Set(view.completed_checkpoints)),
   }));
 
@@ -251,6 +275,7 @@ function summarise(row) {
     id: row.id,
     room_code: row.room_code,
     title: row.title,
+    kind: isExam(row) ? 'exam' : 'lab',
     template_id: row.template_id,
     template_title: row.template_title,
     template_version: row.template_version,
@@ -291,6 +316,7 @@ router.post(
     const info = q.insert.run(
       roomCode,
       title || template.title,
+      template.kind === 'exam' ? 'exam' : 'lab',
       template.id,
       req.instructor.id,
       template.version,
@@ -327,27 +353,97 @@ router.get('/:id/participants/:pid', (req, res) => {
   const pid = Number(req.params.pid);
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
-  res.json(participantDetail(p, JSON.parse(row.content)));
+  const content = JSON.parse(row.content);
+  res.json(isExam(row) ? examParticipantDetail(p, content) : participantDetail(p, content));
 });
+
+/**
+ * PUT /api/sessions/:id/participants/:pid/marks/:key — EXAM sessions only.
+ * Body: { correct: true | false | null }. Marks one response correct or
+ * incorrect by hand (overriding the automatic verdict), or clears the mark
+ * with null. Allowed during and after the session.
+ */
+router.put('/:id/participants/:pid/marks/:key', (req, res) => {
+  const row = ownedOr404(req);
+  if (!isExam(row)) throw httpError(409, 'Marks only apply to exam sessions');
+  const pid = Number(req.params.pid);
+  const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
+  if (!p) throw httpError(404, 'Participant not found');
+  const content = JSON.parse(row.content);
+  const key = String(req.params.key);
+  if (!listQuestions(content).some((x) => x.key === key)) throw httpError(404, 'Unknown question');
+  const verdict = req.body?.correct;
+  if (verdict !== true && verdict !== false && verdict !== null) {
+    throw httpError(400, 'correct must be true, false or null');
+  }
+  const grades = parseObject(p.grades);
+  if (verdict === null) delete grades[key];
+  else grades[key] = { correct: verdict ? 1 : 0, by: req.instructor.username, at: nowIso() };
+  q.setGrades.run(JSON.stringify(grades), p.id);
+  log.info('exam.marked', {
+    session: row.id,
+    participant: p.id,
+    question: key,
+    correct: verdict,
+    instructor: req.instructor.id,
+  });
+  const fresh = q.participant.get(p.id, row.id);
+  res.json(gradeParticipant(fresh, content).find((g) => g.key === key));
+});
+
+/** GET /api/sessions/:id/questions/:key — EXAM sessions: every response to one question. */
+router.get('/:id/questions/:key', (req, res) => {
+  const row = ownedOr404(req);
+  if (!isExam(row)) throw httpError(409, 'Only exam sessions have questions');
+  const out = examQuestionResponses(
+    q.participants.all(row.id),
+    JSON.parse(row.content),
+    String(req.params.key),
+  );
+  if (!out) throw httpError(404, 'Unknown question');
+  res.json(out);
+});
+
+/** Monitor data for an EXAM session. */
+function examSessionDetail(row) {
+  const content = JSON.parse(row.content);
+  const rows = q.participants.all(row.id);
+  const participants = rows.map((p) => examParticipantView(p, content));
+  return {
+    ...summarise(row),
+    template_exists: row.latest_template_version != null,
+    template_archived: Boolean(row.template_archived_at),
+    section_count: content.length,
+    question_count: listQuestions(content).length,
+    total_points: totalPoints(content),
+    submitted_count: participants.filter((p) => p.submitted).length,
+    pending_count: participants.reduce((n, p) => n + p.pending_count, 0),
+    questions: examQuestionStats(rows, content),
+    participants,
+  };
+}
 
 /** GET /api/sessions/:id — detail + live analytics dashboard data. */
 router.get('/:id', (req, res) => {
   const row = ownedOr404(req);
+  if (isExam(row)) return res.json(examSessionDetail(row));
   const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
   const participants = q.participants.all(row.id).map((p) => participantView(p, sections));
 
-  // Aggregate: how many seats are currently on each section.
+  // Aggregate: how many seats have got to each section. Seats are placed by
+  // their FURTHEST section, so reviewing an earlier one doesn't move them back.
   const sectionDistribution = sections.map((s, i) => ({
     index: i,
     title: s.title || `Section ${i + 1}`,
+    optional: isOptionalSection(s),
     step_count: (s.steps && s.steps.length) || 0,
     checkpoint_count: (s.steps || []).filter((step) => stepHasCheckpoint(step)).length,
     has_checkpoint: (s.steps || []).some((step) => stepHasCheckpoint(step)),
-    // Seats currently viewing this section (complete seats are counted under `complete`).
-    seats_here: participants.filter((p) => !p.complete && p.current_section === i).length,
-    // Seats that have moved past (or cleared) this section.
-    seats_past: participants.filter((p) => p.complete || p.max_section > i).length,
+    // Seats whose furthest section is this one (complete seats are counted under `complete`).
+    seats_here: participants.filter((p) => !p.complete && p.furthest_section === i).length,
+    // Seats that have completed this section (moved past it, or finished the lab).
+    seats_past: participants.filter((p) => p.complete || p.sections_done[i]).length,
   }));
   const completeCount = participants.filter((p) => p.complete).length;
 
@@ -434,6 +530,7 @@ router.delete('/:id', (req, res) => {
  */
 router.get('/:id/export', (req, res) => {
   const row = ownedOr404(req);
+  if (isExam(row)) return res.json(examExport(row));
   const sections = JSON.parse(row.content);
   const captureNames = captureNamesOf(sections);
 
@@ -445,6 +542,8 @@ router.get('/:id/export', (req, res) => {
     number: i + 1,
     title: sec.title || `Section ${i + 1}`,
     step_count: (sec.steps || []).length,
+    // Optional / wrap-up sections are excluded from sections_completed and progress_pct.
+    optional: isOptionalSection(sec),
   }));
   const checkpointIndex = [];
   sections.forEach((sec, si) => {
@@ -474,7 +573,9 @@ router.get('/:id/export', (req, res) => {
       // so every row has the same columns.
       captured: Object.fromEntries(captureNames.map((n) => [n, d.captured[n] ?? ''])),
       current_section: d.current_section + 1,
+      furthest_section: d.furthest_section + 1,
       sections_completed: d.completed_sections,
+      counting_sections: d.counting_sections,
       total_sections: sections.length,
       progress_pct: d.progress_pct,
       checkpoints_cleared: d.completed_checkpoints.length,
@@ -496,6 +597,8 @@ router.get('/:id/export', (req, res) => {
         title: t.title,
         seconds: t.seconds,
         cleared: t.cleared,
+        done: t.done,
+        optional: t.optional,
       })),
       // Every checkpoint in the manual with what this seat typed: the accepted
       // answer (as typed) and each incorrect attempt with its timestamp.
@@ -583,6 +686,97 @@ router.get('/:id/export', (req, res) => {
     attempts,
   });
 });
+
+/**
+ * Export document for an EXAM session: the question index (with expected
+ * answers), one record per participant (score, every response with its
+ * automatic verdict and manual mark), and a chronological log of every
+ * answer change across the class.
+ */
+function examExport(row) {
+  const content = JSON.parse(row.content);
+  const rows = q.participants.all(row.id);
+  const questions = listQuestions(content).map(({ key, si, qi, number, q: qq }) => ({
+    key,
+    number,
+    section_number: si + 1,
+    question_number: qi + 1,
+    section_title: content[si]?.title || `Section ${si + 1}`,
+    type: qq.type,
+    prompt: qq.prompt,
+    options: qq.options,
+    points: qq.points,
+    expected: describeExpected(qq),
+  }));
+  const participants = rows.map((p) => {
+    const v = examParticipantView(p, content);
+    return {
+      number: v.seat_number,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      name: v.name,
+      submitted: v.submitted,
+      submitted_at: v.submitted_at,
+      answered: v.answered,
+      question_count: v.question_count,
+      score: v.score,
+      max_score: v.max_score,
+      score_pct: v.score_pct,
+      pending_count: v.pending_count,
+      fully_graded: v.fully_graded,
+      total_seconds: v.total_seconds,
+      joined_at: p.joined_at,
+      last_seen_at: p.last_seen_at,
+      responses: gradeParticipant(p, content).map((g) => ({
+        key: g.key,
+        number: g.number,
+        response: g.response,
+        answered: g.answered,
+        auto: g.auto,
+        override: g.override,
+        correct: g.correct,
+        pending: g.pending,
+        points_awarded: g.points_awarded,
+        marked_by: g.marked_by,
+        marked_at: g.marked_at,
+      })),
+    };
+  });
+  const answerLog = [];
+  for (const p of rows) {
+    for (const e of parseArray(p.answer_log)) {
+      answerLog.push({
+        at: e.at,
+        number: p.seat_number,
+        name: `${p.first_name} ${p.last_name}`.trim(),
+        question: e.k,
+        response: e.a,
+      });
+    }
+  }
+  answerLog.sort((a, b) => String(a.at).localeCompare(String(b.at)) || a.number - b.number);
+  return {
+    exported_at: nowIso(),
+    session: {
+      id: row.id,
+      kind: 'exam',
+      title: row.title,
+      room_code: row.room_code,
+      template_title: row.template_title,
+      template_version: row.template_version,
+      status: sessionStatus(row),
+      section_count: content.length,
+      question_count: questions.length,
+      total_points: totalPoints(content),
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+      ended_at: row.ended_at,
+    },
+    questions,
+    participants,
+    answer_log: answerLog,
+  };
+}
 
 export { sessionStatus };
 export default router;

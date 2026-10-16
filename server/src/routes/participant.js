@@ -13,6 +13,7 @@ import { signParticipantToken } from '../lib/tokens.js';
 import { nowIso, parseUtc, secondsBetween } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
+import { labProgress } from '../lib/labProgress.js';
 import {
   resolveVariables,
   matchCheckpoint,
@@ -133,22 +134,6 @@ function closeOpenVisit(p, times, now) {
 }
 
 /**
- * Is the whole manual cleared? Every checkpoint in every section completed
- * and the participant has reached the last section (so a checkpoint-free
- * final section still has to be opened once).
- */
-function manualComplete(sections, p, completed, reachedLast) {
-  const total = sections.length;
-  if (total === 0) return false;
-  const lastIdx = total - 1;
-  if (!(reachedLast || p.max_section >= lastIdx)) return false;
-  for (let s = 0; s < total; s += 1) {
-    if (!isSectionCleared(sections[s], s, completed)) return false;
-  }
-  return true;
-}
-
-/**
  * Record completion the moment the manual is cleared: freezes the clock
  * (total time = joined → completed) and lets the monitor show "Complete" even
  * if the participant keeps reviewing instead of pressing Finish.
@@ -248,7 +233,7 @@ router.post(
     const nameKey = `${firstName} ${lastName}`.toLowerCase();
     const { participant, resumed } = registerParticipant(session, firstName, lastName, nameKey);
 
-    const { sections } = loadManual(session);
+    const sections = JSON.parse(session.content || '[]');
     const token = signParticipantToken(participant, session);
     log.info(resumed ? 'participant.resumed' : 'participant.joined', {
       session: session.id,
@@ -263,10 +248,11 @@ router.post(
       first_name: participant.first_name,
       last_name: participant.last_name,
       session: {
+        kind: session.kind || 'lab',
         title: session.title,
         expires_at: session.expires_at,
         section_count: sections.length,
-        step_count: countSteps(sections),
+        step_count: session.kind === 'exam' ? 0 : countSteps(sections),
         template_version: session.template_version,
       },
     });
@@ -278,6 +264,15 @@ router.post(
 /*  AFTER the guard so they can key on the verified participant id.           */
 /* -------------------------------------------------------------------------- */
 router.use(requireParticipant);
+
+/**
+ * Everything below except /status is LAB-only. Exam sessions are served by
+ * routes/exam.js (mounted at /api/participant/exam, ahead of this router).
+ */
+router.use((req, res, next) => {
+  if (req.path === '/status' || (req.session.kind || 'lab') === 'lab') return next();
+  res.status(409).json({ error: 'This session is an exam', code: 'WRONG_KIND' });
+});
 
 /**
  * GET /api/participant/content
@@ -335,17 +330,10 @@ router.get(
       rendered.push(section);
     }
 
-    // Monotonic completed-section count for the progress bar (mirrors the
-    // instructor analytics in sessions.js).
+    // Progress for the bar and stepper — the same computation the instructor
+    // monitor uses. Optional / wrap-up sections are flagged and not counted.
     const total = sections.length;
-    let completedSections = Math.min(p.max_section, total);
-    if (
-      total > 0 &&
-      p.max_section >= total - 1 &&
-      isSectionCleared(sections[total - 1], total - 1, completed)
-    ) {
-      completedSections = total;
-    }
+    const progress = labProgress(sections, p, completed);
 
     noStore(res);
     res.json({
@@ -355,10 +343,17 @@ router.get(
       total_sections: total,
       unlocked_section: unlockedSection,
       current_section: Math.min(p.current_section, Math.max(total - 1, 0)),
-      completed_sections: completedSections,
-      progress_pct: total > 0 ? Math.round((completedSections / total) * 100) : 0,
+      completed_sections: progress.completedCounting,
+      counting_sections: progress.countingTotal,
+      progress_pct: progress.progressPct,
+      // Per section index: { optional, done } — titles of locked sections are
+      // deliberately not included.
+      section_flags: sections.map((_, i) => ({
+        optional: progress.optional[i],
+        done: progress.done[i],
+      })),
       completed_checkpoints: [...completed],
-      completed: Boolean(p.completed_at),
+      completed: progress.complete,
       finished: Boolean(p.finished_at),
       expires_at: req.session.expires_at,
       template_version: req.session.template_version,
@@ -436,7 +431,7 @@ router.post(
       section: si,
       step: sti,
     });
-    if (manualComplete(sections, p, completed, si === sections.length - 1)) markCompleted(p, now);
+    if (labProgress(sections, p, completed, si).complete) markCompleted(p, now);
     res.json({
       correct: true,
       section_cleared: isSectionCleared(sections[si], si, completed),
@@ -477,8 +472,8 @@ router.post(
     } else {
       q.touch.run(now, p.id);
     }
-    // Opening a checkpoint-free final section is what completes such a manual.
-    if (manualComplete(sections, p, completed, si === sections.length - 1)) markCompleted(p, now);
+    // Reaching a checkpoint-free last counting section is what completes such a manual.
+    if (labProgress(sections, p, completed).complete) markCompleted(p, now);
     res.json({ current_section: si, completed: Boolean(p.completed_at) });
   }),
 );
@@ -553,8 +548,9 @@ router.post(
 
 /**
  * POST /api/participant/finish
- * Marks the participant as finished (idempotent) — only once every section is
- * complete. Powers the completion screen and the instructor "finished" status.
+ * Marks the participant as finished (idempotent) — only once the lab is
+ * complete (optional / wrap-up sections are not required). Powers the
+ * completion screen and the instructor "finished" status.
  */
 router.post(
   '/finish',
@@ -563,14 +559,10 @@ router.post(
     const p = req.participant;
     const { sections } = loadManual(req.session);
     const completed = completedSetOf(p);
-    const total = sections.length;
-    // Require genuine completion: max_section reached the end and the last
-    // section is cleared.
-    const done =
-      total > 0 &&
-      p.max_section >= total - 1 &&
-      isSectionCleared(sections[total - 1], total - 1, completed);
-    if (!done) throw httpError(400, 'Lab is not complete yet');
+    // Require genuine completion: every counting section cleared and reached.
+    if (!labProgress(sections, p, completed).complete) {
+      throw httpError(400, 'Lab is not complete yet');
+    }
 
     const now = nowIso();
     markCompleted(p, now);
@@ -596,9 +588,11 @@ router.get('/status', contentLimiter, (req, res) => {
   noStore(res);
   res.json({
     session_active: true,
+    kind: req.session.kind || 'lab',
     expires_at: req.session.expires_at,
     completed: Boolean(p.completed_at),
     finished: Boolean(p.finished_at),
+    submitted: Boolean(p.submitted_at),
     template_version: req.session.template_version,
   });
 });

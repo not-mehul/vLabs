@@ -1,7 +1,7 @@
 import { createApp } from './app.js';
 import config from './config.js';
 import db from './db/index.js';
-import { ensureSeed, needsBootstrapInstructor } from './db/seed.js';
+import { ensureSeed, needsBootstrapInstructor, accountsOnDefaultPassword } from './db/seed.js';
 import { sweepExpiredSessions } from './lib/sessionLifecycle.js';
 import { log } from './lib/logger.js';
 
@@ -70,6 +70,7 @@ if (isProd && !config.trustProxyConfigured) {
 
 // Ensure a bootstrap instructor + sample template exist on first run.
 ensureSeed();
+const onDefaultPassword = accountsOnDefaultPassword();
 sweepExpiredSessions();
 
 const app = createApp();
@@ -87,10 +88,10 @@ const server = app.listen(config.port, config.host, () => {
         `  JWT_PARTICIPANT_SECRET to strong random values before deploying.${RESET}`,
     );
   }
-  if (config.seedPasswordIsDefault) {
+  if (onDefaultPassword.length) {
     console.warn(
-      `  ${YELLOW}Note: the bootstrap instructor uses the default password. Change it from\n` +
-        `  the portal (Account → Change password) or set SEED_INSTRUCTOR_PASSWORD.${RESET}`,
+      `  ${YELLOW}Note: ${onDefaultPassword.join(', ')} still use${onDefaultPassword.length === 1 ? 's' : ''} the default password.\n` +
+        `  Change it from the portal (Account → Change password).${RESET}`,
     );
   }
   console.log('');

@@ -12,8 +12,29 @@ const db = new Database(config.dbPath);
 // Pragmas: WAL for better read/write concurrency, foreign keys enforced, and a
 // busy timeout so a concurrent writer (e.g. a CLI seed) waits instead of failing.
 db.pragma('journal_mode = WAL');
+// better-sqlite3 is compiled with SQLITE_DEFAULT_WAL_SYNCHRONOUS=1, so every
+// open after the first one ran with synchronous=NORMAL: commits sat in the
+// WAL without an fsync until the next checkpoint (up to ~1000 pages, which a
+// quiet Pi can take days to reach). Pulling the power — the usual way a
+// classroom Pi gets "rebooted" — then silently rolled back recent writes such
+// as a password change. FULL fsyncs the WAL on every commit; the write volume
+// here (progress pings, answers) is far below what an SD card handles.
+db.pragma('synchronous = FULL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+
+/**
+ * Fold the WAL back into the main database file. Called after rare but
+ * important writes (instructor accounts) so the change also survives someone
+ * copying or restoring only `vlabs.sqlite` without its `-wal` sidecar.
+ */
+export function checkpoint() {
+  try {
+    db.pragma('wal_checkpoint(PASSIVE)');
+  } catch (err) {
+    log.warn('db.checkpoint.failed', { err });
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Schema                                                                    */
@@ -43,6 +64,9 @@ CREATE TABLE IF NOT EXISTS instructors (
 -- "launch session" picker without destroying anything.
 CREATE TABLE IF NOT EXISTS templates (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  -- 'lab' (sections of steps, shared/template-schema.js) or 'exam' (sections
+  -- of questions, shared/exam-schema.js). Fixed at creation.
+  kind        TEXT NOT NULL DEFAULT 'lab',
   title       TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   content     TEXT NOT NULL DEFAULT '[]',
@@ -93,6 +117,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   room_code        TEXT NOT NULL,
   title            TEXT NOT NULL DEFAULT '',
+  -- Copied from the template at launch: 'lab' | 'exam'.
+  kind             TEXT NOT NULL DEFAULT 'lab',
   template_id      INTEGER REFERENCES templates(id) ON DELETE SET NULL,
   instructor_id    INTEGER NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
   template_version INTEGER NOT NULL DEFAULT 1,
@@ -138,6 +164,14 @@ CREATE TABLE IF NOT EXISTS participants (
   section_times          TEXT NOT NULL DEFAULT '{}',
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
+  -- Exam sessions only. answers: { "<section>.<question>": value } (latest
+  -- response per question); answer_log: every change, newest last, capped:
+  --   { k, a, at }; grades: instructor overrides { key: { correct: 0|1,
+  -- by, at } }; submitted_at: when the participant handed the exam in.
+  answers                TEXT NOT NULL DEFAULT '{}',
+  answer_log             TEXT NOT NULL DEFAULT '[]',
+  grades                 TEXT NOT NULL DEFAULT '{}',
+  submitted_at           TEXT,
   -- Set by the server the moment every section is cleared (the clock stops);
   -- finished_at is when the participant pressed Finish (may be later/never).
   completed_at           TEXT,
@@ -271,6 +305,18 @@ const MIGRATIONS = [
       db.exec(
         'UPDATE participants SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL',
       );
+    },
+  },
+  {
+    version: 5,
+    name: 'examination mode: template/session kind, participant answers + grades',
+    up() {
+      addColumnIfMissing('templates', 'kind', "TEXT NOT NULL DEFAULT 'lab'");
+      addColumnIfMissing('sessions', 'kind', "TEXT NOT NULL DEFAULT 'lab'");
+      addColumnIfMissing('participants', 'answers', "TEXT NOT NULL DEFAULT '{}'");
+      addColumnIfMissing('participants', 'answer_log', "TEXT NOT NULL DEFAULT '[]'");
+      addColumnIfMissing('participants', 'grades', "TEXT NOT NULL DEFAULT '{}'");
+      addColumnIfMissing('participants', 'submitted_at', 'TEXT');
     },
   },
 ];

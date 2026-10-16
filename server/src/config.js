@@ -140,6 +140,7 @@ config.weakSecrets =
   isWeakSecret(config.jwt.instructorSecret) || isWeakSecret(config.jwt.participantSecret);
 config.sameSecrets = config.jwt.instructorSecret === config.jwt.participantSecret;
 config.seedPasswordIsDefault = config.seedInstructor.password === DEV_SEED_PASSWORD;
+config.devSeedPassword = DEV_SEED_PASSWORD;
 
 // Kept for backwards compatibility with older log/readme wording.
 config.usingDefaultSecrets = config.weakSecrets;

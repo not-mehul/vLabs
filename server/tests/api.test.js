@@ -97,7 +97,7 @@ before(async () => {
   });
   instructorToken = login.data.token;
   const templates = await call('/api/templates', { token: instructorToken });
-  templateId = templates.data[0].id;
+  templateId = templates.data.find((t) => t.kind === 'lab').id;
   const session = await call('/api/sessions', {
     method: 'POST',
     body: { template_id: templateId, duration_minutes: 60 },
@@ -332,12 +332,15 @@ test('checkpoint validates server-side (incl. alternatives) and unlocks the next
   assert.match(wrapUp, /ABCD\.1234\.WXYZ/);
 });
 
-test('opening the checkpoint-free last section completes the manual; detail shows attempts + timings', async () => {
-  // Section 3 (Wrap Up) has no checkpoint: entering it is what completes the lab.
+test('a wrap-up section is not required or counted; detail shows attempts + timings', async () => {
+  // Section 3 ("Wrap Up") is a wrap-up section: it is excluded from progress,
+  // so clearing Section 2's checkpoint already completed the lab.
   const before = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
   const rowBefore = before.data.participants[0];
-  assert.equal(rowBefore.complete, false);
-  assert.equal(rowBefore.status, 'active');
+  assert.equal(rowBefore.complete, true, 'complete before opening the wrap-up');
+  assert.equal(rowBefore.counting_sections, 2);
+  assert.equal(rowBefore.completed_sections, 2);
+  assert.equal(before.data.section_distribution[2].optional, true);
 
   const progress = await call('/api/participant/progress', {
     method: 'POST',
@@ -360,7 +363,9 @@ test('opening the checkpoint-free last section completes the manual; detail show
   assert.equal(detail.data.section_distribution[2].seats_here, 0);
   assert.equal(detail.data.section_distribution[0].seats_past, 1);
 
-  // Reviewing an earlier section afterwards keeps them complete and frozen.
+  // Reviewing an earlier section afterwards keeps them complete and frozen,
+  // keeps them placed at their furthest section, and reports the exact
+  // location separately.
   await call('/api/participant/progress', {
     method: 'POST',
     body: { section_index: 0 },
@@ -369,6 +374,9 @@ test('opening the checkpoint-free last section completes the manual; detail show
   const again = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
   assert.equal(again.data.participants[0].complete, true);
   assert.equal(again.data.participants[0].total_seconds, row.total_seconds);
+  assert.equal(again.data.participants[0].furthest_section, 2);
+  assert.equal(again.data.participants[0].current_section, 0);
+  assert.deepEqual(again.data.participants[0].sections_done, [true, true, true]);
 
   // Per-participant detail: wrong attempts were logged with what was typed.
   const pd = await call(`/api/sessions/${sessionId}/participants/${row.id}`, {
@@ -869,8 +877,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 4: images, attempt log, section times)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 4);
+test('database schema version is recorded (migration 5: examination mode)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 5);
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()

@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js';
 import templateRoutes from './routes/templates.js';
 import sessionRoutes from './routes/sessions.js';
 import participantRoutes from './routes/participant.js';
+import examRoutes from './routes/exam.js';
 import imageRoutes from './routes/images.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +100,8 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/templates', templateRoutes);
   app.use('/api/sessions', sessionRoutes);
+  // Exam routes first: the lab participant router refuses exam sessions.
+  app.use('/api/participant/exam', examRoutes);
   app.use('/api/participant', participantRoutes);
   app.use('/api/images', imageRoutes);
 
