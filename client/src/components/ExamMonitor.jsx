@@ -222,9 +222,7 @@ function ParticipantExamDrawer({ sessionId, participantId, onClose, onChanged })
                 {d.score}
                 <span className="muted">/{d.max_score}</span>
               </span>
-              <span className="stat__label">
-                Score{d.fully_graded ? '' : ' (provisional)'}
-              </span>
+              <span className="stat__label">Score{d.fully_graded ? '' : ' (provisional)'}</span>
             </div>
             <div className="stat">
               <span className="stat__num">
@@ -265,7 +263,10 @@ function ParticipantExamDrawer({ sessionId, participantId, onClose, onChanged })
 
           <ol className="qreview">
             {shown.map((q) => (
-              <li key={q.key} className={`qreview__item ${q.pending ? 'qreview__item--pending' : ''}`}>
+              <li
+                key={q.key}
+                className={`qreview__item ${q.pending ? 'qreview__item--pending' : ''}`}
+              >
                 <div className="qreview__head">
                   <span className="qreview__num">Q{q.number}</span>
                   <span className="muted small">
@@ -426,9 +427,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
       <div className="panel">
         <div className="panel__head">
           <h2 className="panel__title">Questions</h2>
-          <span className="muted small">
-            Click a question to see and mark every response to it
-          </span>
+          <span className="muted small">Click a question to see and mark every response to it</span>
         </div>
         <div className="table-wrap">
           <table className="table table--clickable">
@@ -549,7 +548,9 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                         </span>
                       </div>
                     </td>
-                    <td title={p.fully_graded ? '' : 'Provisional: some answers still need marking'}>
+                    <td
+                      title={p.fully_graded ? '' : 'Provisional: some answers still need marking'}
+                    >
                       <strong>{p.score}</strong>
                       <span className="muted">/{p.max_score}</span>{' '}
                       <span className="muted small">

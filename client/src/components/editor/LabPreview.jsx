@@ -89,4 +89,3 @@ export default function LabPreview({ id, draft }) {
     </div>
   );
 }
-

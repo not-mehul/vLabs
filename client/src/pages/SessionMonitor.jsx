@@ -237,10 +237,7 @@ function ParticipantDrawer({ sessionId, participantId, onClose }) {
               <p className="drawer__where" role="status">
                 <Icon name="eye" size={14} /> Currently viewing{' '}
                 <strong>
-                  Section {d.current_section + 1}
-                  {d.section_times[d.current_section]
-                    ? ` · ${d.section_times[d.current_section].title}`
-                    : ''}
+                  {d.section_times[d.current_section]?.title || `Section ${d.current_section + 1}`}
                 </strong>
                 {d.reviewing && (
                   <span className="muted">

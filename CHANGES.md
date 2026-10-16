@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.2.0). The first section is the original code
+Newest entry at the bottom (1.5.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -367,3 +367,84 @@ Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
 rules, per-seat images, portability), completion semantics, limits, error
 catalogue and checklist updated. README: highlights, API, data model,
 upgrade notes.
+
+## 1.5.0 — exams, instructor accounts, Template Studio look (2026-10-16)
+
+### Fixes
+
+- **Password changes could be lost on a Pi reboot.** better-sqlite3 is built
+  with `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1`, so every start after the first ran
+  WAL mode with `synchronous=NORMAL`: commits were not fsynced until the next
+  checkpoint (≈1000 pages — days on a quiet Pi). Pulling the power rolled back
+  recent writes such as a password change. Now `synchronous=FULL`, plus a WAL
+  checkpoint after every instructor-account write. The start-up "default
+  password" warning now reads the database (it used to print after every
+  restart from the env var alone, which looked like the change had been lost),
+  and `must_change_password` means "still on a temporary password"
+  (`password_changed_at IS NULL`).
+- Seat-number pill in the monitor table was misaligned: `.seat-num`
+  (`inline-grid`) sat on the `<td>` itself and took it out of table layout. It
+  is now a span inside a centred `.col--seat` cell.
+- The lab checkpoint input had no field styling (rendered as a browser
+  default box).
+
+### Instructor accounts
+
+- New **Instructors** page: list, add (generated one-time temporary password
+  or a chosen one), reset a colleague's password (signs them out everywhere),
+  remove (their sessions move to you; you can't remove yourself).
+- Unlinked **`/instructor/add`** page, reached by URL or a discreet link under
+  the sign-in form: an existing instructor's username + password authorise the
+  new account, so the page grants nothing by itself. Rate-limited like login.
+- API: `GET/POST /auth/instructors`, `POST /auth/instructors/:id/reset-password`,
+  `DELETE /auth/instructors/:id`.
+
+### Labs
+
+- Templates are written in **vLabs Template Studio** and imported (`.zip`
+  package with images, `.md`, `.json`). The portal's lab editor is now a
+  minimal typo editor: every text field is editable, structure is read-only;
+  find-in-steps filter, preview, images and change history kept. The lab
+  template format and its parser are unchanged.
+- **Progress**: a section counts as done once the participant has moved past
+  it, and reviewing it never shows it as in progress again. The monitor places
+  seats by their _furthest_ section (time on section = time on that section);
+  the exact section being viewed is shown only in the participant drawer.
+- **Optional / wrap-up sections** (title contains optional, bonus, extra
+  credit, stretch, wrap up…) are excluded from progress and completion
+  (`shared/lab-progress.js`); tagged in the stepper and the monitor.
+- **Hints**: every hint label is listed in a hints panel with a viewed
+  counter; open any, in any order. The solution still needs every hint opened.
+
+### Examination mode (new)
+
+- New template kind `exam` with its own schema (`shared/exam-schema.js`) and
+  Markdown format (`shared/exam-format.js`): single choice, select-all,
+  true/false, short answer (auto-graded against accepted answers, else by
+  hand) and long answer (by hand). Pluggable question-type registry.
+- Participant exam page: all questions available, autosave, review page with
+  unanswered list, submit lock; correct answers and scores never sent.
+- Exam monitor: per-question stats (click to mark every response to a
+  question), per-participant scores (provisional while marking is pending),
+  participant drawer with options/expected/response/history and
+  Correct / Incorrect / Clear marks. Exports: results CSV, answer key CSV,
+  answer-log CSV, JSON.
+- Exam editor in the portal (sections, questions, options, correct answers,
+  points; Markdown/JSON import/export; participant-view preview). A sample
+  exam is seeded on fresh installs. Guide: `docs/EXAM_GUIDE.md`.
+- Migration 5: `templates.kind`, `sessions.kind`, `participants.answers`,
+  `answer_log`, `grades`, `submitted_at`.
+
+### Look and feel
+
+- UI restyled to match vLabs Template Studio: slate neutrals, indigo accent,
+  Studio dark surfaces, Inter + JetBrains Mono (self-hosted; Poppins removed),
+  tighter radii, slate-900 / indigo primary actions, refreshed favicon and app
+  icons. New client dependencies: `@fontsource/inter`,
+  `@fontsource/jetbrains-mono`, `jszip` (lazy-loaded, only for `.zip` import).
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual — migration 5 runs on start. Existing labs keep
+working unchanged; give optional / wrap-up sections a title that says so if
+they should not count towards progress.

@@ -200,4 +200,3 @@ export default function ImageLibrary({ images, missing, onChange }) {
     </section>
   );
 }
-

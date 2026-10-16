@@ -79,4 +79,3 @@ export default function ChangeHistory({ audit, onRevert }) {
     </ul>
   );
 }
-

@@ -329,7 +329,11 @@ export default function Exam() {
               />
             ))}
             <div className="section-nav">
-              <button className="btn btn--ghost" disabled={view === 0} onClick={() => goTo(view - 1)}>
+              <button
+                className="btn btn--ghost"
+                disabled={view === 0}
+                onClick={() => goTo(view - 1)}
+              >
                 <Icon name="chevronLeft" size={16} /> Previous
               </button>
               {view < sections.length - 1 ? (

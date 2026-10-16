@@ -6,7 +6,19 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.4.0**.
+Applies to vLabs **1.5.0**.
+
+> **Where labs are written.** Labs are authored in **vLabs Template Studio**
+> (`docs/vlabs_template_studio.html`, a standalone page — open it in a
+> browser) and imported into the portal under **Templates → Import lab** as
+> the Studio's `.zip` package (template + images), `.md` or `.json`. The
+> portal's lab page is a minimal editor for fixing typos only: every text
+> field can be corrected, but sections, steps, checkpoints and variables
+> cannot be added, removed or reordered there. Restructure in the Studio and
+> re-import. The format described below is unchanged and is what both read.
+>
+> **Exams** are a separate template kind with their own format — see
+> [EXAM_GUIDE.md](EXAM_GUIDE.md).
 
 ---
 
@@ -43,11 +55,11 @@ Applies to vLabs **1.4.0**.
 
 1. You write a **template**: a title, optional description, a list of
    **variables** (formulas), and ordered **sections** of ordered **steps**.
-2. You create it in the instructor portal (**Templates → New**), either by
-   typing in the editor or by **importing** a `.md` or `.json` file. The
-   editor shows a live warning for unknown placeholders, has a **Preview**
-   that renders the manual for any seat number, and keeps a change history
-   with revert.
+2. You write it in **vLabs Template Studio** and import it in the portal
+   (**Templates → Import lab**) as a `.zip` package, `.md` or `.json`. The
+   portal shows a live warning for unknown placeholders, has a **Preview**
+   that renders the manual for any seat number, lets you correct typos in
+   any text, and keeps a change history with revert.
 3. **Saving validates** the whole template. If any rule in this guide is
    broken the save is refused and every problem is listed with its location
    ("Section 2 · step 3 checkpoint answer"). Nothing partial is stored.
@@ -518,12 +530,30 @@ Understanding delivery helps you place checkpoints well.
 - Within the furthest unlocked section, steps are revealed **up to and
   including the first step whose checkpoint is still open**. Clearing it
   reveals the rest of the section (up to the next open checkpoint).
-- A participant counts as **complete** the moment every section is cleared
-  (and the last section has been opened) — their clock stops and the monitor
-  shows *Complete* even if they keep reviewing. **Finish** then shows the
-  completion screen; it is not required.
+- A section counts as **done** once the participant has **moved past it**
+  (or it is the last section they need and its checkpoints are cleared).
+  Going back to review a done section never makes it "in progress" again:
+  the monitor keeps placing the participant at the furthest section they
+  reached, and only their own detail drawer shows the section they are
+  looking at right now.
+- **Optional and wrap-up sections don't count.** A section whose title
+  contains *optional*, *bonus*, *extra credit*, *stretch* / *stretch goal*,
+  or *wrap up* / *wrap-up* / *wrapping up* (any case) is left out of
+  "x / y sections", the progress percentage and completion. Participants
+  still see it, can do it, and its checkpoints still gate what comes after
+  it — it just isn't required. Name such sections accordingly, e.g.
+  `# Section 4 · Wrap up` or `# Optional: VLAN tagging`. (This is read from
+  the title at display time; the template format itself has no flag.)
+- A participant counts as **complete** the moment every counting section is
+  cleared and they have reached the last one — their clock stops and the
+  monitor shows *Complete* even if they keep reviewing or carry on into a
+  wrap-up section. **Finish** then shows the completion screen; it is not
+  required.
 - Participants can always navigate **back** to earlier sections to review;
   the stepper shows locked sections greyed out.
+- Every hint on a step is listed with its label visible; participants open
+  whichever they need, in any order. The step's **solution** unlocks only
+  once **every** hint on that step has been opened.
 - Hints, solutions, checkpoints and progress reports all go through the same
   reachability gate: a participant cannot act on a step they cannot see.
 - Rejoining with the same name (any case) resumes the same seat, progress and

@@ -109,7 +109,9 @@ export default function Instructors() {
     setIssued(null);
     setBusy(true);
     try {
-      const res = await call((t) => api.createInstructor(t, { username: username.trim(), password }));
+      const res = await call((t) =>
+        api.createInstructor(t, { username: username.trim(), password }),
+      );
       if (res.temporary_password) {
         setIssued({ username: res.instructor.username, password: res.temporary_password });
       } else {
@@ -214,7 +216,10 @@ export default function Instructors() {
                     <td className="col--sm">
                       {i.session_count}
                       {i.active_session_count > 0 && (
-                        <span className="status-live"> · {i.active_session_count} live</span>
+                        <>
+                          {' · '}
+                          <span className="status-live">{i.active_session_count} live</span>
+                        </>
                       )}
                     </td>
                     <td className="col--lg muted">{formatDateTime(i.created_at)}</td>
