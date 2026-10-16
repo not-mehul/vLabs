@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import Join from './pages/Join.jsx';
 import Lab from './pages/Lab.jsx';
+import Exam from './pages/Exam.jsx';
 
 // The instructor portal is a separate audience from participants (the bulk of
 // traffic), so lazy-load it into its own chunk — a participant never downloads
@@ -13,6 +14,8 @@ const Templates = lazy(() => import('./pages/Templates.jsx'));
 const TemplateEditor = lazy(() => import('./pages/TemplateEditor.jsx'));
 const SessionMonitor = lazy(() => import('./pages/SessionMonitor.jsx'));
 const Account = lazy(() => import('./pages/Account.jsx'));
+const Instructors = lazy(() => import('./pages/Instructors.jsx'));
+const AddInstructor = lazy(() => import('./pages/AddInstructor.jsx'));
 
 /** Gate instructor-only routes behind a token. */
 function RequireInstructor({ children }) {
@@ -32,9 +35,13 @@ export default function App() {
         <Route path="/" element={<Join />} />
         <Route path="/join" element={<Navigate to="/" replace />} />
         <Route path="/lab" element={<Lab />} />
+        <Route path="/exam" element={<Exam />} />
 
         {/* Instructor portal */}
         <Route path="/instructor/login" element={<InstructorLogin />} />
+        {/* Unlinked: reached by URL or the discreet link under the sign-in
+            form. An existing instructor's credentials authorise the account. */}
+        <Route path="/instructor/add" element={<AddInstructor />} />
         <Route
           path="/instructor"
           element={
@@ -72,6 +79,14 @@ export default function App() {
           element={
             <RequireInstructor>
               <Account />
+            </RequireInstructor>
+          }
+        />
+        <Route
+          path="/instructor/instructors"
+          element={
+            <RequireInstructor>
+              <Instructors />
             </RequireInstructor>
           }
         />

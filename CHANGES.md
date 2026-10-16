@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.2.0). The first section is the original code
+Newest entry at the bottom (1.7.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -367,3 +367,219 @@ Reviewed every screen against a laptop (1280–1440) and iPad (1024 landscape,
 rules, per-seat images, portability), completion semantics, limits, error
 catalogue and checklist updated. README: highlights, API, data model,
 upgrade notes.
+
+## 1.5.0 — exams, instructor accounts, Template Studio look (2026-10-16)
+
+### Fixes
+
+- **Password changes could be lost on a Pi reboot.** better-sqlite3 is built
+  with `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1`, so every start after the first ran
+  WAL mode with `synchronous=NORMAL`: commits were not fsynced until the next
+  checkpoint (≈1000 pages — days on a quiet Pi). Pulling the power rolled back
+  recent writes such as a password change. Now `synchronous=FULL`, plus a WAL
+  checkpoint after every instructor-account write. The start-up "default
+  password" warning now reads the database (it used to print after every
+  restart from the env var alone, which looked like the change had been lost),
+  and `must_change_password` means "still on a temporary password"
+  (`password_changed_at IS NULL`).
+- Seat-number pill in the monitor table was misaligned: `.seat-num`
+  (`inline-grid`) sat on the `<td>` itself and took it out of table layout. It
+  is now a span inside a centred `.col--seat` cell.
+- The lab checkpoint input had no field styling (rendered as a browser
+  default box).
+
+### Instructor accounts
+
+- New **Instructors** page: list, add (generated one-time temporary password
+  or a chosen one), reset a colleague's password (signs them out everywhere),
+  remove (their sessions move to you; you can't remove yourself).
+- Unlinked **`/instructor/add`** page, reached by URL or a discreet link under
+  the sign-in form: an existing instructor's username + password authorise the
+  new account, so the page grants nothing by itself. Rate-limited like login.
+- API: `GET/POST /auth/instructors`, `POST /auth/instructors/:id/reset-password`,
+  `DELETE /auth/instructors/:id`.
+
+### Labs
+
+- Templates are written in **vLabs Template Studio** and imported (`.zip`
+  package with images, `.md`, `.json`). The portal's lab editor is now a
+  minimal typo editor: every text field is editable, structure is read-only;
+  find-in-steps filter, preview, images and change history kept. The lab
+  template format and its parser are unchanged.
+- **Progress**: a section counts as done once the participant has moved past
+  it, and reviewing it never shows it as in progress again. The monitor places
+  seats by their _furthest_ section (time on section = time on that section);
+  the exact section being viewed is shown only in the participant drawer.
+- **Optional / wrap-up sections** (title contains optional, bonus, extra
+  credit, stretch, wrap up…) are excluded from progress and completion
+  (`shared/lab-progress.js`); tagged in the stepper and the monitor.
+- **Hints**: every hint label is listed in a hints panel with a viewed
+  counter; open any, in any order. The solution still needs every hint opened.
+
+### Examination mode (new)
+
+- New template kind `exam` with its own schema (`shared/exam-schema.js`) and
+  Markdown format (`shared/exam-format.js`): single choice, select-all,
+  true/false, short answer (auto-graded against accepted answers, else by
+  hand) and long answer (by hand). Pluggable question-type registry.
+- Participant exam page: all questions available, autosave, review page with
+  unanswered list, submit lock; correct answers and scores never sent.
+- Exam monitor: per-question stats (click to mark every response to a
+  question), per-participant scores (provisional while marking is pending),
+  participant drawer with options/expected/response/history and
+  Correct / Incorrect / Clear marks. Exports: results CSV, answer key CSV,
+  answer-log CSV, JSON.
+- Exam editor in the portal (sections, questions, options, correct answers,
+  points; Markdown/JSON import/export; participant-view preview). A sample
+  exam is seeded on fresh installs. Guide: `docs/EXAM_GUIDE.md`.
+- Migration 5: `templates.kind`, `sessions.kind`, `participants.answers`,
+  `answer_log`, `grades`, `submitted_at`.
+
+### Look and feel
+
+- UI restyled to match vLabs Template Studio: slate neutrals, indigo accent,
+  Studio dark surfaces, Inter + JetBrains Mono (self-hosted; Poppins removed),
+  tighter radii, slate-900 / indigo primary actions, refreshed favicon and app
+  icons. New client dependencies: `@fontsource/inter`,
+  `@fontsource/jetbrains-mono`, `jszip` (lazy-loaded, only for `.zip` import).
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual — migration 5 runs on start. Existing labs keep
+working unchanged; give optional / wrap-up sections a title that says so if
+they should not count towards progress.
+
+## 1.5.1 — production readiness audit (2026-10-16)
+
+Full audit of architecture, security, data safety and operations; report in
+[docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md). Fixes:
+
+- **Dependencies**: `npm audit fix` (non-breaking) — server had a critical
+  (proxy-addr IP spoofing) and a high (compression DoS) advisory that would
+  also have failed CI's audit step.
+- **Exam seats are device-bound**: joining an exam hands out a resume key;
+  rejoining that name without it is refused (`SEAT_TAKEN`). Instructor **Move
+  to another device** releases the seat and signs the old device out
+  (`SEAT_RELEASED`, participant `token_version`).
+- **Exam answer history** moved from a JSON column rewritten on every
+  autosave to an append-only `exam_answer_events` table (SD-card wear;
+  migration 6 copies existing history).
+- **Instructor seat actions**: remove a participant (labs and exams), reopen a
+  submitted exam, move an exam seat to another device.
+- **Template saves** carry `expected_version`; a save over a colleague's newer
+  version is refused (`VERSION_CONFLICT`) instead of discarding it.
+- **Countdowns** correct for device clock skew (`server_time` in status,
+  content, exam and session detail).
+- **Exam autosave**: typed answers awaiting the debounce are flushed with
+  `fetch(keepalive)` when the tab is hidden or closed.
+- **Error boundary** around the app (no more blank page on a render error).
+- **Ops**: added the missing `vlabs-caddy-refresh.service` (boot-time
+  certificate IP refresh) to install/update/uninstall and CI; empty
+  `CORS_ORIGINS` now means none; presence writes throttled to one per 10 s per
+  seat; mutating participant handlers re-read the row before writing; CI also
+  runs on `smarty/**` pushes.
+- Docs: deployment runbook (instructor accounts, exam day, troubleshooting),
+  exam guide, README API.
+
+## 1.6.0 — time allocated per section, class breaks, gated exams
+
+### Time allocated per section (labs and exams)
+
+- A section may declare the **minutes allocated** to it: `> minutes: N` under
+  the `#` heading (lab and exam Markdown), `"minutes": N` in JSON, the minutes
+  box in Template Studio's section header, or the field under each section in
+  the portal's lab / exam editor. Whole minutes 1–600; optional.
+- The allocation decides when a participant is spending too long. The monitor
+  judges time on the furthest section against it: amber from 80 %, red over
+  100 %. Sections without one keep the old 8 / 15 min thresholds. The time
+  column reads _spent / allocated_.
+- **Average time per section**: the section cards show the allocation and the
+  average time of the participants who completed the section. The average is
+  marked final once everyone has moved on. It is in the JSON export too
+  (`minutes`, `avg_seconds`, `completed_count`, `avg_final`).
+- Backward compatible: the lab Markdown parser is unchanged except for this
+  one directive, which sits where text under `#` was always discarded. Older
+  vLabs and Studio versions ignore it. Templates without it behave as before.
+
+### Class breaks
+
+- **Start break / End break** on the session monitor
+  (`POST /sessions/:id/break`). Break time is excluded from every
+  section-time figure, including visits that straddle a break and
+  participants who join mid-break. Counters resume for everyone when the
+  break ends. Participants see a banner. The session countdown is not
+  paused. Ending a session ends a running break. Stored as intervals in
+  `sessions.breaks` (**migration 7**).
+
+### Exams
+
+- **Sections unlock like a lab's**: a section opens once every question
+  before it is answered. Locked sections are not sent and cannot be answered
+  (`403`). Participants navigate freely up to the furthest section reached.
+- **No review after submitting**: once handed in, the exam API returns no
+  questions and no answers, only the answered count.
+- Exams are timed per section like labs (`POST /participant/exam/progress`).
+  Submitting stops the clock. The monitor gains _Where everyone got to_,
+  per-participant section and time against the allocation, and time per
+  section in the drawer. Results CSV adds `furthest_section` and
+  `time_s<N>_…` columns.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual — migration 7 runs on start. Running sessions
+continue; add `> minutes:` to templates (or set it in the editor) when you
+want allocation-based alerts.
+
+## 1.7.0 — exams in Template Studio, section details in the monitor
+
+### Template Studio writes exams
+
+- **New → New Exam** (and **Examples → E. Network Fundamentals Quiz**) puts
+  the Studio in exam mode. You get parts with time allocated, and questions of
+  every vLabs type (multiple choice, select all, true/false, short and long
+  answer) with points and correct answers. The image library and Markdown
+  toolbar work as for labs. Lab-only tools (variables, lineage, tokens) are
+  hidden.
+- Exam outline, search and validation use vLabs' own wording. The
+  **Participant Preview** lets you answer the exam, **Check my answers**
+  (graded exactly as the server grades) and **Show answer key**.
+- **Export** writes the vLabs exam format: `.zip` package (exam + images),
+  `.md` (now with `kind: exam` in the front matter) or `.json`
+  (`"kind": "exam"`). **Import** reads exams as well as labs. Lab authoring is
+  unchanged.
+- The Studio carries its own copy of the exam format (a DOM-free script
+  block). `client/tests/studioExamParity.test.js` checks that copy against
+  the app's modules, so the two cannot drift apart unnoticed.
+
+### vLabs imports Studio exams
+
+- **Templates → Import** (was _Import lab_) accepts a lab or an exam, as
+  `.zip`, `.md` or `.json`. Exams are recognised by `kind: exam` or by their
+  question types. A package's images are uploaded, and the exam opens in the
+  exam editor ready to save. The exam editor's own Import accepts Studio
+  `.zip` packages too. Each editor refuses the other kind with a clear
+  message.
+- Lab parsing is unchanged. Exam Markdown without the new `kind: exam` line
+  still imports.
+
+### Monitor: Sections panel and section details
+
+- _Where everyone got to_ is now **Sections**. The cards show only the basics:
+  participants on the section, how many completed it, and whether it is
+  optional.
+- **Click a section** for its details in a side panel, as for participants:
+  - time allocated, plus average (_so far_ or _final_), median, fastest and
+    slowest times
+  - how many took longer than allocated, and how many still on it are nearing
+    or over
+  - who is on it, who completed it (with their times) and who has not reached
+    it; click anyone to open their details
+  - labs: per step, hints opened, solutions revealed, and checkpoint results
+    with the most common wrong answers
+  - exams: the section's questions with answered, correct and to-mark counts;
+    click one to mark it
+- New endpoint `GET /api/sessions/:id/sections/:index`.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.

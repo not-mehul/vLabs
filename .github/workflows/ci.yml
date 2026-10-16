@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'claude/**']
+    branches: [main, 'claude/**', 'smarty/**']
   pull_request:
 
 permissions:
@@ -99,5 +99,5 @@ jobs:
           exit 1
       - name: systemd unit and Caddyfile sanity
         run: |
-          systemd-analyze verify --man=no deploy/pi/vlabs.service deploy/pi/vlabs-backup.timer || true
+          systemd-analyze verify --man=no deploy/pi/vlabs.service deploy/pi/vlabs-backup.timer deploy/pi/vlabs-caddy-refresh.service || true
           bash -n deploy/pi/*.sh

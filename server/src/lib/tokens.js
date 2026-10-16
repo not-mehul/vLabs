@@ -45,6 +45,9 @@ export function signParticipantToken(participant, session) {
       name: `${participant.first_name} ${participant.last_name}`.trim(),
       session: session.id,
       role: 'participant',
+      // Seat version: bumped when the instructor releases the seat, which
+      // signs out the device that held it.
+      tv: participant.token_version ?? 0,
     },
     config.jwt.participantSecret,
     { expiresIn: config.jwt.participantTtl, algorithm: 'HS256' },

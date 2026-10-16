@@ -6,7 +6,22 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.4.0**.
+Applies to vLabs **1.7.0**.
+
+> **Where labs are written.** Labs are authored in **vLabs Template Studio**
+> (`docs/vlabs_template_studio.html`, a standalone page — open it in a
+> browser) and imported into the portal under **Templates → Import** as
+> the Studio's `.zip` package (template + images), `.md` or `.json`. The
+> portal's lab page is a minimal editor for fixing typos only: every text
+> field can be corrected, but sections, steps, checkpoints and variables
+> cannot be added, removed or reordered there. Restructure in the Studio and
+> re-import. The format described below is unchanged and is what both read.
+> The one exception is a section's **time allocated** (§11.1), which can be
+> set in the Studio or in the portal's lab editor.
+>
+> **Exams** are a separate template kind with their own format — see
+> [EXAM_GUIDE.md](EXAM_GUIDE.md). The Studio writes those too (**New → New
+> Exam**), and **Templates → Import** recognises which kind a file is.
 
 ---
 
@@ -23,6 +38,7 @@ Applies to vLabs **1.4.0**.
 9. [Pattern checkpoints: the mask language](#9-pattern-checkpoints-the-mask-language)
 10. [Captured values](#10-captured-values)
 11. [How participants experience the lab](#11-how-participants-experience-the-lab)
+    - [11.1 Time allocated per section, breaks and averages](#111-time-allocated-per-section-breaks-and-averages)
 12. [Writing good step bodies (Markdown that renders)](#12-writing-good-step-bodies)
     - [Links](#links)
     - [Images](#images)
@@ -43,11 +59,11 @@ Applies to vLabs **1.4.0**.
 
 1. You write a **template**: a title, optional description, a list of
    **variables** (formulas), and ordered **sections** of ordered **steps**.
-2. You create it in the instructor portal (**Templates → New**), either by
-   typing in the editor or by **importing** a `.md` or `.json` file. The
-   editor shows a live warning for unknown placeholders, has a **Preview**
-   that renders the manual for any seat number, and keeps a change history
-   with revert.
+2. You write it in **vLabs Template Studio** and import it in the portal
+   (**Templates → Import**) as a `.zip` package, `.md` or `.json`. The
+   portal shows a live warning for unknown placeholders, has a **Preview**
+   that renders the manual for any seat number, lets you correct typos in
+   any text, and keeps a change history with revert.
 3. **Saving validates** the whole template. If any rule in this guide is
    broken the save is refused and every problem is listed with its location
    ("Section 2 · step 3 checkpoint answer"). Nothing partial is stored.
@@ -73,6 +89,7 @@ Template
 ├── variables[]      { name, expression }   formulas evaluated per participant
 └── content[]        Sections, in order
     ├── title        required (may contain placeholders)
+    ├── minutes      optional time allocated, whole minutes 1–600 (§11.1)
     └── steps[]      in order
         ├── type         desk | computer | info
         ├── title        optional (defaults to "Step N")
@@ -113,6 +130,7 @@ variables:
 ---
 
 # Section 1 · Bench preparation
+> minutes: 20
 
 ## [info] About this lab
 Context the participant should read. Nothing to do here.
@@ -151,7 +169,8 @@ Write **{{ SERIAL }}** on the label and attach it.
 | Front matter | `---` … `---` at the very top | Keys: `title`, `description`, `variables`. Optional but strongly recommended (a template without a title cannot be saved). |
 | Title / description | `title: …`, `description: …` | Single line each. The value runs to the end of the line, colons inside are fine. |
 | Variables block | `variables:` then **indented** `NAME = expression` lines | One per line. The block ends at the first non-indented line. |
-| Section | `# Title` | Required before steps; a step before any `#` gets an implicit "Section 1". Text directly under `#` (before the first `##`) is **discarded**. |
+| Section | `# Title` | Required before steps; a step before any `#` gets an implicit "Section 1". Text directly under `#` (before the first `##`) is **discarded**, except a `> minutes:` line. |
+| Time allocated | `> minutes: N` directly under `# Title` | Optional. Whole minutes, 1–600. See §11.1. |
 | Step | `## [type] Title` | `[desk]`, `[computer]` or `[info]`; omitted → `desk`. Title is everything after the bracket. |
 | Body | Plain lines under `##` | Everything that is not a directive. Markdown. Fenced code (``` or ~~~) is copied verbatim — `#` and `>` inside a fence are not interpreted. |
 | Hint | `> hint: Label :: Text` | Further `> …` lines continue the text until a blank line or another directive. Label defaults to "Hint" if empty. |
@@ -518,12 +537,30 @@ Understanding delivery helps you place checkpoints well.
 - Within the furthest unlocked section, steps are revealed **up to and
   including the first step whose checkpoint is still open**. Clearing it
   reveals the rest of the section (up to the next open checkpoint).
-- A participant counts as **complete** the moment every section is cleared
-  (and the last section has been opened) — their clock stops and the monitor
-  shows *Complete* even if they keep reviewing. **Finish** then shows the
-  completion screen; it is not required.
+- A section counts as **done** once the participant has **moved past it**
+  (or it is the last section they need and its checkpoints are cleared).
+  Going back to review a done section never makes it "in progress" again:
+  the monitor keeps placing the participant at the furthest section they
+  reached, and only their own detail drawer shows the section they are
+  looking at right now.
+- **Optional and wrap-up sections don't count.** A section whose title
+  contains *optional*, *bonus*, *extra credit*, *stretch* / *stretch goal*,
+  or *wrap up* / *wrap-up* / *wrapping up* (any case) is left out of
+  "x / y sections", the progress percentage and completion. Participants
+  still see it, can do it, and its checkpoints still gate what comes after
+  it — it just isn't required. Name such sections accordingly, e.g.
+  `# Section 4 · Wrap up` or `# Optional: VLAN tagging`. (This is read from
+  the title at display time; the template format itself has no flag.)
+- A participant counts as **complete** the moment every counting section is
+  cleared and they have reached the last one — their clock stops and the
+  monitor shows *Complete* even if they keep reviewing or carry on into a
+  wrap-up section. **Finish** then shows the completion screen; it is not
+  required.
 - Participants can always navigate **back** to earlier sections to review;
   the stepper shows locked sections greyed out.
+- Every hint on a step is listed with its label visible; participants open
+  whichever they need, in any order. The step's **solution** unlocks only
+  once **every** hint on that step has been opened.
 - Hints, solutions, checkpoints and progress reports all go through the same
   reachability gate: a participant cannot act on a step they cannot see.
 - Rejoining with the same name (any case) resumes the same seat, progress and
@@ -543,6 +580,74 @@ Design patterns:
 Time: the session has an expiry (set at launch, extendable with **+30**).
 The participant sees a countdown; when the session ends or expires every
 request is rejected and the lab closes.
+
+### 11.1 Time allocated per section, breaks and averages
+
+**Declaring it.** Give a section the number of minutes you expect it to
+take. Any of these sets the same value:
+
+- Markdown: a `> minutes: N` line directly under the section's `#` heading.
+- JSON: `"minutes": N` on the section object (§18).
+- Template Studio: the minutes box in the section's header bar.
+- Portal: **Time allocated (minutes)** under each section in the lab editor.
+  This is the one structural setting you can change there without
+  re-importing.
+
+Whole minutes from 1 to 600. Leave it empty for no allocation.
+
+**What it decides.** The session monitor compares each participant's time on
+their **furthest** section with that section's allocation:
+
+| Time on the section | Row | Meaning |
+| --- | --- | --- |
+| under 80 % of the allocation | normal | on pace |
+| 80 % – 100 % | amber | nearing the allocation |
+| over 100 % | red | over the allocation, may need help |
+
+The time column reads *spent / allocated*, e.g. `12m 30s / 15m`. A section
+with **no** allocation uses fixed thresholds instead: amber from 8 minutes,
+red after 15. Participants never see the allocation. Nothing locks when it
+runs out; it is only a signal for the instructor.
+
+**How time is counted.** A participant's time on a section is the sum of
+every visit to it (going back to review adds to it), minus any time during
+a break. Their clock stops when they complete the lab.
+
+**Averages and section details.** The monitor's **Sections** panel shows one
+card per section with just the basics: how many participants are on it, how
+many have completed it, and whether it is optional. **Click a section** to
+open its details:
+
+- The time allocated, and the **average** time of the participants who have
+  completed it. While others are still working it reads *Average so far*,
+  with the number it is based on; once **everyone** has moved past the
+  section it reads *Average (final)*. An average over the allocation is shown
+  in amber. That is a sign the section needs more time, or more help, next
+  run.
+- Median, fastest and slowest times, how many took longer than allocated,
+  and how many of those still on it are nearing or over the allocation.
+- Who is on it now (and their time against the allocation), who has
+  completed it and how long they took, and who has not reached it yet.
+  Click anyone to open their participant details.
+- Per step: hints opened (and by how many participants), solutions
+  revealed, and for checkpoints how many cleared it, the number of wrong
+  attempts, and the most common wrong answers.
+
+The JSON export carries `minutes`, `avg_seconds`, `completed_count` and
+`avg_final` per section. Both CSV and JSON exports have each participant's
+seconds per section.
+
+**Breaks.** **Start break** on the session monitor pauses every
+participant's section timer at once. Participants see a "Break" banner
+within about 15 s. **End break** resumes the timers for everyone. Break time
+never counts towards any section, including for participants who join or
+change section during the break. The session's own countdown is **not**
+paused; use **+30 min** if the break eats into the class. Ending the session
+also ends a running break. The export records `break_total_seconds`.
+
+**Compatibility.** Templates without `minutes` behave exactly as before. The
+`> minutes:` line sits where text has always been discarded, so older vLabs
+versions and older copies of the Studio simply ignore it.
 
 ---
 
@@ -674,6 +779,7 @@ Connect the cable as shown:
 | Solution | 4000 chars |
 | Checkpoint prompt / placeholder / answer | 300 / 120 / 200 chars |
 | Mask | 120 chars, ≤ 3 `*` |
+| Time allocated per section | whole minutes, 1–600 |
 | Image file | 3 MB; PNG/JPEG/GIF/WebP; name ≤ 80 chars |
 | Capture name | 40 chars |
 | Expression | 500 chars, nesting 32 |
@@ -696,6 +802,7 @@ problems at once. Locations read `Section N · step M <field>`.
 | `Title is required` | Empty front-matter `title`. |
 | `At least one section is required` / `Section N has no steps` | Add `#` / `##` headings. |
 | `Section N needs a title` | `#` with nothing after it. |
+| `Section N time allocated must be a whole number of minutes from 1 to 600 (or empty)` | Fix or remove the `> minutes:` value. |
 | `Section N · step M has an empty body` | Every step needs body text (info steps too). |
 | `Variable #N is missing a name` / `has an invalid name` | Fix the `NAME = expr` line; names are `[A-Za-z_][A-Za-z0-9_]*`. |
 | `Variable "X" is reserved` | Rename; see §4.1. |
@@ -1092,6 +1199,7 @@ another tool. Keys not listed are ignored on import; missing ones default.
   "content": [
     {
       "title": "Section 1 · Identify the device",
+      "minutes": 15,
       "steps": [
         {
           "type": "info",

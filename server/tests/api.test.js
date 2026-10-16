@@ -97,7 +97,7 @@ before(async () => {
   });
   instructorToken = login.data.token;
   const templates = await call('/api/templates', { token: instructorToken });
-  templateId = templates.data[0].id;
+  templateId = templates.data.find((t) => t.kind === 'lab').id;
   const session = await call('/api/sessions', {
     method: 'POST',
     body: { template_id: templateId, duration_minutes: 60 },
@@ -332,12 +332,15 @@ test('checkpoint validates server-side (incl. alternatives) and unlocks the next
   assert.match(wrapUp, /ABCD\.1234\.WXYZ/);
 });
 
-test('opening the checkpoint-free last section completes the manual; detail shows attempts + timings', async () => {
-  // Section 3 (Wrap Up) has no checkpoint: entering it is what completes the lab.
+test('a wrap-up section is not required or counted; detail shows attempts + timings', async () => {
+  // Section 3 ("Wrap Up") is a wrap-up section: it is excluded from progress,
+  // so clearing Section 2's checkpoint already completed the lab.
   const before = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
   const rowBefore = before.data.participants[0];
-  assert.equal(rowBefore.complete, false);
-  assert.equal(rowBefore.status, 'active');
+  assert.equal(rowBefore.complete, true, 'complete before opening the wrap-up');
+  assert.equal(rowBefore.counting_sections, 2);
+  assert.equal(rowBefore.completed_sections, 2);
+  assert.equal(before.data.section_distribution[2].optional, true);
 
   const progress = await call('/api/participant/progress', {
     method: 'POST',
@@ -360,7 +363,9 @@ test('opening the checkpoint-free last section completes the manual; detail show
   assert.equal(detail.data.section_distribution[2].seats_here, 0);
   assert.equal(detail.data.section_distribution[0].seats_past, 1);
 
-  // Reviewing an earlier section afterwards keeps them complete and frozen.
+  // Reviewing an earlier section afterwards keeps them complete and frozen,
+  // keeps them placed at their furthest section, and reports the exact
+  // location separately.
   await call('/api/participant/progress', {
     method: 'POST',
     body: { section_index: 0 },
@@ -369,6 +374,9 @@ test('opening the checkpoint-free last section completes the manual; detail show
   const again = await call(`/api/sessions/${sessionId}`, { token: instructorToken });
   assert.equal(again.data.participants[0].complete, true);
   assert.equal(again.data.participants[0].total_seconds, row.total_seconds);
+  assert.equal(again.data.participants[0].furthest_section, 2);
+  assert.equal(again.data.participants[0].current_section, 0);
+  assert.deepEqual(again.data.participants[0].sections_done, [true, true, true]);
 
   // Per-participant detail: wrong attempts were logged with what was typed.
   const pd = await call(`/api/sessions/${sessionId}/participants/${row.id}`, {
@@ -869,8 +877,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 4: images, attempt log, section times)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 4);
+test('database schema version is recorded (migration 7: session breaks)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()
@@ -879,4 +887,182 @@ test('database schema version is recorded (migration 4: images, attempt log, sec
     assert.ok(cols.includes(c), c);
   }
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());
+});
+
+test('template saves refuse to overwrite a newer version (optimistic concurrency)', async () => {
+  const created = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: tinyTemplate('Concurrency'),
+  });
+  const id = created.data.id;
+  const ok = await call(`/api/templates/${id}`, {
+    method: 'PUT',
+    token: instructorToken,
+    body: { ...tinyTemplate('Concurrency (A)'), expected_version: 1 },
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.version, 2);
+  const stale = await call(`/api/templates/${id}`, {
+    method: 'PUT',
+    token: instructorToken,
+    body: { ...tinyTemplate('Concurrency (B)'), expected_version: 1 },
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.data.code, 'VERSION_CONFLICT');
+  const current = await call(`/api/templates/${id}`, { token: instructorToken });
+  assert.equal(current.data.title, 'Concurrency (A)', 'the newer save survived');
+});
+
+test('sections may allocate minutes; invalid allocations are rejected with a reason', async () => {
+  const withMinutes = tinyTemplate('Timed');
+  withMinutes.content[0].minutes = 20;
+  const ok = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: withMinutes,
+  });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.data.content[0].minutes, 20);
+  const none = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: tinyTemplate('Untimed'),
+  });
+  assert.equal('minutes' in none.data.content[0], false, 'storage omits unset minutes');
+  for (const bad of [0, 601, 'abc', 2.5]) {
+    const t = tinyTemplate('Bad time');
+    t.content[0].minutes = bad;
+    const res = await call('/api/templates', { method: 'POST', token: instructorToken, body: t });
+    assert.equal(res.status, 400, `minutes ${bad}`);
+    assert.match(res.data.details.join(' '), /time allocated/);
+  }
+});
+
+test('time on a section is judged against its allocation and excludes class breaks', async () => {
+  // Fresh session of the seeded lab (Section 1 allocates 10 min, Section 2 15).
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  const j = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: s.data.room_code, first_name: 'Tim', last_name: 'Er' },
+  });
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  db.prepare('UPDATE participants SET section_entered_at = ?, joined_at = ? WHERE id = ?').run(
+    ago(30),
+    ago(30),
+    (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data.participants[0].id,
+  );
+
+  let d = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data;
+  let p = d.participants[0];
+  assert.equal(p.allocated_seconds, 600);
+  assert.ok(Math.abs(p.seconds_on_furthest_section - 1800) < 5);
+  assert.equal(p.time_status, 'over');
+  assert.equal(d.section_distribution[0].minutes, 10);
+
+  // A 25-minute break inside that window leaves 5 minutes: under 80 % of 10.
+  db.prepare('UPDATE sessions SET breaks = ? WHERE id = ?').run(
+    JSON.stringify([{ start: ago(28), end: ago(3) }]),
+    s.data.id,
+  );
+  p = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data.participants[0];
+  assert.ok(Math.abs(p.seconds_on_furthest_section - 300) < 5, 'break time excluded');
+  assert.equal(p.time_status, 'ok');
+  assert.ok(Math.abs(p.total_seconds - 300) < 5);
+
+  // Toggle a break from the monitor: participants are told, timers pause.
+  const on = await call(`/api/sessions/${s.data.id}/break`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { on: true },
+  });
+  assert.equal(on.data.on_break, true);
+  assert.equal(
+    (await call('/api/participant/status', { token: j.data.token })).data.on_break,
+    true,
+  );
+  const off = await call(`/api/sessions/${s.data.id}/break`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { on: false },
+  });
+  assert.equal(off.data.on_break, false);
+  assert.ok(off.data.break_total_seconds >= 25 * 60);
+
+  // Finishing Section 1 records the (break-free) time and the class average.
+  await call('/api/participant/checkpoint', {
+    method: 'POST',
+    token: j.data.token,
+    body: { section_index: 0, step_index: 3, answer: 'abcd1234wxyz' },
+  });
+  await call('/api/participant/progress', {
+    method: 'POST',
+    token: j.data.token,
+    body: { section_index: 1 },
+  });
+  d = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data;
+  const s1 = d.section_distribution[0];
+  assert.equal(s1.completed_count, 1);
+  assert.ok(Math.abs(s1.avg_seconds - 300) < 5);
+  assert.equal(s1.final, true, 'everyone has moved on');
+  assert.equal(d.section_distribution[1].avg_seconds, null, 'nobody has finished Section 2');
+  const exp = (await call(`/api/sessions/${s.data.id}/export`, { token: instructorToken })).data;
+  assert.equal(exp.sections[0].minutes, 10);
+  assert.ok(Math.abs(exp.sections[0].avg_seconds - 300) < 5);
+});
+
+test('section drawer: who is on a section, who completed it, timing and per-step activity', async () => {
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  const join = (first) =>
+    call('/api/participant/join', {
+      method: 'POST',
+      body: { room_code: s.data.room_code, first_name: first, last_name: 'Section' },
+    });
+  const a = (await join('Ada')).data.token;
+  await join('Bo');
+  const post = (path, body) => call(path, { method: 'POST', token: a, body });
+  await post('/api/participant/hint', { section_index: 0, step_index: 1, hint_index: 0 });
+  await post('/api/participant/checkpoint', { section_index: 0, step_index: 3, answer: 'nope' });
+  await post('/api/participant/checkpoint', {
+    section_index: 0,
+    step_index: 3,
+    answer: 'abcd1234wxyz',
+  });
+  await post('/api/participant/progress', { section_index: 1 });
+
+  const d = (await call(`/api/sessions/${s.data.id}/sections/0`, { token: instructorToken })).data;
+  assert.equal(d.kind, 'lab');
+  assert.equal(d.minutes, 10);
+  assert.equal(d.participant_count, 2);
+  assert.equal(d.here_count, 1);
+  assert.equal(d.here[0].name, 'Bo Section');
+  assert.equal(d.completed_count, 1);
+  assert.equal(d.completed[0].name, 'Ada Section');
+  assert.equal(d.timing.timed_count, 1);
+  assert.equal(d.steps.length, 4);
+  assert.equal(d.steps[1].hint_opens, 1);
+  assert.equal(d.steps[1].hint_participants, 1);
+  const cp = d.steps[3].checkpoint;
+  assert.equal(cp.cleared_count, 1);
+  assert.equal(cp.wrong_attempts, 1);
+  assert.deepEqual(cp.common_wrong, [{ answer: 'nope', count: 1 }]);
+  assert.equal(d.steps[0].checkpoint, null);
+
+  const s2 = (await call(`/api/sessions/${s.data.id}/sections/1`, { token: instructorToken })).data;
+  assert.equal(s2.here_count, 1);
+  assert.equal(s2.not_reached_count, 1);
+  assert.equal(s2.timing.avg_seconds, null);
+
+  assert.equal(
+    (await call(`/api/sessions/${s.data.id}/sections/9`, { token: instructorToken })).status,
+    404,
+  );
 });

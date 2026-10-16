@@ -34,6 +34,9 @@ export default function PortalShell({ children }) {
           <NavLink to="/instructor/templates" className="portal__link">
             Templates
           </NavLink>
+          <NavLink to="/instructor/instructors" className="portal__link">
+            Instructors
+          </NavLink>
           <NavLink to="/instructor/account" className="portal__link">
             Account
           </NavLink>
@@ -53,8 +56,8 @@ export default function PortalShell({ children }) {
       {instructor?.must_change_password && !onAccountPage && (
         <div className="banner banner--warn portal__banner" role="status">
           <span>
-            <strong>You are using the default bootstrap password.</strong> Change it before running
-            this in front of a class.
+            <strong>You are signed in with a temporary password.</strong> Choose your own before
+            running a class.
           </span>
           <Link className="btn btn--sm btn--primary" to="/instructor/account">
             Change password

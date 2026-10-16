@@ -1,97 +1,107 @@
 /* ==========================================================================
-   vLabs design system — professional slate + indigo, light & dark.
-   Theme switches on <html data-theme> via CSS custom properties.
+   vLabs design system — matches vLabs Template Studio: slate neutrals, an
+   indigo brand, near-black "surface" tones in dark mode, Inter + JetBrains
+   Mono. Theme switches on <html data-theme> via CSS custom properties.
    ========================================================================== */
 
-/* ------------------------------- Light ----------------------------------
-   Verkada palette: lead with white, neutral grays, Blue 600 as the accent. */
+/* ------------------------------- Light ---------------------------------- */
 :root {
-  --page-bg: #f7f9fb; /* neutrals off-white */
+  --page-bg: #f8fafc; /* slate-50 */
   --surface: #ffffff;
-  --surface-2: #f7f9fb;
-  --surface-3: #eff3f7; /* neutrals 10 */
-  --border: #e6eaee; /* neutrals 50 */
-  --border-strong: #dce0e4; /* neutrals 75 */
+  --surface-2: #f8fafc; /* inputs, wells */
+  --surface-3: #f1f5f9; /* slate-100: hovers, chips */
+  --border: #e2e8f0; /* slate-200 */
+  --border-strong: #cbd5e1; /* slate-300 */
 
-  --text: #030e16; /* neutrals off-black */
-  --text-2: #536573; /* neutrals 600 */
-  --text-3: #838e98; /* neutrals 400 */
+  --text: #0f172a; /* slate-900 */
+  --text-2: #64748b; /* slate-500 */
+  --text-3: #94a3b8; /* slate-400 */
 
-  --brand: #007faf; /* Blue 600 */
-  --brand-hover: #115274; /* Blue 700 */
+  --brand: #4f46e5; /* indigo-600 */
+  --brand-hover: #4338ca; /* indigo-700 */
   --brand-contrast: #ffffff;
-  --brand-soft: rgba(0, 127, 175, 0.08);
-  --brand-ring: rgba(0, 127, 175, 0.22);
-  --brand-grad: linear-gradient(135deg, #19a0d5, #007faf); /* Blue 500 → 600 */
+  --brand-soft: rgba(99, 102, 241, 0.08);
+  --brand-ring: rgba(99, 102, 241, 0.2);
+  --brand-grad: linear-gradient(135deg, #6366f1, #4f46e5);
+  /* Studio: primary actions and the logo tile are slate-900 in light mode. */
+  --primary-bg: #0f172a;
+  --primary-hover: #1e293b;
+  --primary-text: #ffffff;
+  --mark-bg: #0f172a;
 
-  --desk: #c2450a; /* darkened Orange for legible pills */
-  --desk-soft: rgba(255, 85, 0, 0.1);
-  --computer: #007faf; /* Blue 600 */
-  --computer-soft: rgba(0, 127, 175, 0.09);
-  --info: #5b6472; /* neutral slate: context, not a task */
-  --info-soft: rgba(91, 100, 114, 0.1);
+  --desk: #c2410c; /* orange-700 */
+  --desk-soft: rgba(249, 115, 22, 0.1);
+  --computer: #4f46e5;
+  --computer-soft: rgba(99, 102, 241, 0.09);
+  --info: #64748b;
+  --info-soft: rgba(100, 116, 139, 0.1);
 
-  --success: #0f8a58; /* darkened Green 400 */
-  --success-soft: rgba(38, 204, 134, 0.14);
-  --warn: #b26a00; /* darkened Yellow 400 */
-  --warn-soft: rgba(255, 171, 64, 0.16);
-  --danger: #de3243; /* Red 500 */
-  --danger-hover: #b01d2b; /* Red 700 */
-  --danger-soft: rgba(222, 50, 67, 0.09);
+  --success: #059669; /* emerald-600 */
+  --success-soft: rgba(16, 185, 129, 0.1);
+  --warn: #b45309; /* amber-700 */
+  --warn-soft: rgba(245, 158, 11, 0.12);
+  --danger: #e11d48; /* rose-600 */
+  --danger-hover: #be123c;
+  --danger-soft: rgba(244, 63, 94, 0.08);
+  --danger-solid: #e11d48; /* filled destructive buttons, both themes */
 
-  --radius: 14px;
-  --radius-sm: 9px;
-  --radius-lg: 18px;
+  --radius: 12px; /* rounded-xl — cards and panels */
+  --radius-sm: 8px; /* rounded-lg — buttons and inputs */
+  --radius-lg: 16px; /* rounded-2xl — dialogs */
   /* Shared surface padding so panels, editor sections and stat rows line up. */
-  --panel-pad: clamp(1rem, 0.6rem + 1.2vw, 1.5rem);
-  --shadow-sm: 0 1px 2px rgba(3, 14, 22, 0.05);
-  --shadow: 0 1px 3px rgba(3, 14, 22, 0.05), 0 12px 28px rgba(3, 14, 22, 0.06);
-  --shadow-lg: 0 24px 60px rgba(3, 14, 22, 0.12);
+  --panel-pad: clamp(1rem, 0.7rem + 0.9vw, 1.25rem);
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
+  --shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  --shadow-lg: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
 
-  --font: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color-scheme: light;
 }
 
 /* ------------------------------- Dark -----------------------------------
-   Verkada off-black lead with Blue 800/900 surfaces and a bright Blue accent. */
+   Studio "surface" scale: 950 page, 900 panels, 850 wells, 800 raised. */
 :root[data-theme='dark'] {
-  --page-bg: #030e16; /* neutrals off-black */
-  --surface: #0a1922;
-  --surface-2: #0e202b;
-  --surface-3: #15374c; /* Blue 800 */
-  --border: #16303f;
-  --border-strong: #1e4459;
+  --page-bg: #08090c; /* surface-950 */
+  --surface: #0d0f14; /* surface-900 */
+  --surface-2: #12141a; /* surface-850 */
+  --surface-3: #181a20; /* surface-800 */
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
 
-  --text: #f7f9fb; /* neutrals off-white */
-  --text-2: #b0b6be; /* neutrals 200 */
-  --text-3: #838e98; /* neutrals 400 */
+  --text: #f1f5f9; /* slate-100 */
+  --text-2: #94a3b8; /* slate-400 */
+  --text-3: #64748b; /* slate-500 */
 
-  --brand: #3ac1eb; /* Blue 400 */
-  --brand-hover: #63d0f5; /* Blue 300 */
-  --brand-contrast: #002033; /* Blue 900 */
-  --brand-soft: rgba(58, 193, 235, 0.14);
-  --brand-ring: rgba(58, 193, 235, 0.35);
-  --brand-grad: linear-gradient(135deg, #3ac1eb, #19a0d5);
+  --brand: #818cf8; /* indigo-400 for text/accents on dark */
+  --brand-hover: #a5b4fc;
+  --brand-contrast: #ffffff;
+  --brand-soft: rgba(99, 102, 241, 0.14);
+  --brand-ring: rgba(99, 102, 241, 0.35);
+  --brand-grad: linear-gradient(135deg, #6366f1, #4f46e5);
+  --primary-bg: #4f46e5; /* indigo-600 */
+  --primary-hover: #6366f1;
+  --primary-text: #ffffff;
+  --mark-bg: #4f46e5;
 
-  --desk: #ff7a33;
-  --desk-soft: rgba(255, 122, 51, 0.16);
-  --computer: #3ac1eb;
-  --computer-soft: rgba(58, 193, 235, 0.15);
-  --info: #a7b0bd;
-  --info-soft: rgba(167, 176, 189, 0.14);
+  --desk: #fb923c;
+  --desk-soft: rgba(251, 146, 60, 0.13);
+  --computer: #818cf8;
+  --computer-soft: rgba(99, 102, 241, 0.15);
+  --info: #94a3b8;
+  --info-soft: rgba(148, 163, 184, 0.12);
 
-  --success: #26cc86; /* Green 400 */
-  --success-soft: rgba(38, 204, 134, 0.15);
-  --warn: #ffab40; /* Yellow 400 */
-  --warn-soft: rgba(255, 171, 64, 0.16);
-  --danger: #f2647a;
-  --danger-hover: #de3243;
-  --danger-soft: rgba(222, 50, 67, 0.16);
+  --success: #34d399;
+  --success-soft: rgba(16, 185, 129, 0.13);
+  --warn: #fbbf24;
+  --warn-soft: rgba(245, 158, 11, 0.13);
+  --danger: #fb7185;
+  --danger-hover: #f43f5e;
+  --danger-soft: rgba(244, 63, 94, 0.13);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 18px 42px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.65);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
 
@@ -116,6 +126,8 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-size: 15px;
   line-height: 1.55;
   transition:
     background-color 0.2s ease,
@@ -157,8 +169,23 @@ h2,
 h3 {
   margin: 0 0 0.35em;
   line-height: 1.22;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   font-weight: 600;
+}
+::selection {
+  background: rgba(99, 102, 241, 0.2);
+}
+/* Slim scrollbars, as in the Studio. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
 }
 h1 {
   letter-spacing: -0.02em;
@@ -202,7 +229,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text);
 }
 .brand:hover {
@@ -213,11 +240,9 @@ code {
   width: 1.7em;
   height: 1.7em;
   flex: none;
-  border-radius: 9px;
-  background: var(--brand-grad);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    var(--shadow-sm);
+  border-radius: 8px;
+  background: var(--mark-bg);
+  box-shadow: var(--shadow-sm);
 }
 .brand__mark::after {
   content: '';
@@ -234,14 +259,15 @@ code {
   letter-spacing: -0.02em;
 }
 .brand__tag {
-  font-size: 0.58em;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  font-family: var(--mono);
+  font-size: 0.6em;
+  letter-spacing: 0.02em;
   color: var(--text-2);
-  border: 1px solid var(--border-strong);
-  padding: 0.15em 0.55em;
-  border-radius: 999px;
-  font-weight: 600;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 0.15em 0.5em;
+  border-radius: 6px;
+  font-weight: 500;
 }
 .brand--lg {
   font-size: 2.4rem;
@@ -257,13 +283,15 @@ code {
   justify-content: center;
   gap: 0.45rem;
   font: inherit;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
-  padding: 0.6rem 1.05rem;
+  padding: 0.5rem 0.95rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+  box-shadow: var(--shadow-sm);
   transition:
     background 0.15s,
     border-color 0.15s,
@@ -276,8 +304,8 @@ code {
   line-height: 1.2;
 }
 .btn:hover {
-  border-color: var(--brand);
-  color: var(--brand);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
 }
 .btn:active {
   transform: translateY(1px);
@@ -287,49 +315,65 @@ code {
   cursor: not-allowed;
 }
 .btn--primary {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: var(--brand-contrast);
-  box-shadow: var(--shadow-sm);
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
 }
 .btn--primary:hover {
-  background: var(--brand-hover);
-  border-color: var(--brand-hover);
-  color: var(--brand-contrast);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: var(--primary-text);
 }
 .btn--ghost {
-  background: transparent;
+  background: var(--surface);
+  color: var(--text-2);
+}
+.btn--ghost:hover {
+  color: var(--text);
+}
+.btn--success {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+.btn--success:hover {
+  filter: brightness(1.05);
+  background: var(--success);
+  color: #fff;
 }
 .btn--danger {
-  background: var(--danger);
-  border-color: var(--danger);
+  background: var(--danger-solid, #e11d48);
+  border-color: var(--danger-solid, #e11d48);
   color: #fff;
 }
 .btn--danger:hover {
-  background: var(--danger-hover);
-  border-color: var(--danger-hover);
+  background: #be123c;
+  border-color: #be123c;
   color: #fff;
 }
 .btn--danger-ghost {
   background: transparent;
-  color: var(--danger);
+  color: var(--text-3);
   border-color: transparent;
+  box-shadow: none;
 }
 .btn--danger-ghost:hover {
-  border-color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
   color: var(--danger);
 }
 .btn--block {
   width: 100%;
 }
 .btn--sm {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
   min-height: 2.125rem; /* 34px */
 }
 .btn--xs {
-  padding: 0.25rem 0.55rem;
-  font-size: 0.76rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
   min-height: 1.75rem; /* 28px */
 }
 /* Square icon-only buttons keep a consistent footprint across the app. */
@@ -375,9 +419,9 @@ code {
   width: 2.25rem;
   height: 2.25rem;
   flex: none;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-2);
   cursor: pointer;
   font-size: 1rem;
@@ -387,14 +431,16 @@ code {
     background 0.15s;
 }
 .theme-toggle:hover {
-  color: var(--brand);
-  border-color: var(--brand);
+  color: var(--text);
+  background: var(--surface-3);
 }
 .theme-toggle--corner {
   position: fixed;
   top: 1rem;
   right: 1rem;
   z-index: 50;
+  background: var(--surface);
+  border-color: var(--border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -420,19 +466,20 @@ code {
   flex: 1;
 }
 .field__label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-2);
-  font-weight: 600;
+  font-weight: 500;
 }
 .field__input {
   font: inherit;
+  font-size: 0.875rem;
   color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0.6rem 0.8rem;
+  padding: 0.5rem 0.75rem;
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.375rem;
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
@@ -446,14 +493,15 @@ textarea.field__input {
 }
 .field__input:focus {
   outline: none;
-  border-color: var(--brand);
+  background: var(--surface);
+  border-color: #6366f1;
   box-shadow: 0 0 0 3px var(--brand-ring);
 }
 select.field__input {
   appearance: none;
   cursor: pointer;
   padding-right: 2.4rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23838e98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   background-size: 16px;
@@ -469,7 +517,7 @@ select.field__input {
 .form__error {
   color: var(--danger);
   background: var(--danger-soft);
-  border: 1px solid var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
@@ -484,21 +532,20 @@ select.field__input {
   place-items: center;
   padding: 2rem 1.25rem;
   background:
-    radial-gradient(1100px 640px at 12% -14%, var(--brand-soft), transparent 60%),
-    radial-gradient(860px 520px at 112% 6%, var(--computer-soft), transparent 55%), var(--page-bg);
+    radial-gradient(900px 520px at 50% -20%, var(--brand-soft), transparent 65%), var(--page-bg);
 }
 .auth-card {
   width: 100%;
-  max-width: 430px;
+  max-width: 420px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow);
+  padding: 1.75rem;
+  box-shadow: var(--shadow-lg);
 }
 .auth-card__title {
-  margin-top: 1.2rem;
-  font-size: 1.55rem;
+  margin-top: 1.1rem;
+  font-size: 1.3rem;
 }
 .auth-card__sub {
   color: var(--text-2);
@@ -581,7 +628,9 @@ select.field__input {
   padding-left: max(clamp(1rem, 3vw, 1.5rem), env(safe-area-inset-left));
   padding-right: max(clamp(1rem, 3vw, 1.5rem), env(safe-area-inset-right));
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -607,11 +656,12 @@ select.field__input {
 .portal__link {
   display: inline-flex;
   align-items: center;
-  min-height: 2.25rem;
+  min-height: 2.125rem;
   color: var(--text-2);
-  padding: 0.4rem 0.85rem;
+  padding: 0.35rem 0.75rem;
   border-radius: var(--radius-sm);
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
   white-space: nowrap;
 }
 .portal__link:hover {
@@ -620,8 +670,8 @@ select.field__input {
   background: var(--surface-3);
 }
 .portal__link.active {
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--text);
+  background: var(--surface-3);
 }
 .portal__main {
   padding: clamp(1.25rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem) 3rem;
@@ -637,7 +687,8 @@ select.field__input {
   margin-bottom: 1.5rem;
 }
 .page-head h1 {
-  font-size: clamp(1.4rem, 1.1rem + 1.2vw, 1.75rem);
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.5rem);
+  letter-spacing: -0.02em;
 }
 .page-head--row {
   display: flex;
@@ -675,7 +726,10 @@ select.field__input {
   box-shadow: var(--shadow-sm);
 }
 .panel__title {
-  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.95rem;
   margin-bottom: 1rem;
 }
 
@@ -683,15 +737,15 @@ select.field__input {
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.875rem;
 }
 .table th {
   text-align: left;
   color: var(--text-3);
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
@@ -704,7 +758,7 @@ select.field__input {
   border-bottom: none;
 }
 .table__primary {
-  font-weight: 600;
+  font-weight: 500;
 }
 .table__actions {
   text-align: right;
@@ -714,15 +768,32 @@ select.field__input {
   justify-content: flex-end;
 }
 .seat-num {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.9rem;
-  height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.75rem;
+  height: 1.75rem;
   padding: 0 0.4rem;
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-weight: 700;
+  border-radius: 7px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+/* The seat column centres its pill; never put .seat-num on a <td> itself —
+   inline-flex on a table cell takes it out of table layout. */
+.col--seat {
+  width: 3rem;
+  text-align: center;
+}
+.table th.col--seat {
+  text-align: center;
 }
 .row--slow {
   background: var(--warn-soft);
@@ -867,11 +938,12 @@ select.field__input {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 .pill--active {
   background: var(--success-soft);
@@ -890,19 +962,23 @@ select.field__input {
 .banner {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
   flex-wrap: wrap;
-  padding: 1rem 1.25rem;
+  padding: 0.7rem 1rem;
   border-radius: var(--radius);
-  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
 }
 .banner--success {
-  background: var(--brand-soft);
-  border: 1px solid var(--brand);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
 }
 .roomcode {
   font-family: var(--mono);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.25em;
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
@@ -932,11 +1008,11 @@ select.field__input {
   font-family: var(--font);
   font-size: 0.72rem;
   letter-spacing: 0;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--brand);
   background: var(--brand-soft);
   padding: 0.25rem 0.55rem;
-  border-radius: 999px;
+  border-radius: 6px;
 }
 
 /* --------------------------- Create session ----------------------------- */
@@ -1012,7 +1088,8 @@ select.field__input {
   font-weight: 500;
 }
 .card__title {
-  font-size: clamp(1.1rem, 0.95rem + 0.6vw, 1.28rem);
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.2rem);
+  letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
 .card__body {
@@ -1022,7 +1099,37 @@ select.field__input {
   margin-top: 1rem;
   display: flex;
   flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, #f59e0b 28%, transparent);
+  background: color-mix(in srgb, #f59e0b 5%, var(--surface));
+  border-radius: var(--radius);
+}
+.card__hints-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--warn);
+}
+.card__hints-head .icon {
+  vertical-align: -0.2em;
+}
+.card__hints-count {
+  font-family: var(--mono);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-2);
+}
+.card__hints-note {
+  margin: -0.15rem 0 0.15rem;
+  font-size: 0.8rem;
+  color: var(--text-2);
 }
 
 /* Markdown */
@@ -1045,21 +1152,30 @@ select.field__input {
 }
 .md code {
   background: var(--surface-3);
-  padding: 0.15em 0.4em;
+  padding: 0.12em 0.35em;
   border-radius: 5px;
   border: 1px solid var(--border);
+  font-size: 0.84em;
 }
+/* Studio: code blocks are always dark. */
 .md pre {
-  background: var(--surface-2);
+  background: #0f172a;
+  color: #f8fafc;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0.9rem 1rem;
+  padding: 0.85rem 1rem;
   overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+:root[data-theme='dark'] .md pre {
+  background: #08090c;
 }
 .md pre code {
   background: none;
   border: none;
   padding: 0;
+  color: inherit;
 }
 .md img {
   display: block;
@@ -1078,7 +1194,7 @@ select.field__input {
   font-style: italic;
 }
 .md blockquote {
-  border-left: 3px solid var(--brand);
+  border-left: 2px solid #6366f1;
   margin: 0.8rem 0;
   padding: 0.2rem 0 0.2rem 1rem;
   color: var(--text-2);
@@ -1112,7 +1228,7 @@ select.field__input {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface-2);
+  background: var(--surface);
 }
 .hint__toggle {
   display: flex;
@@ -1124,8 +1240,9 @@ select.field__input {
   border: none;
   color: var(--text);
   font: inherit;
-  font-weight: 600;
-  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.55rem 0.75rem;
   cursor: pointer;
   text-align: left;
 }
@@ -1147,26 +1264,48 @@ select.field__input {
   transform: rotate(180deg);
   color: var(--brand);
 }
+.hint__num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+.hint__seen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--success);
+}
 .hint__body {
-  padding: 0 0.8rem 0.8rem 2.4rem;
+  padding: 0 0.8rem 0.8rem 2.65rem;
   color: var(--text-2);
 }
 .hint--open {
-  border-color: var(--brand);
+  border-color: color-mix(in srgb, #f59e0b 45%, transparent);
 }
 
 /* ----------------------------- Checkpoints ------------------------------ */
 .checkpoint {
   display: flex;
-  gap: 1rem;
+  gap: 0.85rem;
   margin-top: 1.25rem;
-  padding: 1.1rem;
+  padding: 1rem;
   background: var(--brand-soft);
-  border: 1px solid var(--brand);
-  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, #6366f1 35%, transparent);
+  border-radius: var(--radius);
 }
 .checkpoint__lock {
-  font-size: 1.4rem;
+  color: var(--brand);
+  padding-top: 0.1rem;
 }
 .checkpoint__main {
   flex: 1;
@@ -1182,6 +1321,24 @@ select.field__input {
 }
 .checkpoint__input {
   flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  min-height: 2.5rem;
+}
+.checkpoint__input::placeholder {
+  color: var(--text-3);
+}
+.checkpoint__input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px var(--brand-ring);
 }
 .checkpoint__input.is-error {
   border-color: var(--danger);
@@ -1195,7 +1352,7 @@ select.field__input {
 .checkpoint--done {
   align-items: center;
   background: var(--success-soft);
-  border-color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
   color: var(--text-2);
 }
 .checkpoint__badge {
@@ -1223,9 +1380,9 @@ select.field__input {
 }
 .solution {
   margin-top: 0.85rem;
-  border: 1px solid var(--warn);
-  border-radius: var(--radius-sm);
-  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+  border-radius: var(--radius);
+  background: var(--success-soft);
   overflow: hidden;
 }
 .solution__head {
@@ -1233,12 +1390,12 @@ select.field__input {
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.8rem;
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--warn);
-  border-bottom: 1px solid var(--warn);
+  color: var(--success);
+  border-bottom: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
 }
 .solution__body {
   padding: 0.6rem 0.8rem;
@@ -1259,7 +1416,9 @@ select.field__input {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
@@ -1279,19 +1438,21 @@ select.field__input {
   min-width: 0;
 }
 .lab__seat {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 2rem;
   height: 2rem;
   padding: 0 0.5rem;
-  border-radius: 999px;
-  background: var(--brand);
-  color: var(--brand-contrast);
-  font-weight: 700;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  background: var(--mark-bg);
+  color: #fff;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 0.8rem;
 }
 .lab__name {
-  font-weight: 650;
+  font-weight: 600;
 }
 .lab__session {
   color: var(--text-2);
@@ -1356,9 +1517,10 @@ select.field__input {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  border: 2px solid var(--border-strong);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border-strong);
   color: var(--text-3);
   background: var(--surface);
   transition: all 0.2s;
@@ -1372,10 +1534,16 @@ select.field__input {
   background: var(--success);
 }
 .stepper__node--current .stepper__dot {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--brand-soft);
+  border-color: #6366f1;
+  color: #fff;
+  background: #4f46e5;
   box-shadow: 0 0 0 4px var(--brand-ring);
+}
+.stepper__node--is-done::before {
+  background: var(--success);
+}
+.stepper__node--optional .stepper__dot {
+  border-style: dashed;
 }
 .stepper__node--open .stepper__dot {
   border-color: var(--brand);
@@ -1396,7 +1564,7 @@ select.field__input {
 }
 .lab__progress-track {
   flex: 1;
-  height: 8px;
+  height: 6px;
   background: var(--surface-3);
   border-radius: 999px;
   overflow: hidden;
@@ -1479,8 +1647,8 @@ select.field__input {
 
 .section-head {
   margin-bottom: 1.5rem;
-  padding-bottom: 1.1rem;
-  border-bottom: 2px solid var(--border);
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
 }
 .section-head--compact {
   margin-bottom: 1rem;
@@ -1488,16 +1656,24 @@ select.field__input {
   border-bottom-width: 1px;
 }
 .section-head__eyebrow {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--brand);
+  color: var(--text-3);
   margin-bottom: 0.4rem;
 }
+.section-head__eyebrow .tag {
+  text-transform: none;
+  letter-spacing: 0;
+}
 .section-head__title {
-  font-size: clamp(1.35rem, 1rem + 1.4vw, 1.75rem);
+  font-size: clamp(1.3rem, 1rem + 1.2vw, 1.6rem);
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
@@ -1542,7 +1718,7 @@ select.field__input {
   color: var(--text-3);
 }
 .ended-card--done {
-  border-color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
 }
 .ended-card__icon--done {
   color: var(--success);
@@ -1613,9 +1789,11 @@ select.field__input {
   margin-bottom: 0.75rem;
 }
 .editor-label {
-  font-size: 0.8rem;
-  color: var(--text-2);
+  font-size: 0.7rem;
+  color: var(--text-3);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .var-row {
   display: flex;
@@ -1795,11 +1973,19 @@ select.field__input {
   margin-bottom: 1.5rem;
 }
 .tag {
-  background: var(--surface-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.4rem;
+  background: var(--surface-3);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.2rem 0.6rem;
-  font-size: 0.8rem;
+  border-radius: 6px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-2);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .tag code {
   color: var(--brand);
@@ -1815,7 +2001,7 @@ select.field__input {
   flex-wrap: wrap;
 }
 .monitor-head h1 {
-  font-size: clamp(1.4rem, 1.1rem + 1.2vw, 1.75rem);
+  font-size: clamp(1.25rem, 1.05rem + 0.8vw, 1.5rem);
   overflow-wrap: anywhere;
 }
 .monitor-head > div:first-child {
@@ -1857,16 +2043,19 @@ select.field__input {
   border-right: none;
 }
 .stat__num {
-  font-size: 1.75rem;
-  font-weight: 750;
+  font-size: 1.5rem;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 .stat__label {
   color: var(--text-3);
-  font-size: 0.8rem;
-  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.4rem;
 }
 
 .dist {

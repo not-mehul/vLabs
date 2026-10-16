@@ -65,7 +65,9 @@ export function participantsToCsv(docOrRows) {
     'last_name',
     'status',
     'current_section',
+    'furthest_section',
     'sections_completed',
+    'counting_sections',
     'total_sections',
     'progress_pct',
     'checkpoints_cleared',
@@ -150,4 +152,94 @@ export function attemptsToCsv(doc) {
     a.correct ? 'yes' : 'no',
   ]);
   return csvLines(header, rows);
+}
+
+const verdictText = (r) =>
+  !r.answered ? 'unanswered' : r.pending ? 'needs marking' : r.correct ? 'correct' : 'incorrect';
+
+/**
+ * EXAM sessions: one row per participant. Fixed columns, then for every
+ * question `q<N>_response`, `q<N>_result` (correct / incorrect / needs marking
+ * / unanswered), `q<N>_points` and `q<N>_marked_by` (set when an instructor
+ * marked it by hand). A `time_s<N>_<title>` column per section (seconds, breaks
+ * excluded) sits between the fixed and per-question columns.
+ */
+export function examResultsToCsv(doc) {
+  const questions = doc?.questions || [];
+  const sections = doc?.sections || [];
+  const fixed = [
+    'number',
+    'name',
+    'first_name',
+    'last_name',
+    'submitted',
+    'submitted_at',
+    'answered',
+    'question_count',
+    'score',
+    'max_score',
+    'score_pct',
+    'pending_count',
+    'fully_graded',
+    'total_seconds',
+    'furthest_section',
+    'joined_at',
+    'last_seen_at',
+  ];
+  const header = [
+    ...fixed,
+    ...sections.map((sec) => `time_s${sec.number}_${colSlug(sec.title)}`),
+    ...questions.flatMap((q) => [
+      `q${q.number}_response`,
+      `q${q.number}_result`,
+      `q${q.number}_points`,
+      `q${q.number}_marked_by`,
+    ]),
+  ];
+  const rows = (doc?.participants || []).map((p) => {
+    const byKey = new Map((p.responses || []).map((r) => [r.key, r]));
+    return [
+      ...fixed.map((c) => (typeof p[c] === 'boolean' ? (p[c] ? 'yes' : 'no') : p[c])),
+      ...sections.map((_, i) => p.section_seconds?.[i] ?? 0),
+      ...questions.flatMap((q) => {
+        const r = byKey.get(q.key);
+        if (!r) return ['', '', '', ''];
+        return [r.response, verdictText(r), r.points_awarded, r.marked_by || ''];
+      }),
+    ];
+  });
+  return csvLines(header, rows);
+}
+
+/** EXAM sessions: the question index with expected answers (an answer key). */
+export function examKeyToCsv(doc) {
+  const header = ['number', 'key', 'section', 'type', 'points', 'prompt', 'options', 'expected'];
+  const rows = (doc?.questions || []).map((q) => [
+    q.number,
+    q.key,
+    q.section_title,
+    q.type,
+    q.points,
+    q.prompt,
+    (q.options || []).join(' | '),
+    q.expected,
+  ]);
+  return csvLines(header, rows);
+}
+
+/** EXAM sessions: every answer change across the class, in time order. */
+export function examLogToCsv(doc) {
+  const header = ['at', 'number', 'name', 'question', 'response'];
+  const rows = (doc?.answer_log || []).map((e) => [e.at, e.number, e.name, e.question, e.response]);
+  return csvLines(header, rows);
+}
+
+/** Plain-text excerpt of a Markdown prompt for table cells. */
+export function excerpt(md, n = 90) {
+  const t = String(md || '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '[image]')
+    .replace(/[`*_>#[\]()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }

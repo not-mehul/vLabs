@@ -62,7 +62,7 @@ export default function Join() {
         session: res.session,
       };
       participantSession.set(session);
-      navigate('/lab', { replace: true, state: session });
+      navigate(res.session?.kind === 'exam' ? '/exam' : '/lab', { replace: true, state: session });
     } catch (err) {
       setError(err.message || 'Could not join. Check your code and name.');
       setBusy(false);
@@ -82,7 +82,12 @@ export default function Join() {
           <button
             type="button"
             className="resume-banner"
-            onClick={() => navigate('/lab', { replace: true, state: stored })}
+            onClick={() =>
+              navigate(stored.session?.kind === 'exam' ? '/exam' : '/lab', {
+                replace: true,
+                state: stored,
+              })
+            }
           >
             <span className="resume-banner__icon">
               <Icon name="refresh" size={18} />
@@ -152,7 +157,7 @@ export default function Join() {
           )}
 
           <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
-            {busy ? 'Registering…' : 'Register & enter lab'}
+            {busy ? 'Registering…' : 'Register & enter'}
           </button>
         </form>
 

@@ -18,6 +18,8 @@
  *   variables: [{ name: string, expression: string }],
  *   content: [{
  *     title: string,
+ *     minutes: number | null,               // time allocated to the section
+ *                                           //   (whole minutes, 1–600); null = none
  *     steps: [{
  *       type: 'desk' | 'computer' | 'info',
  *       title: string,
@@ -65,6 +67,8 @@ export const LIMITS = Object.freeze({
   title: 200,
   description: 1000,
   sectionTitle: 200,
+  /** Time allocated to one section, in minutes. */
+  sectionMinutes: 600,
   stepTitle: 200,
   body: 20_000,
   hintLabel: 120,
@@ -111,6 +115,17 @@ const str = (v, max) => {
   const s = v === null || v === undefined ? '' : String(v);
   return typeof max === 'number' ? s.slice(0, max) : s;
 };
+
+/**
+ * Time allocated to a section: whole minutes 1–LIMITS.sectionMinutes, or null
+ * for "not set". Shared by labs and exams. Strings such as "15" or "15 min"
+ * (from Markdown) are accepted.
+ */
+export function normaliseMinutes(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+  return Number.isInteger(n) && n >= 1 && n <= LIMITS.sectionMinutes ? n : null;
+}
 
 /** A fresh, empty step in canonical shape. */
 export function blankStep() {
@@ -205,6 +220,7 @@ export function normaliseTemplate(obj) {
       const s = sec && typeof sec === 'object' ? sec : {};
       return {
         title: str(s.title, LIMITS.sectionTitle),
+        minutes: normaliseMinutes(s.minutes),
         steps: (Array.isArray(s.steps) ? s.steps : [])
           .slice(0, LIMITS.stepsPerSection)
           .map(normaliseStep),

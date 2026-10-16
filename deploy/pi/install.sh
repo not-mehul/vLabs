@@ -13,6 +13,7 @@
 #   vlabs.service         Node 22 on 127.0.0.1:4000 (systemd, hardened)
 #   caddy.service         HTTPS on :443 with Caddy's internal CA, proxying to Node
 #   vlabs-backup.timer    nightly consistent SQLite backup
+#   vlabs-caddy-refresh   boot-time refresh of the certificate's IP list
 #
 # Non-interactive use: pre-set any of these in the environment.
 #   VLABS_HOSTNAME=vlabs            mDNS name → https://vlabs.local
@@ -182,10 +183,13 @@ bold "7/8  systemd units"
 install -m 0644 "$REPO_DIR/deploy/pi/vlabs.service" /etc/systemd/system/vlabs.service
 install -m 0644 "$REPO_DIR/deploy/pi/vlabs-backup.service" /etc/systemd/system/vlabs-backup.service
 install -m 0644 "$REPO_DIR/deploy/pi/vlabs-backup.timer" /etc/systemd/system/vlabs-backup.timer
+install -m 0644 "$REPO_DIR/deploy/pi/vlabs-caddy-refresh.service" /etc/systemd/system/vlabs-caddy-refresh.service
 # Point the backup unit at the real checkout location (it may not be /opt/vlabs).
-sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd/system/vlabs-backup.service
+sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd/system/vlabs-backup.service \
+  /etc/systemd/system/vlabs-caddy-refresh.service
 systemctl daemon-reload
 systemctl enable --now caddy vlabs vlabs-backup.timer >/dev/null
+systemctl enable vlabs-caddy-refresh.service >/dev/null
 systemctl restart caddy vlabs
 
 echo -n "  waiting for the API"
@@ -208,5 +212,5 @@ Done.
   Instructor    : username 'instructor', password in $ENV_FILE
   Logs          : sudo journalctl -u vlabs -f      sudo journalctl -u caddy -f
   Update        : sudo $REPO_DIR/deploy/pi/update.sh
-  Add instructor: sudo -u vlabs node $REPO_DIR/server/scripts/instructors.js create <name>
+  Add instructor: portal → Instructors (or sudo $REPO_DIR/deploy/pi/vlabs-cli.sh instructors create <name>)
 EOF

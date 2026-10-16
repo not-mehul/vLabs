@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import db from './index.js';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
+import { parseExamMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
 
 /**
  * Sample master template. Demonstrates every content feature:
@@ -26,6 +27,8 @@ const SAMPLE_VARIABLES = [
 const SAMPLE_CONTENT = [
   {
     title: 'Section 1 · Bench Preparation',
+    // Time allocated: drives the monitor's "over time" highlighting.
+    minutes: 10,
     steps: [
       {
         type: 'info',
@@ -86,6 +89,7 @@ const SAMPLE_CONTENT = [
   },
   {
     title: 'Section 2 · Network Configuration',
+    minutes: 15,
     steps: [
       {
         type: 'computer',
@@ -165,6 +169,20 @@ export function needsBootstrapInstructor() {
 }
 
 /**
+ * Usernames whose password is still the public development default. Checked
+ * against the stored hash (not the env var), so the start-up warning stops the
+ * moment the password is changed in the portal — the old env-based warning
+ * kept printing after every restart and read as if the change had been lost.
+ */
+export function accountsOnDefaultPassword() {
+  return db
+    .prepare('SELECT username, password_hash FROM instructors WHERE password_changed_at IS NULL')
+    .all()
+    .filter((r) => bcrypt.compareSync(config.devSeedPassword, r.password_hash))
+    .map((r) => r.username);
+}
+
+/**
  * Idempotently ensure a bootstrap instructor and a sample template exist.
  * Safe to call on every start-up.
  */
@@ -183,32 +201,46 @@ export function ensureSeed() {
 
   const templateCount = db.prepare('SELECT COUNT(*) AS n FROM templates').get().n;
   if (templateCount === 0) {
-    const info = db
-      .prepare(
-        `INSERT INTO templates (title, description, content, variables, version, created_by)
-         VALUES (?, ?, ?, ?, 1, ?)`,
-      )
-      .run(
-        SAMPLE_TITLE,
-        SAMPLE_DESCRIPTION,
-        JSON.stringify(SAMPLE_CONTENT),
-        JSON.stringify(SAMPLE_VARIABLES),
-        instructorId,
-      );
     const username = db
       .prepare('SELECT username FROM instructors WHERE id = ?')
       .get(instructorId).username;
-    const snapshot = JSON.stringify({
-      title: SAMPLE_TITLE,
-      description: SAMPLE_DESCRIPTION,
-      content: SAMPLE_CONTENT,
-      variables: SAMPLE_VARIABLES,
-    });
-    db.prepare(
+    const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
+    const samples = [
+      {
+        kind: 'lab',
+        title: SAMPLE_TITLE,
+        description: SAMPLE_DESCRIPTION,
+        content: SAMPLE_CONTENT,
+        variables: SAMPLE_VARIABLES,
+      },
+      {
+        kind: 'exam',
+        title: exam.title,
+        description: exam.description,
+        content: exam.content,
+        variables: [],
+      },
+    ];
+    const insert = db.prepare(
+      `INSERT INTO templates (kind, title, description, content, variables, version, created_by)
+       VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    );
+    const audit = db.prepare(
       `INSERT INTO template_audit (template_id, template_title, action, version, snapshot, instructor_id, instructor_username)
        VALUES (?, ?, 'created', 1, ?, ?, ?)`,
-    ).run(info.lastInsertRowid, SAMPLE_TITLE, snapshot, instructorId, username);
-    log.info('seed.template', { title: SAMPLE_TITLE });
+    );
+    for (const t of samples) {
+      const info = insert.run(
+        t.kind,
+        t.title,
+        t.description,
+        JSON.stringify(t.content),
+        JSON.stringify(t.variables),
+        instructorId,
+      );
+      audit.run(info.lastInsertRowid, t.title, JSON.stringify(t), instructorId, username);
+      log.info('seed.template', { kind: t.kind, title: t.title });
+    }
   }
 }
 

@@ -12,8 +12,29 @@ const db = new Database(config.dbPath);
 // Pragmas: WAL for better read/write concurrency, foreign keys enforced, and a
 // busy timeout so a concurrent writer (e.g. a CLI seed) waits instead of failing.
 db.pragma('journal_mode = WAL');
+// better-sqlite3 is compiled with SQLITE_DEFAULT_WAL_SYNCHRONOUS=1, so every
+// open after the first one ran with synchronous=NORMAL: commits sat in the
+// WAL without an fsync until the next checkpoint (up to ~1000 pages, which a
+// quiet Pi can take days to reach). Pulling the power — the usual way a
+// classroom Pi gets "rebooted" — then silently rolled back recent writes such
+// as a password change. FULL fsyncs the WAL on every commit; the write volume
+// here (progress pings, answers) is far below what an SD card handles.
+db.pragma('synchronous = FULL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+
+/**
+ * Fold the WAL back into the main database file. Called after rare but
+ * important writes (instructor accounts) so the change also survives someone
+ * copying or restoring only `vlabs.sqlite` without its `-wal` sidecar.
+ */
+export function checkpoint() {
+  try {
+    db.pragma('wal_checkpoint(PASSIVE)');
+  } catch (err) {
+    log.warn('db.checkpoint.failed', { err });
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Schema                                                                    */
@@ -43,6 +64,9 @@ CREATE TABLE IF NOT EXISTS instructors (
 -- "launch session" picker without destroying anything.
 CREATE TABLE IF NOT EXISTS templates (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  -- 'lab' (sections of steps, shared/template-schema.js) or 'exam' (sections
+  -- of questions, shared/exam-schema.js). Fixed at creation.
+  kind        TEXT NOT NULL DEFAULT 'lab',
   title       TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   content     TEXT NOT NULL DEFAULT '[]',
@@ -93,6 +117,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   room_code        TEXT NOT NULL,
   title            TEXT NOT NULL DEFAULT '',
+  -- Copied from the template at launch: 'lab' | 'exam'.
+  kind             TEXT NOT NULL DEFAULT 'lab',
   template_id      INTEGER REFERENCES templates(id) ON DELETE SET NULL,
   instructor_id    INTEGER NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
   template_version INTEGER NOT NULL DEFAULT 1,
@@ -102,7 +128,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   is_active        INTEGER NOT NULL DEFAULT 1,
   expires_at       TEXT NOT NULL,
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  ended_at         TEXT
+  ended_at         TEXT,
+  -- Class-wide breaks toggled by the instructor: [{ start, end|null }]. Time
+  -- inside a break never counts towards anyone's section time.
+  breaks           TEXT NOT NULL DEFAULT '[]'
 );
 
 -- Only one ACTIVE session may hold a given room_code at a time. Expired /
@@ -138,6 +167,15 @@ CREATE TABLE IF NOT EXISTS participants (
   section_times          TEXT NOT NULL DEFAULT '{}',
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
+  -- Exam sessions only. answers: { "<section>.<question>": value } (latest
+  -- response per question); grades: instructor overrides { key: { correct:
+  -- 0|1, by, at } }; submitted_at: when the participant handed the exam in.
+  -- (answer_log is the pre-1.5.1 change log, superseded by
+  -- exam_answer_events and no longer written.)
+  answers                TEXT NOT NULL DEFAULT '{}',
+  answer_log             TEXT NOT NULL DEFAULT '[]',
+  grades                 TEXT NOT NULL DEFAULT '{}',
+  submitted_at           TEXT,
   -- Set by the server the moment every section is cleared (the clock stops);
   -- finished_at is when the participant pressed Finish (may be later/never).
   completed_at           TEXT,
@@ -145,9 +183,30 @@ CREATE TABLE IF NOT EXISTS participants (
   section_entered_at     TEXT NOT NULL DEFAULT (datetime('now')),
   joined_at              TEXT NOT NULL DEFAULT (datetime('now')),
   last_seen_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Exam seats: SHA-256 of the per-device resume key handed out at join. A
+  -- rejoin by name must present the key, so knowing a classmate's name is not
+  -- enough to open their exam. NULL = not bound (labs, or released by the
+  -- instructor so the next join on any device rebinds the seat).
+  resume_hash            TEXT,
+  -- Bumped when the instructor releases the seat; participant tokens carry it,
+  -- so the previous device is signed out.
+  token_version          INTEGER NOT NULL DEFAULT 0,
   UNIQUE (session_id, seat_number),
   UNIQUE (session_id, name_key)
 );
+
+-- Exam answer history, one small row per change (append-only). Kept out of the
+-- participants row so an autosave writes a few hundred bytes, not the whole
+-- history; long answers are logged truncated.
+CREATE TABLE IF NOT EXISTS exam_answer_events (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  participant_id  INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  question_key    TEXT NOT NULL,
+  response        TEXT NOT NULL DEFAULT '',
+  at              TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exam_answer_events_participant
+  ON exam_answer_events(participant_id, question_key);
 
 -- Instance-wide image library for template bodies. Markdown references an
 -- image by NAME (![caption](rack.png)); the server rewrites it to
@@ -271,6 +330,65 @@ const MIGRATIONS = [
       db.exec(
         'UPDATE participants SET completed_at = finished_at WHERE completed_at IS NULL AND finished_at IS NOT NULL',
       );
+    },
+  },
+  {
+    version: 5,
+    name: 'examination mode: template/session kind, participant answers + grades',
+    up() {
+      addColumnIfMissing('templates', 'kind', "TEXT NOT NULL DEFAULT 'lab'");
+      addColumnIfMissing('sessions', 'kind', "TEXT NOT NULL DEFAULT 'lab'");
+      addColumnIfMissing('participants', 'answers', "TEXT NOT NULL DEFAULT '{}'");
+      addColumnIfMissing('participants', 'answer_log', "TEXT NOT NULL DEFAULT '[]'");
+      addColumnIfMissing('participants', 'grades', "TEXT NOT NULL DEFAULT '{}'");
+      addColumnIfMissing('participants', 'submitted_at', 'TEXT');
+    },
+  },
+  {
+    version: 6,
+    name: 'exam answer events table, exam seat resume keys, participant token_version',
+    up() {
+      addColumnIfMissing('participants', 'resume_hash', 'TEXT');
+      addColumnIfMissing('participants', 'token_version', 'INTEGER NOT NULL DEFAULT 0');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS exam_answer_events (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          participant_id  INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+          question_key    TEXT NOT NULL,
+          response        TEXT NOT NULL DEFAULT '',
+          at              TEXT NOT NULL
+        );
+      `);
+      // Carry over any history written by 1.5.0 into the new table.
+      const rows = db
+        .prepare("SELECT id, answer_log FROM participants WHERE answer_log NOT IN ('', '[]')")
+        .all();
+      const insert = db.prepare(
+        'INSERT INTO exam_answer_events (participant_id, question_key, response, at) VALUES (?, ?, ?, ?)',
+      );
+      // One transaction: an interrupted upgrade re-runs this cleanly instead of
+      // copying the history twice.
+      db.transaction(() => {
+        for (const r of rows) {
+          let entries = [];
+          try {
+            entries = JSON.parse(r.answer_log);
+          } catch {
+            entries = [];
+          }
+          for (const e of Array.isArray(entries) ? entries : []) {
+            if (e && e.k) insert.run(r.id, String(e.k), String(e.a ?? ''), String(e.at ?? ''));
+          }
+        }
+        db.exec("UPDATE participants SET answer_log = '[]'");
+      })();
+    },
+  },
+  {
+    version: 7,
+    name: 'session breaks (time-on-section excludes breaks)',
+    up() {
+      addColumnIfMissing('sessions', 'breaks', "TEXT NOT NULL DEFAULT '[]'");
     },
   },
 ];

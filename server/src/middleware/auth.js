@@ -59,6 +59,12 @@ export function requireParticipant(req, res, next) {
   if (!participant) {
     return res.status(401).json({ error: 'Seat is no longer registered', code: 'SEAT_REMOVED' });
   }
+  if ((claims.tv ?? 0) !== (participant.token_version ?? 0)) {
+    return res.status(401).json({
+      error: 'This seat was moved to another device by the instructor.',
+      code: 'SEAT_RELEASED',
+    });
+  }
 
   const session = q.session.get(claims.session);
 

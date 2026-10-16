@@ -1,0 +1,16 @@
+# Re-render the Caddy site list at boot so a Pi that came up with a different
+# IP address (new network, DHCP lease change) serves a certificate covering the
+# new address. Names given to install.sh are kept (/etc/vlabs/caddy-sites.conf);
+# only the IP list is refreshed, and Caddy is reloaded only if it changed.
+#   sudo systemctl start vlabs-caddy-refresh   # run it now
+[Unit]
+Description=Refresh vLabs Caddy sites for the current IP addresses
+Wants=network-online.target
+After=network-online.target caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vlabs/deploy/pi/render-caddy.sh
+
+[Install]
+WantedBy=multi-user.target

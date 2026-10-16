@@ -2,6 +2,7 @@ import {
   LIMITS,
   IDENT_RE,
   normaliseTemplate,
+  normaliseMinutes,
   findUnknownPlaceholders,
   findMissingImages,
   compileMask,
@@ -64,6 +65,11 @@ export function validateTemplatePayload(payload, opts = {}) {
     errors.push(`Too many sections (max ${LIMITS.sections})`);
   }
   rawSections.forEach((s, si) => {
+    if (minutesInvalid(s?.minutes)) {
+      errors.push(
+        `Section ${si + 1} time allocated must be a whole number of minutes from 1 to ${LIMITS.sectionMinutes} (or empty)`,
+      );
+    }
     const n = Array.isArray(s?.steps) ? s.steps.length : 0;
     if (n > LIMITS.stepsPerSection) {
       errors.push(`Section ${si + 1} has too many steps (max ${LIMITS.stepsPerSection})`);
@@ -133,6 +139,8 @@ export function validateTemplatePayload(payload, opts = {}) {
   const captures = new Map(); // name -> where first captured
   const content = tpl.content.map((section, si) => {
     const clean = { title: section.title.trim(), steps: [] };
+    // Storage shape: `minutes` only when set (keeps older consumers unaffected).
+    if (section.minutes) clean.minutes = section.minutes;
     if (!clean.title) errors.push(`Section ${si + 1} needs a title`);
     if (section.steps.length === 0) {
       errors.push(`Section ${si + 1} ("${clean.title || 'untitled'}") has no steps`);
@@ -216,6 +224,11 @@ function toStorageStep(s, sectionIndex, stepIndex, errors, variableNames, captur
     }
   }
   return step;
+}
+
+/** A minutes value that was given but is not a valid allocation. */
+export function minutesInvalid(v) {
+  return v !== undefined && v !== null && v !== '' && normaliseMinutes(v) === null;
 }
 
 function fail(errors) {

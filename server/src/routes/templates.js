@@ -3,7 +3,15 @@ import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
-import { renderManual, countSteps, injectVariables, FUNCTION_NAMES } from '../lib/templating.js';
+import { validateExamPayload } from '../lib/validateExam.js';
+import { listQuestions, totalPoints } from '../../../shared/exam-schema.js';
+import {
+  renderManual,
+  countSteps,
+  injectVariables,
+  injectImages,
+  FUNCTION_NAMES,
+} from '../lib/templating.js';
 import { maskExample } from '../../../shared/template-schema.js';
 import { imageNames, imageUrlMap } from '../lib/images.js';
 import { nowIso } from '../lib/time.js';
@@ -18,7 +26,7 @@ router.use(requireInstructor);
 
 const q = {
   list: db.prepare(
-    `SELECT t.id, t.title, t.description, t.version, t.content, t.updated_at, t.archived_at,
+    `SELECT t.id, t.kind, t.title, t.description, t.version, t.content, t.updated_at, t.archived_at,
             (SELECT instructor_username FROM template_audit a
               WHERE a.template_id = t.id AND a.action IN ('created', 'updated')
               ORDER BY a.id DESC LIMIT 1) AS updated_by,
@@ -34,8 +42,8 @@ const q = {
        FROM template_audit WHERE template_id = ? ORDER BY id DESC`,
   ),
   insert: db.prepare(
-    `INSERT INTO templates (title, description, content, variables, version, created_by)
-     VALUES (?, ?, ?, ?, 1, ?)`,
+    `INSERT INTO templates (kind, title, description, content, variables, version, created_by)
+     VALUES (?, ?, ?, ?, ?, 1, ?)`,
   ),
   update: db.prepare(
     `UPDATE templates
@@ -56,9 +64,22 @@ const q = {
   ),
 };
 
+const kindOf = (row) => (row.kind === 'exam' ? 'exam' : 'lab');
+
+/**
+ * Validate a create/update payload for the given kind. Labs go through the
+ * lab validator (unchanged); exams through their own (lib/validateExam.js).
+ */
+function validateFor(kind, payload) {
+  return kind === 'exam'
+    ? validateExamPayload(payload, { imageNames: imageNames() })
+    : validateTemplatePayload(payload, { imageNames: imageNames() });
+}
+
 function rowToTemplate(row) {
   return {
     id: row.id,
+    kind: kindOf(row),
     title: row.title,
     description: row.description,
     content: JSON.parse(row.content),
@@ -86,6 +107,7 @@ function recordAudit(instructor, { templateId, title, action, version, snapshot 
 /** Build a snapshot object from a template row. */
 function snapshotOf(row) {
   return {
+    kind: kindOf(row),
     title: row.title,
     description: row.description,
     content: JSON.parse(row.content),
@@ -116,13 +138,17 @@ router.get('/', (req, res) => {
   res.json(
     rows.map((r) => {
       const content = JSON.parse(r.content);
+      const exam = kindOf(r) === 'exam';
       return {
         id: r.id,
+        kind: kindOf(r),
         title: r.title,
         description: r.description,
         version: r.version,
         section_count: content.length,
-        step_count: countSteps(content),
+        step_count: exam ? 0 : countSteps(content),
+        question_count: exam ? listQuestions(content).length : 0,
+        total_points: exam ? totalPoints(content) : 0,
         updated_at: r.updated_at,
         updated_by: r.updated_by,
         archived_at: r.archived_at,
@@ -158,12 +184,14 @@ router.get('/:id', (req, res) => {
   res.json(rowToTemplate(loadOr404(req)));
 });
 
-/** POST /api/templates — create. */
+/** POST /api/templates — create. Body `kind: 'exam'` creates an exam; default lab. */
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const clean = validateTemplatePayload(req.body, { imageNames: imageNames() });
+    const kind = req.body?.kind === 'exam' ? 'exam' : 'lab';
+    const clean = validateFor(kind, req.body);
     const info = q.insert.run(
+      kind,
       clean.title,
       clean.description,
       JSON.stringify(clean.content),
@@ -184,7 +212,8 @@ router.post(
 );
 
 /**
- * PUT /api/templates/:id — update (bumps version).
+ * PUT /api/templates/:id — update (bumps version). The kind is fixed at
+ * creation; the payload is validated as the existing template's kind.
  * Running sessions are NOT affected: they render from their own snapshot until
  * the instructor pushes the new version from the session monitor.
  */
@@ -192,7 +221,18 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const existing = loadOr404(req);
-    const clean = validateTemplatePayload(req.body, { imageNames: imageNames() });
+    // Optimistic concurrency: templates are shared, so an editor sends the
+    // version it loaded and a save over someone else's newer save is refused
+    // instead of silently discarding their change.
+    const expected = req.body?.expected_version;
+    if (expected !== undefined && expected !== null && Number(expected) !== existing.version) {
+      throw httpError(
+        409,
+        `This template was changed by someone else (now v${existing.version}, you loaded v${expected}). Reload it and apply your edits again.`,
+        'VERSION_CONFLICT',
+      );
+    }
+    const clean = validateFor(kindOf(existing), req.body);
     q.update.run(
       clean.title,
       clean.description,
@@ -299,15 +339,37 @@ router.post(
     const seatId = Number.isInteger(seatRaw) ? Math.min(Math.max(seatRaw, 0), 9999) : 1;
     let content;
     let variables;
+    let kind;
 
     if (req.body?.draft) {
-      const clean = validateTemplatePayload(req.body.draft, { imageNames: imageNames() });
+      kind = req.body.draft.kind === 'exam' ? 'exam' : 'lab';
+      const clean = validateFor(kind, req.body.draft);
       content = clean.content;
       variables = clean.variables;
     } else {
       const row = loadOr404(req);
+      kind = kindOf(row);
       content = JSON.parse(row.content);
       variables = JSON.parse(row.variables);
+    }
+
+    if (kind === 'exam') {
+      // Exams have no per-seat variables: the preview is the authored exam
+      // (answers included — instructor-only route) with library images resolved.
+      const images = imageUrlMap();
+      return res.json({
+        kind,
+        sections: content.map((sec, si) => ({
+          index: si,
+          title: sec.title,
+          questions: sec.questions.map((qq, qi) => ({
+            ...qq,
+            index: qi,
+            prompt: injectImages(qq.prompt, images),
+            options: qq.options.map((o) => injectImages(o, images)),
+          })),
+        })),
+      });
     }
 
     const name = (v, fallback) =>

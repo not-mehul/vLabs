@@ -65,8 +65,8 @@ export default function Account() {
         </h2>
         {instructor?.must_change_password && (
           <div className="banner banner--warn" role="status">
-            This account still uses the default bootstrap password from the repository. Set a new
-            one now.
+            This account still uses a temporary password (the bootstrap password, or one set by
+            another instructor). Set your own now.
           </div>
         )}
         <form className="form account-form" onSubmit={handleSubmit}>

@@ -7,7 +7,8 @@
 #   sudo /opt/vlabs/deploy/pi/uninstall.sh --yes --purge  # also apt-purge Caddy + Node
 #
 # What is removed
-#   vlabs.service, vlabs-backup.{service,timer}   (disabled, files deleted)
+#   vlabs.service, vlabs-backup.{service,timer}, vlabs-caddy-refresh.service
+#                                                 (disabled, files deleted)
 #   /etc/vlabs            configuration + generated secrets
 #   /var/lib/vlabs        SQLite database, uploaded images, backups  ← your data
 #   /srv/vlabs-public     published root certificate
@@ -87,11 +88,12 @@ fi
 
 # ---------------------------------------------------------------------------
 bold "2/6  Services"
-systemctl disable --now vlabs.service vlabs-backup.timer 2>/dev/null || true
+systemctl disable --now vlabs.service vlabs-backup.timer vlabs-caddy-refresh.service 2>/dev/null || true
 systemctl stop vlabs-backup.service 2>/dev/null || true
 rm -f /etc/systemd/system/vlabs.service \
       /etc/systemd/system/vlabs-backup.service \
-      /etc/systemd/system/vlabs-backup.timer
+      /etc/systemd/system/vlabs-backup.timer \
+      /etc/systemd/system/vlabs-caddy-refresh.service
 systemctl daemon-reload
 systemctl reset-failed vlabs.service vlabs-backup.service 2>/dev/null || true
 echo "  vlabs units removed"

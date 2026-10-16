@@ -229,3 +229,61 @@ Serial is {{ SERIAL }}
   assert.equal(unknown[0].name, 'SERIAL');
   assert.equal(unknown[0].early, true);
 });
+
+test('section time allocation: `> minutes:` round-trips; old templates are unaffected', () => {
+  const md = `---
+title: Timed
+---
+
+# Setup
+> minutes: 15
+
+## [desk] Cable it
+Plug in.
+
+# Untimed
+
+## [info] Read
+Text.
+`;
+  const t = parseMarkdownTemplate(md);
+  assert.equal(t.content[0].minutes, 15);
+  assert.equal(t.content[1].minutes, null);
+  assert.equal(t.content[0].steps[0].body, 'Plug in.');
+  const again = parseMarkdownTemplate(templateToMarkdown(t));
+  assert.deepEqual(again, t);
+  assert.deepEqual(parseJsonTemplate(templateToJson(t)), t);
+  // Out-of-range or non-integer allocations normalise to "none".
+  assert.equal(
+    normaliseTemplate({ content: [{ title: 'x', minutes: 0, steps: [] }] }).content[0].minutes,
+    null,
+  );
+  assert.equal(
+    normaliseTemplate({ content: [{ title: 'x', minutes: '20', steps: [] }] }).content[0].minutes,
+    20,
+  );
+  assert.equal(
+    normaliseTemplate({ content: [{ title: 'x', minutes: 601, steps: [] }] }).content[0].minutes,
+    null,
+  );
+});
+
+test('a `> minutes:` line inside a step parses exactly as before (body / hint text)', () => {
+  const md = `---
+title: Compat
+---
+
+# S
+
+## [desk] Step
+Body line
+> minutes: 5 is quoted body text here
+
+> hint: H :: first
+> minutes: continuation of the hint
+`;
+  const t = parseMarkdownTemplate(md);
+  assert.equal(t.content[0].minutes, null);
+  assert.match(t.content[0].steps[0].body, /> minutes: 5 is quoted body text here/);
+  assert.equal(t.content[0].steps[0].hints[0].text, 'first\nminutes: continuation of the hint');
+});

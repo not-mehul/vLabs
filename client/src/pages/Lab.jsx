@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { api, ApiError, participantSession } from '../api.js';
+import { api, ApiError, participantSession, clockOffset } from '../api.js';
 import { useCountdown } from '../hooks/useCountdown.js';
 import StepCard from '../components/StepCard.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -33,10 +33,14 @@ export default function Lab() {
   const [liveExpiry, setLiveExpiry] = useState(null);
   const [remoteFinished, setRemoteFinished] = useState(false);
   const [updatedNotice, setUpdatedNotice] = useState(false);
+  const [offsetMs, setOffsetMs] = useState(0);
+  const [onBreak, setOnBreak] = useState(false);
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
   const versionRef = useRef(null);
-  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at);
+  const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
+    offsetMs,
+  });
 
   useEffect(() => {
     if (!token) navigate('/', { replace: true });
@@ -48,6 +52,8 @@ export default function Lab() {
       const res = await api.content(token);
       setData(res);
       setLiveExpiry(res.expires_at);
+      setOffsetMs(clockOffset(res.server_time));
+      setOnBreak(Boolean(res.on_break));
       setError('');
       // Keep the persisted session's expiry fresh so resume shows the right time.
       participantSession.set({
@@ -72,14 +78,17 @@ export default function Lab() {
       }
       versionRef.current = res.template_version;
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+      if (err instanceof ApiError && err.code === 'WRONG_KIND') {
+        // A stored exam session resumed through /lab.
+        navigate('/exam', { replace: true, state: resumed });
+      } else if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
         participantSession.clear();
         setEnded({ reason: err.message });
       } else {
         setError(err.message || 'Could not load your lab.');
       }
     }
-  }, [token, seatNumber, name, session]);
+  }, [token, seatNumber, name, session, navigate, resumed]);
 
   // Lightweight liveness poll: refreshes the countdown + finished flag,
   // detects session-end, and notices an instructor "push latest version"
@@ -90,6 +99,8 @@ export default function Lab() {
     try {
       const res = await api.status(token);
       setLiveExpiry(res.expires_at);
+      setOffsetMs(clockOffset(res.server_time));
+      setOnBreak(Boolean(res.on_break));
       if (res.finished) setRemoteFinished(true);
       setError('');
       if (versionRef.current !== null && res.template_version !== versionRef.current) {
@@ -191,7 +202,10 @@ export default function Lab() {
   if (!token) return null;
 
   const total = data?.total_sections ?? session?.section_count ?? 0;
+  // Progress counts only the sections that count (optional / wrap-up excluded).
   const completed = data?.completed_sections ?? 0;
+  const counting = data?.counting_sections ?? total;
+  const flags = data?.section_flags ?? [];
   const unlocked = data?.unlocked_section ?? 0;
   const section = data?.sections?.[view];
   const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
@@ -199,7 +213,7 @@ export default function Lab() {
   const canNext = view < unlocked && view < total - 1;
   const blockedByCheckpoint = section && !section.cleared && view >= unlocked;
   const isLast = view === total - 1;
-  const allDone = completed >= total && total > 0;
+  const allDone = Boolean(data?.completed);
   const finished = finishedLocal || data?.finished || remoteFinished;
 
   // Completion screen: shown once the lab is finished (unless reviewing).
@@ -212,10 +226,7 @@ export default function Lab() {
             <Icon name="check-circle" size={44} strokeWidth={1.9} />
           </span>
           <h1>Lab complete</h1>
-          <p>
-            Nice work, {displayName || `#${seatNumber}`}. You finished all {total} section
-            {total === 1 ? '' : 's'}.
-          </p>
+          <p>Nice work, {displayName || `#${seatNumber}`}. You completed the lab.</p>
           <div className="ended-actions">
             <button className="btn btn--ghost" onClick={() => setReviewing(true)}>
               Review sections
@@ -268,14 +279,16 @@ export default function Lab() {
             with aria-current="step" rather than role=tablist. */}
         <nav className="stepper" aria-label="Sections">
           {Array.from({ length: total }).map((_, i) => {
+            const done = Boolean(flags[i]?.done);
+            const optional = Boolean(flags[i]?.optional);
             const state =
-              i < completed ? 'done' : i === view ? 'current' : i <= unlocked ? 'open' : 'locked';
-            const label = `Section ${i + 1}${state === 'done' ? ' (complete)' : state === 'locked' ? ' (locked)' : ''}`;
+              i === view ? 'current' : done ? 'done' : i <= unlocked ? 'open' : 'locked';
+            const label = `Section ${i + 1}${optional ? ' (optional)' : ''}${done ? ' (complete)' : state === 'locked' ? ' (locked)' : ''}`;
             return (
               <button
                 key={i}
                 type="button"
-                className={`stepper__node stepper__node--${state}`}
+                className={`stepper__node stepper__node--${state} ${done ? 'stepper__node--is-done' : ''} ${optional ? 'stepper__node--optional' : ''}`}
                 disabled={i > unlocked}
                 onClick={() => goTo(i)}
                 aria-current={i === view ? 'step' : undefined}
@@ -283,7 +296,7 @@ export default function Lab() {
                 title={label}
               >
                 <span className="stepper__dot" aria-hidden="true">
-                  {state === 'done' ? <Icon name="check" size={15} strokeWidth={2.25} /> : i + 1}
+                  {done && i !== view ? <Icon name="check" size={15} strokeWidth={2.25} /> : i + 1}
                 </span>
               </button>
             );
@@ -295,23 +308,28 @@ export default function Lab() {
             className="lab__progress-track"
             role="progressbar"
             aria-valuemin={0}
-            aria-valuemax={total || 0}
+            aria-valuemax={counting || 0}
             aria-valuenow={completed}
             aria-label="Sections complete"
           >
-            <div
-              className="lab__progress-fill"
-              style={{ width: total ? `${(completed / total) * 100}%` : '0%' }}
-            />
+            <div className="lab__progress-fill" style={{ width: `${data?.progress_pct ?? 0}%` }} />
           </div>
           <span className="lab__progress-label">
-            {completed} / {total} complete
+            {completed} / {counting} complete
           </span>
         </div>
       </div>
 
       <main className="lab__content">
         <div aria-live="polite">
+          {onBreak && (
+            <div className="banner banner--info lab__notice" role="status">
+              <span>
+                <strong>Break.</strong> Your instructor has paused the class — time on this section
+                isn&apos;t counted until the break ends.
+              </span>
+            </div>
+          )}
           {error && <p className="form__error lab__error">{error}</p>}
           {updatedNotice && (
             <div className="banner banner--info lab__notice">
@@ -332,6 +350,12 @@ export default function Lab() {
             <div className="section-head">
               <span className="section-head__eyebrow">
                 Section {view + 1} of {total}
+                {flags[view]?.optional && (
+                  <span className="tag tag--optional" title="Does not count towards progress">
+                    Optional
+                  </span>
+                )}
+                {flags[view]?.done && <span className="tag tag--done">Completed</span>}
               </span>
               <h1 className="section-head__title">{section.title}</h1>
             </div>
@@ -357,6 +381,12 @@ export default function Lab() {
                 <span className="section-nav__hint" role="status">
                   <Icon name="lock" size={14} /> Complete the checkpoint to continue
                 </span>
+              )}
+
+              {allDone && !isLast && !finished && (
+                <button className="btn btn--ghost" onClick={handleFinish}>
+                  <Icon name="check-circle" size={16} /> Finish lab
+                </button>
               )}
 
               {isLast && allDone ? (

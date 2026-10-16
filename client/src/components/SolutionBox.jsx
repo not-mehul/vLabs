@@ -47,7 +47,7 @@ export default function SolutionBox({ solution: initialSolution, available, onRe
   if (!available) {
     return (
       <div className="solution-lock">
-        <Icon name="lock" size={14} /> Open all hints to reveal the solution
+        <Icon name="lock" size={14} /> View every hint above to unlock the solution
       </div>
     );
   }
