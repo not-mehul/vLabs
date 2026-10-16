@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { slug } from '../lib/format.js';
-import { downloadFile, readTextFile } from '../lib/files.js';
+import { downloadFile } from '../lib/files.js';
+import { readStudioFile, uploadPackageImages } from '../lib/studioPackage.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
@@ -20,11 +21,7 @@ import {
   examErrors,
   isManualQuestion,
 } from '../../../shared/exam-schema.js';
-import {
-  parseExamMarkdown,
-  examToMarkdown,
-  SAMPLE_EXAM_MARKDOWN,
-} from '../../../shared/exam-format.js';
+import { examToMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
 
 const NEW_EXAM = () =>
   normaliseExam({
@@ -293,9 +290,14 @@ function ExamPreview({ id, draft }) {
 export default function ExamEditor({ id, initial }) {
   const isNew = id === 'new-exam';
   const navigate = useNavigate();
+  const location = useLocation();
+  // An exam imported from Templates → Import arrives in the navigation state.
+  const imported = isNew ? location.state?.imported : null;
   const { call } = useInstructorApi();
   const fileRef = useRef(null);
-  const [tpl, setTpl] = useState(() => (initial ? normaliseExam(initial) : NEW_EXAM()));
+  const [tpl, setTpl] = useState(() =>
+    initial ? normaliseExam(initial) : imported ? normaliseExam(imported) : NEW_EXAM(),
+  );
   const [meta, setMeta] = useState({
     archived_at: initial?.archived_at ?? null,
     version: initial?.version ?? null,
@@ -304,7 +306,7 @@ export default function ExamEditor({ id, initial }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [errorDetails, setErrorDetails] = useState([]);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => (imported ? location.state?.notice || '' : ''));
   const [showPreview, setShowPreview] = useState(false);
   const [images, setImages] = useState([]);
   const [audit, setAudit] = useState([]);
@@ -340,13 +342,25 @@ export default function ExamEditor({ id, initial }) {
     e.target.value = '';
     if (!file) return;
     try {
-      const text = await readTextFile(file);
-      const parsed = /\.json$/i.test(file.name)
-        ? normaliseExam(JSON.parse(text))
-        : parseExamMarkdown(text);
+      const { kind, template, images: pkgImages, source } = await readStudioFile(file);
+      if (kind !== 'exam') {
+        setError(`"${file.name}" is a lab, not an exam. Import it from Templates → Import.`);
+        return;
+      }
       if (!window.confirm(`Replace this exam's content with "${file.name}"?`)) return;
-      set(parsed);
-      setNotice(`Imported ${file.name}. Review, then Save.`);
+      let notes = [];
+      if (pkgImages.length) {
+        notes = await uploadPackageImages(api, call, pkgImages, (names) =>
+          window.confirm(
+            `${names.length} image(s) already exist in the library (${names.join(', ')}).\n\nReplace them with the package's versions? This updates every template that uses them.`,
+          ),
+        );
+        loadImages();
+      }
+      set(normaliseExam(template));
+      setNotice(
+        `Imported ${file.name} (${source}).${notes.length ? ` Images: ${notes.join(', ')}.` : ''} Review, then Save.`,
+      );
     } catch (err) {
       setError(`Import failed: ${err.message}`);
     }
@@ -401,7 +415,7 @@ export default function ExamEditor({ id, initial }) {
       <input
         ref={fileRef}
         type="file"
-        accept=".md,.markdown,.json,text/markdown,application/json"
+        accept=".zip,.md,.markdown,.json,application/zip,text/markdown,application/json"
         hidden
         onChange={handleImport}
       />

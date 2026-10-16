@@ -6,11 +6,11 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.6.0**.
+Applies to vLabs **1.7.0**.
 
 > **Where labs are written.** Labs are authored in **vLabs Template Studio**
 > (`docs/vlabs_template_studio.html`, a standalone page — open it in a
-> browser) and imported into the portal under **Templates → Import lab** as
+> browser) and imported into the portal under **Templates → Import** as
 > the Studio's `.zip` package (template + images), `.md` or `.json`. The
 > portal's lab page is a minimal editor for fixing typos only: every text
 > field can be corrected, but sections, steps, checkpoints and variables
@@ -20,7 +20,8 @@ Applies to vLabs **1.6.0**.
 > set in the Studio or in the portal's lab editor.
 >
 > **Exams** are a separate template kind with their own format — see
-> [EXAM_GUIDE.md](EXAM_GUIDE.md).
+> [EXAM_GUIDE.md](EXAM_GUIDE.md). The Studio writes those too (**New → New
+> Exam**), and **Templates → Import** recognises which kind a file is.
 
 ---
 
@@ -59,7 +60,7 @@ Applies to vLabs **1.6.0**.
 1. You write a **template**: a title, optional description, a list of
    **variables** (formulas), and ordered **sections** of ordered **steps**.
 2. You write it in **vLabs Template Studio** and import it in the portal
-   (**Templates → Import lab**) as a `.zip` package, `.md` or `.json`. The
+   (**Templates → Import**) as a `.zip` package, `.md` or `.json`. The
    portal shows a live warning for unknown placeholders, has a **Preview**
    that renders the manual for any seat number, lets you correct typos in
    any text, and keeps a change history with revert.
@@ -612,16 +613,25 @@ runs out; it is only a signal for the instructor.
 every visit to it (going back to review adds to it), minus any time during
 a break. Their clock stops when they complete the lab.
 
-**Averages.** Each card in *Where everyone got to* shows the section's
-allocation and **avg**, the average time of the participants who have
-completed that section:
+**Averages and section details.** The monitor's **Sections** panel shows one
+card per section with just the basics: how many participants are on it, how
+many have completed it, and whether it is optional. **Click a section** to
+open its details:
 
-- While others are still working, the number of participants it is based on
-  is shown, e.g. `avg 11m 40s (7)`.
-- Once **everyone** has moved past the section, the count disappears and the
-  average is final.
-- An average over the allocation is shown in amber. That is a sign the
-  section needs more time, or more help, next run.
+- The time allocated, and the **average** time of the participants who have
+  completed it. While others are still working it reads *Average so far*,
+  with the number it is based on; once **everyone** has moved past the
+  section it reads *Average (final)*. An average over the allocation is shown
+  in amber. That is a sign the section needs more time, or more help, next
+  run.
+- Median, fastest and slowest times, how many took longer than allocated,
+  and how many of those still on it are nearing or over the allocation.
+- Who is on it now (and their time against the allocation), who has
+  completed it and how long they took, and who has not reached it yet.
+  Click anyone to open their participant details.
+- Per step: hints opened (and by how many participants), solutions
+  revealed, and for checkpoints how many cleared it, the number of wrong
+  attempts, and the most common wrong answers.
 
 The JSON export carries `minutes`, `avg_seconds`, `completed_count` and
 `avg_final` per section. Both CSV and JSON exports have each participant's

@@ -18,21 +18,7 @@ import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
 import ExamMonitor from '../components/ExamMonitor.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from '../components/SectionFlow.jsx';
-
-/** One line under each lab section card: steps and checkpoints. */
-const labMeta = (s) => (
-  <>
-    {s.step_count} step{s.step_count === 1 ? '' : 's'}
-    {s.checkpoint_count ? (
-      <span title={`${s.checkpoint_count} checkpoint${s.checkpoint_count === 1 ? '' : 's'}`}>
-        {' '}
-        · <Icon name="lock" size={11} /> {s.checkpoint_count}
-      </span>
-    ) : (
-      ' · no checkpoint'
-    )}
-  </>
-);
+import SectionDrawer from '../components/SectionDrawer.jsx';
 
 function CopyCode({ code }) {
   const [copied, setCopied] = useState(false);
@@ -350,6 +336,12 @@ export default function SessionMonitor() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState(null); // participant id open in the drawer
+  const [sectionOpen, setSectionOpen] = useState(null); // section index open in the drawer
+  const closeSection = useCallback(() => setSectionOpen(null), []);
+  const openFromSection = useCallback((pid) => {
+    setSectionOpen(null);
+    setSelected(pid);
+  }, []);
   const offsetMs = useMemo(() => clockOffset(data?.server_time), [data?.server_time]);
   const remaining = useCountdown(data?.status === 'active' ? data?.expires_at : null, {
     hours: true,
@@ -668,7 +660,7 @@ export default function SessionMonitor() {
         <ExamMonitor data={data} sessionId={id} onChanged={refresh} />
       ) : (
         <>
-          <SectionFlow data={data} meta={labMeta} />
+          <SectionFlow data={data} onSelect={setSectionOpen} />
 
           <div className="panel">
             <div className="panel__head">
@@ -776,6 +768,14 @@ export default function SessionMonitor() {
             </p>
           </div>
 
+          {sectionOpen != null && (
+            <SectionDrawer
+              sessionId={id}
+              index={sectionOpen}
+              onClose={closeSection}
+              onParticipant={openFromSection}
+            />
+          )}
           {selected != null && (
             <ParticipantDrawer
               sessionId={id}

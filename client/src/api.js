@@ -212,6 +212,9 @@ export const api = {
   /** Exam sessions: every participant's response to one question. */
   questionResponses: (token, sessionId, key) =>
     request(`/sessions/${sessionId}/questions/${key}`, { token }),
+  /** Monitor: one section's timings, seats and per-step / per-question detail. */
+  getSection: (token, sessionId, index) =>
+    request(`/sessions/${sessionId}/sections/${index}`, { token }),
   /** Start (on: true) or end (on: false) a class-wide break. */
   setBreak: (token, id, on) =>
     request(`/sessions/${id}/break`, { method: 'POST', body: { on }, token }),

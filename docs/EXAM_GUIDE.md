@@ -9,19 +9,33 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.6.0**.
+Applies to vLabs **1.7.0**.
 
 ---
 
 ## 1. Creating an exam
 
+Exams can be written in two places:
+
+- **vLabs Template Studio** (`docs/vlabs_template_studio.html`): **New → New
+  Exam**, or **Examples → E. Network Fundamentals Quiz**. It has the same
+  parts, question types, minutes, image library and validation as below,
+  plus a **Participant Preview** where you can answer the exam yourself,
+  **Check my answers** (graded exactly as vLabs grades) and **Show answer
+  key**. **Export** writes a `.zip` package (exam + images), `.md` or `.json`.
+  Import it in the portal under **Templates → Import**: vLabs sees that it is
+  an exam, uploads the package's images and opens it in the exam editor, so
+  you only need to press **Save exam**.
+- The portal's own editor, below.
+
 **Templates → New exam** opens the exam editor: sections ("parts"), each with
 questions. For every question choose a type, write the prompt (Markdown, with
 images by library file name, e.g. `![topology](topology.png)`), set the
 points, and give the correct answer. The **Minutes** box beside each section
-title sets the time allocated to that section (§4.1). **Import** / **.md** / **.json** read and
-write the format below; **Sample .md** downloads a ready-made example. A
-sample exam is also created on a fresh install.
+title sets the time allocated to that section (§4.1). **Import** (a Studio
+`.zip`, `.md` or `.json`) / **.md** / **.json** read and write the format
+below; **Sample .md** downloads a ready-made example. A sample exam is also
+created on a fresh install.
 
 Launch it from **Sessions** like a lab (exams are grouped under *Exams* in the
 template picker). The session takes a frozen copy, as labs do.
@@ -43,6 +57,7 @@ question scores 0; unanswered hand-marked questions are simply not awarded.
 
 ```markdown
 ---
+kind: exam
 title: Network Fundamentals — Unit Test
 description: 20 minutes, closed book
 ---
@@ -72,6 +87,9 @@ In two or three sentences, explain why networks are split into VLANs.
 > points: 5
 ```
 
+- `kind: exam` in the front matter marks the file as an exam. Exports always
+  write it; on import it is optional (a file whose `## [type]` headings use
+  exam question types is recognised as an exam anyway).
 - `# ` starts a section, `## [type]` a question. Text after the type and the
   lines below it are the prompt (Markdown). Fenced code blocks are verbatim.
 - Type aliases: `mcq` `choice` `radio` → single; `multi` `checkbox` →
@@ -129,10 +147,11 @@ Section time works exactly as in labs (TEMPLATE_GUIDE.md §11.1):
   amber from 8 minutes, red after 15.
 - Time on a section adds up every visit to it, minus breaks. **Submitting
   stops the clock.**
-- *Where everyone got to* shows, per section: who is on it, how many have
-  completed it, the allocation, and the **average time** of those who
-  completed it. The average is marked final once everyone has moved past
-  the section.
+- The **Sections** panel shows, per section, who is on it and how many have
+  completed it. Click a section for its details: the allocation, the
+  **average time** of those who completed it (marked final once everyone has
+  moved past the section), median / fastest / slowest, who took longer than
+  allocated, who is on it now, and the results of its questions.
 - **Start break** / **End break** on the monitor pauses and resumes every
   participant's section timer at once. Participants see a "Break" banner and
   can keep working, but break time never counts. The session countdown is
@@ -144,8 +163,9 @@ Section time works exactly as in labs (TEMPLATE_GUIDE.md §11.1):
 
 The exam monitor shows:
 
-- **Where everyone got to**: participants per section, completed counts,
-  time allocated and average time (§4.1).
+- **Sections**: participants on each section and how many completed it.
+  Click a section for its timing (§4.1), its participants and the results
+  of its questions; click a question or a participant there to open it.
 - **Questions** — answered count, correct rate (over graded responses), and
   how many still need marking. Click a question to see every participant's
   response to it and mark them in one place.

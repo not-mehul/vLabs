@@ -489,3 +489,19 @@ test('exam sections are timed like lab sections; submitting stops the clock', as
   assert.equal(after.data.time_status, 'ok');
   assert.ok(Array.isArray(after.data.section_times));
 });
+
+test('section drawer for exams: timing plus that section’s question results', async () => {
+  const d = await call(`/api/sessions/${sessionId}/sections/0`, { token });
+  assert.equal(d.status, 200);
+  assert.equal(d.data.kind, 'exam');
+  assert.equal(d.data.question_count, 3);
+  assert.deepEqual(
+    d.data.questions.map((q) => q.key),
+    ['0.0', '0.1', '0.2'],
+  );
+  assert.ok(d.data.completed_count >= 1);
+  assert.ok(d.data.completed.some((p) => p.name === 'Tess Timer'));
+  assert.equal(d.data.questions[0].expected !== undefined, true);
+  const second = await call(`/api/sessions/${sessionId}/sections/1`, { token });
+  assert.ok(second.data.questions.every((q) => q.section_index === 1));
+});

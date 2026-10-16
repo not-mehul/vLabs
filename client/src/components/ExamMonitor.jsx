@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api.js';
-import { fmtDuration } from '../lib/format.js';
+import { fmtDuration, excerpt } from '../lib/format.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import Markdown from './Markdown.jsx';
 import Icon from './Icon.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from './SectionFlow.jsx';
+import SectionDrawer from './SectionDrawer.jsx';
 
 const TYPE_LABEL = {
   single: 'Multiple choice',
@@ -14,16 +15,6 @@ const TYPE_LABEL = {
   short: 'Short answer',
   long: 'Long answer',
 };
-
-/** Plain-text excerpt of a Markdown prompt for table cells. */
-function excerpt(md, n = 90) {
-  const t = String(md || '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '[image]')
-    .replace(/[`*_>#[\]()]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
-}
 
 /** Correct / incorrect / needs marking / unanswered badge for one response. */
 function Verdict({ r }) {
@@ -499,14 +490,16 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
   const [question, setQuestion] = useState(null);
   const closeP = useCallback(() => setParticipant(null), []);
   const closeQ = useCallback(() => setQuestion(null), []);
+  const [section, setSection] = useState(null);
+  const closeS = useCallback(() => setSection(null), []);
+  const fromSection = (open) => (value) => {
+    setSection(null);
+    open(value);
+  };
 
   return (
     <>
-      <SectionFlow
-        data={data}
-        doneLabel="Submitted"
-        meta={(s) => `${s.question_count} question${s.question_count === 1 ? '' : 's'}`}
-      />
+      <SectionFlow data={data} doneLabel="Submitted" onSelect={setSection} />
 
       <div className="panel">
         <div className="panel__head">
@@ -687,6 +680,15 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
         </p>
       </div>
 
+      {section != null && (
+        <SectionDrawer
+          sessionId={sessionId}
+          index={section}
+          onClose={closeS}
+          onParticipant={fromSection(setParticipant)}
+          onQuestion={fromSection(setQuestion)}
+        />
+      )}
       {participant != null && (
         <ParticipantExamDrawer
           sessionId={sessionId}

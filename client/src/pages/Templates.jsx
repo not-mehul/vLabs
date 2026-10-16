@@ -84,8 +84,8 @@ export default function Templates() {
         <div>
           <h1>Templates</h1>
           <p className="muted">
-            Lab manuals (authored in vLabs Template Studio and imported here) and exams. Shared by
-            all instructors.
+            Labs and exams, authored in vLabs Template Studio and imported here (exams can also be
+            written here). Shared by all instructors.
           </p>
         </div>
         <div className="page-head__actions">
@@ -96,7 +96,7 @@ export default function Templates() {
             </button>
           )}
           <button className="btn btn--ghost" onClick={() => navigate('/instructor/templates/new')}>
-            <Icon name="upload" size={16} /> Import lab
+            <Icon name="upload" size={16} /> Import
           </button>
           <button
             className="btn btn--primary"

@@ -353,14 +353,17 @@ out.
 
 ### Template import / export
 
-Labs are authored in **vLabs Template Studio** (`docs/vlabs_template_studio.html`,
-a standalone page) and imported under **Templates → Import lab**. The Studio's
-**`.zip` package** (`template.json` + `images/`) uploads its images to the
-library and loads the lab in one step; `.md` and `.json` work too. In the
+Labs and exams are authored in **vLabs Template Studio**
+(`docs/vlabs_template_studio.html`, a standalone page; **New → New Lab / New
+Exam**) and imported under **Templates → Import**, which tells the two apart
+and opens the matching editor. The Studio's **`.zip` package**
+(`template.json` + `images/`) uploads its images to the library and loads the
+template in one step; `.md` and `.json` work too. In the
 portal a lab can only have its **text** corrected (titles, bodies, hints,
 solutions, checkpoint prompts/answers/patterns, formula expressions) — to add,
 remove or reorder anything, export it, change it in the Studio and re-import.
-Exams have their own editor and format ([docs/EXAM_GUIDE.md](docs/EXAM_GUIDE.md)).
+Exams have their own format and can also be written or edited in the portal's
+exam editor ([docs/EXAM_GUIDE.md](docs/EXAM_GUIDE.md)).
 **[docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) is the complete authoring
 reference** — model, Markdown syntax, every validation rule, the formula and
 mask languages, delivery/gating behaviour, and four ready-to-import example
@@ -509,6 +512,7 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 | `DELETE` | `/sessions/:id`                              | Delete session and its participants                                                                                                                                                                                                                                                                       |
 | `GET`    | `/sessions/:id/export`                       | Full JSON export: `sections[]` + `checkpoints[]` index, per-participant `section_times[]`, `checkpoints[]` (accepted answer + every wrong attempt with timestamps), `hints_opened[]`, `solutions_revealed_list[]`, `captured`, plus a flat chronological `attempts[]` log (works after template deletion) |
 | `GET`    | `/sessions/:id/participants/:pid`            | One participant in depth: checkpoints with accepted answer + wrong attempts, hints opened, solutions revealed, time per section                                                                                                                                                                           |
+| `GET`    | `/sessions/:id/sections/:index`              | Monitor section details: time allocated, average / median / fastest / slowest, who is on it, completed it or has not reached it; labs add per-step hints, solutions and checkpoint results (common wrong answers), exams the section's question results                                                   |
 | `PUT`    | `/sessions/:id/participants/:pid/marks/:key` | Exams: `{ correct: true \| false \| null }` — mark a response by hand (null clears)                                                                                                                                                                                                                       |
 | `GET`    | `/sessions/:id/questions/:key`               | Exams: every participant's response to one question                                                                                                                                                                                                                                                       |
 | `DELETE` | `/sessions/:id/participants/:pid`            | Remove a participant (their device is signed out with `SEAT_REMOVED`)                                                                                                                                                                                                                                     |

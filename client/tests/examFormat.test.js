@@ -166,3 +166,21 @@ test('examResultsToCsv: one time column per section when the export lists sectio
   );
   assert.match(row, /,61,122,/);
 });
+
+test('Studio imports: labs and exams are told apart (JSON kind, Markdown types)', async () => {
+  const { parseStudioText } = await import('../src/lib/studioPackage.js');
+  const { looksLikeExamMarkdown } = await import('../../shared/exam-format.js');
+  const { SAMPLE_MARKDOWN } = await import('../src/lib/templateFormat.js');
+  assert.equal(parseStudioText(SAMPLE_EXAM_MARKDOWN, false).kind, 'exam');
+  assert.equal(parseStudioText(SAMPLE_MARKDOWN, false).kind, 'lab');
+  const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
+  const fromJson = parseStudioText(JSON.stringify(exam), true);
+  assert.equal(fromJson.kind, 'exam');
+  assert.deepEqual(fromJson.template, exam);
+  assert.equal(parseStudioText(JSON.stringify({ title: 'L', content: [] }), true).kind, 'lab');
+  // Exported exams say so; older exam files without the marker are still recognised.
+  assert.match(examToMarkdown(exam), /^---\nkind: exam\n/);
+  assert.equal(looksLikeExamMarkdown('# P\n\n## [mcq] Pick one\n- [x] a\n'), true);
+  assert.equal(looksLikeExamMarkdown('# S\n\n## [desk] Do it\nBody\n'), false);
+  assert.throws(() => parseExamMarkdown('---\nkind: lab\n---\n# S\n'), /is a lab/);
+});

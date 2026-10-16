@@ -107,7 +107,13 @@ export default function LabEditor({ id, initial }) {
     setError('');
     setErrorDetails([]);
     try {
-      const { template, images: pkgImages, source } = await readStudioFile(file);
+      const { kind, template, images: pkgImages, source } = await readStudioFile(file);
+      if (kind === 'exam' && !isNew) {
+        setError(
+          `"${file.name}" is an exam, not a lab. Import it from Templates → Import, or into an exam.`,
+        );
+        return;
+      }
       if (!isNew && tpl && !window.confirm(`Replace this lab's content with "${file.name}"?`)) {
         return;
       }
@@ -119,6 +125,16 @@ export default function LabEditor({ id, initial }) {
           ),
         );
         loadImages();
+      }
+      if (kind === 'exam') {
+        // An exam from the Studio: continue in the exam editor with it loaded.
+        navigate('/instructor/templates/new-exam', {
+          state: {
+            imported: template,
+            notice: `Imported exam ${file.name} (${source}).${notes.length ? ` Images: ${notes.join(', ')}.` : ''} Review, then Save.`,
+          },
+        });
+        return;
       }
       setTpl(normaliseTemplate(template));
       setDirty(true);
@@ -211,7 +227,7 @@ export default function LabEditor({ id, initial }) {
             <Icon name="chevronLeft" size={15} /> Templates
           </button>
           <h1>
-            {isNew ? 'Import a lab' : tpl?.title || 'Lab'}
+            {isNew ? 'Import from Template Studio' : tpl?.title || 'Lab'}
             {meta.version != null && <span className="muted small"> · v{meta.version}</span>}
           </h1>
         </div>
@@ -284,7 +300,7 @@ export default function LabEditor({ id, initial }) {
             <Icon name="upload" size={20} />
           </span>
           <strong>Drop a Template Studio export here, or click to choose</strong>
-          <span className="muted small">.zip package · .md · .json</span>
+          <span className="muted small">Lab or exam · .zip package · .md · .json</span>
         </button>
       ) : (
         <>

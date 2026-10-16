@@ -1014,3 +1014,55 @@ test('time on a section is judged against its allocation and excludes class brea
   assert.equal(exp.sections[0].minutes, 10);
   assert.ok(Math.abs(exp.sections[0].avg_seconds - 300) < 5);
 });
+
+test('section drawer: who is on a section, who completed it, timing and per-step activity', async () => {
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  const join = (first) =>
+    call('/api/participant/join', {
+      method: 'POST',
+      body: { room_code: s.data.room_code, first_name: first, last_name: 'Section' },
+    });
+  const a = (await join('Ada')).data.token;
+  await join('Bo');
+  const post = (path, body) => call(path, { method: 'POST', token: a, body });
+  await post('/api/participant/hint', { section_index: 0, step_index: 1, hint_index: 0 });
+  await post('/api/participant/checkpoint', { section_index: 0, step_index: 3, answer: 'nope' });
+  await post('/api/participant/checkpoint', {
+    section_index: 0,
+    step_index: 3,
+    answer: 'abcd1234wxyz',
+  });
+  await post('/api/participant/progress', { section_index: 1 });
+
+  const d = (await call(`/api/sessions/${s.data.id}/sections/0`, { token: instructorToken })).data;
+  assert.equal(d.kind, 'lab');
+  assert.equal(d.minutes, 10);
+  assert.equal(d.participant_count, 2);
+  assert.equal(d.here_count, 1);
+  assert.equal(d.here[0].name, 'Bo Section');
+  assert.equal(d.completed_count, 1);
+  assert.equal(d.completed[0].name, 'Ada Section');
+  assert.equal(d.timing.timed_count, 1);
+  assert.equal(d.steps.length, 4);
+  assert.equal(d.steps[1].hint_opens, 1);
+  assert.equal(d.steps[1].hint_participants, 1);
+  const cp = d.steps[3].checkpoint;
+  assert.equal(cp.cleared_count, 1);
+  assert.equal(cp.wrong_attempts, 1);
+  assert.deepEqual(cp.common_wrong, [{ answer: 'nope', count: 1 }]);
+  assert.equal(d.steps[0].checkpoint, null);
+
+  const s2 = (await call(`/api/sessions/${s.data.id}/sections/1`, { token: instructorToken })).data;
+  assert.equal(s2.here_count, 1);
+  assert.equal(s2.not_reached_count, 1);
+  assert.equal(s2.timing.avg_seconds, null);
+
+  assert.equal(
+    (await call(`/api/sessions/${s.data.id}/sections/9`, { token: instructorToken })).status,
+    404,
+  );
+});

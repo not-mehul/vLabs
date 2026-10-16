@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.6.0). The first section is the original code
+Newest entry at the bottom (1.7.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -529,3 +529,57 @@ Full audit of architecture, security, data safety and operations; report in
 `deploy/pi/update.sh` as usual — migration 7 runs on start. Running sessions
 continue; add `> minutes:` to templates (or set it in the editor) when you
 want allocation-based alerts.
+
+## 1.7.0 — exams in Template Studio, section details in the monitor
+
+### Template Studio writes exams
+
+- **New → New Exam** (and **Examples → E. Network Fundamentals Quiz**) puts
+  the Studio in exam mode. You get parts with time allocated, and questions of
+  every vLabs type (multiple choice, select all, true/false, short and long
+  answer) with points and correct answers. The image library and Markdown
+  toolbar work as for labs. Lab-only tools (variables, lineage, tokens) are
+  hidden.
+- Exam outline, search and validation use vLabs' own wording. The
+  **Participant Preview** lets you answer the exam, **Check my answers**
+  (graded exactly as the server grades) and **Show answer key**.
+- **Export** writes the vLabs exam format: `.zip` package (exam + images),
+  `.md` (now with `kind: exam` in the front matter) or `.json`
+  (`"kind": "exam"`). **Import** reads exams as well as labs. Lab authoring is
+  unchanged.
+- The Studio carries its own copy of the exam format (a DOM-free script
+  block). `client/tests/studioExamParity.test.js` checks that copy against
+  the app's modules, so the two cannot drift apart unnoticed.
+
+### vLabs imports Studio exams
+
+- **Templates → Import** (was _Import lab_) accepts a lab or an exam, as
+  `.zip`, `.md` or `.json`. Exams are recognised by `kind: exam` or by their
+  question types. A package's images are uploaded, and the exam opens in the
+  exam editor ready to save. The exam editor's own Import accepts Studio
+  `.zip` packages too. Each editor refuses the other kind with a clear
+  message.
+- Lab parsing is unchanged. Exam Markdown without the new `kind: exam` line
+  still imports.
+
+### Monitor: Sections panel and section details
+
+- _Where everyone got to_ is now **Sections**. The cards show only the basics:
+  participants on the section, how many completed it, and whether it is
+  optional.
+- **Click a section** for its details in a side panel, as for participants:
+  - time allocated, plus average (_so far_ or _final_), median, fastest and
+    slowest times
+  - how many took longer than allocated, and how many still on it are nearing
+    or over
+  - who is on it, who completed it (with their times) and who has not reached
+    it; click anyone to open their details
+  - labs: per step, hints opened, solutions revealed, and checkpoint results
+    with the most common wrong answers
+  - exams: the section's questions with answered, correct and to-mark counts;
+    click one to mark it
+- New endpoint `GET /api/sessions/:id/sections/:index`.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.

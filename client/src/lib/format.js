@@ -233,3 +233,13 @@ export function examLogToCsv(doc) {
   const rows = (doc?.answer_log || []).map((e) => [e.at, e.number, e.name, e.question, e.response]);
   return csvLines(header, rows);
 }
+
+/** Plain-text excerpt of a Markdown prompt for table cells. */
+export function excerpt(md, n = 90) {
+  const t = String(md || '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '[image]')
+    .replace(/[`*_>#[\]()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}

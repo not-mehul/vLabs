@@ -148,7 +148,7 @@
       </div>
 
       <span class="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.06]">
-        1.6.0
+        1.7.0
       </span>
 
       <div class="h-4 w-px bg-slate-200 dark:bg-white/[0.08] mx-1 hidden sm:block"></div>
@@ -182,11 +182,24 @@
         </button>
       </div>
 
-      <!-- New Blank Lab Button -->
-      <button onclick="promptNewBlankLab()" class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs" title="Start a fresh blank lab template">
-        <i class="ph ph-plus text-slate-500 dark:text-slate-400"></i>
-        <span class="hidden lg:inline">New</span>
-      </button>
+      <!-- New: blank lab or blank exam -->
+      <div class="relative" id="newDropdownContainer">
+        <button onclick="toggleNewMenu()" class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs" title="Start a new lab or exam">
+          <i class="ph ph-plus text-slate-500 dark:text-slate-400"></i>
+          <span class="hidden lg:inline">New</span>
+          <i class="ph ph-caret-down text-[10px] text-slate-400"></i>
+        </button>
+        <div id="newMenu" class="hidden absolute right-0 mt-1.5 w-56 bg-white dark:bg-surface-850 border border-slate-200/90 dark:border-white/[0.09] rounded-xl shadow-elevated py-1.5 z-50 text-xs">
+          <button onclick="promptNewBlankLab()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200">
+            <i class="ph ph-flask text-sm text-sky-500"></i>
+            <div><span class="block font-medium">New Lab</span><span class="text-[10px] text-slate-400">Steps, hints, checkpoints, variables</span></div>
+          </button>
+          <button onclick="promptNewBlankExam()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200">
+            <i class="ph ph-exam text-sm text-violet-500"></i>
+            <div><span class="block font-medium">New Exam</span><span class="text-[10px] text-slate-400">Multiple choice, true/false, typed answers</span></div>
+          </button>
+        </div>
+      </div>
 
       <!-- Preset Selector Dropdown -->
       <div class="relative" id="presetDropdownContainer">
@@ -204,6 +217,13 @@
             <div>
               <span class="block font-medium">Blank Lab Template</span>
               <span class="text-[10px] text-slate-400">Reset workspace to clean starter</span>
+            </div>
+          </button>
+          <button onclick="promptNewBlankExam()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 border-b border-slate-100 dark:border-white/[0.06] text-slate-700 dark:text-slate-200">
+            <i class="ph ph-exam text-sm text-slate-400"></i>
+            <div>
+              <span class="block font-medium">Blank Exam</span>
+              <span class="text-[10px] text-slate-400">Start a new exam template</span>
             </div>
           </button>
           <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -224,6 +244,13 @@
           <button onclick="loadTemplatePreset('software')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
             <span class="font-medium text-slate-800 dark:text-slate-200">D. Developer Onboarding</span>
             <span class="text-[10px] text-slate-400">Git branches, PRs & wildcard masks</span>
+          </button>
+          <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Exams (EXAM_GUIDE.md)
+          </div>
+          <button onclick="loadTemplatePreset('exam')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">E. Network Fundamentals Quiz</span>
+            <span class="text-[10px] text-slate-400">Every question type, timed parts</span>
           </button>
         </div>
       </div>
@@ -320,7 +347,7 @@
 
       <!-- Bottom Utility Bar -->
       <div class="p-2.5 border-t border-slate-100 dark:border-white/[0.06] flex items-center gap-1.5">
-        <button onclick="openTokenCheatsheet()" class="flex-1 flex items-center justify-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-surface-850 hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg transition" title="Placeholders & Captures Reference">
+        <button id="tokensBtn" onclick="openTokenCheatsheet()" class="flex-1 flex items-center justify-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-surface-850 hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg transition" title="Placeholders & Captures Reference">
           <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i>
           <span class="sidebar-label">Tokens</span>
         </button>
@@ -339,7 +366,8 @@
         <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-3">
             <div class="flex items-center space-x-2">
-              <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Lab Specification</span>
+              <span id="kindBadge" class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">Lab</span>
+              <span id="specKindLabel" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Lab Specification</span>
             </div>
             <div class="flex items-center space-x-1.5">
               <button onclick="toggleAllStepPreviews()" id="toggleAllPreviewsBtn" class="px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-md border border-slate-200/70 dark:border-white/[0.07] transition flex items-center gap-1">
@@ -404,7 +432,7 @@
         <!-- Add Section Button -->
         <button onclick="addNewSection()" class="w-full py-3 border border-dashed border-slate-300 dark:border-white/[0.12] hover:border-brand-500 dark:hover:border-brand-500 rounded-xl flex items-center justify-center space-x-2 text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition group text-xs font-medium bg-white/50 dark:bg-surface-900/40">
           <i class="ph ph-plus text-sm"></i>
-          <span>Add Section</span>
+          <span id="addSectionLabel">Add Section</span>
         </button>
       </section>
 
@@ -500,6 +528,7 @@
               <i class="ph ph-user-focus text-brand-600 dark:text-brand-400 text-sm"></i>
               <span>Participant Simulator</span>
             </span>
+            <div id="previewLabControls" class="contents">
             <div class="h-3.5 w-px bg-slate-200 dark:bg-white/[0.08] hidden sm:block"></div>
             <div class="flex items-center space-x-1.5">
               <label class="text-[11px] text-slate-400">Seat</label>
@@ -523,6 +552,7 @@
                 Reset
               </button>
             </div>
+            </div>
           </div>
 
           <!-- Active Variables & Captures Bar in Preview -->
@@ -537,7 +567,7 @@
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-4">
             <div>
               <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
-                Specification Audit (vLabs 1.6.0)
+                Specification Audit (vLabs 1.7.0)
               </h2>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Verifies structural limits, formulas across Seats 1/24/100, placeholder resolution, capture order, pattern masks, and image assets.
@@ -827,6 +857,336 @@
     </div>
   </div>
 
+  <!--
+    Exam core (vLabs exam templates). A dependency-free port of
+    shared/exam-schema.js and shared/exam-format.js from the vLabs app, so the
+    Studio can open, check and write exactly what vLabs imports. Pure functions,
+    no DOM: client/tests/studioExamParity.test.js loads this block and checks it
+    still matches the app's own modules.
+  -->
+  <script id="vlabs-exam-core">
+    const EXAM_LIMITS = Object.freeze({
+      sections: 50, questionsPerSection: 200, options: 12, accepted: 20, title: 200,
+      description: 1000, sectionTitle: 200, prompt: 10000, option: 500, acceptedAnswer: 200,
+      maxPoints: 100, sectionMinutes: 600
+    });
+
+    const EXAM_TYPE_LABELS = Object.freeze({
+      single: 'Multiple choice', multiple: 'Select all that apply', truefalse: 'True / false',
+      short: 'Short answer', long: 'Long answer'
+    });
+    const EXAM_TYPES = Object.keys(EXAM_TYPE_LABELS);
+    const EXAM_HAS_OPTIONS = (t) => t === 'single' || t === 'multiple';
+
+    const EXAM_TYPE_ALIASES = Object.freeze({
+      single: 'single', mcq: 'single', choice: 'single', radio: 'single',
+      multiple: 'multiple', multi: 'multiple', checkbox: 'multiple', checkboxes: 'multiple',
+      truefalse: 'truefalse', 'true-false': 'truefalse', tf: 'truefalse',
+      short: 'short', text: 'short', 'short-answer': 'short',
+      long: 'long', essay: 'long', 'long-answer': 'long'
+    });
+
+    const examStr = (v, max) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return typeof max === 'number' ? s.slice(0, max) : s;
+    };
+    const examToIndex = (v) => {
+      const n = typeof v === 'number' ? v : Number.parseInt(String(v ?? ''), 10);
+      return Number.isInteger(n) && n >= 0 ? n : null;
+    };
+    const examToBool = (v) => {
+      if (typeof v === 'boolean') return v;
+      const s = String(v ?? '').trim().toLowerCase();
+      if (['true', 't', 'yes', '1'].includes(s)) return true;
+      if (['false', 'f', 'no', '0'].includes(s)) return false;
+      return null;
+    };
+    const examCleanOptions = (opts) =>
+      (Array.isArray(opts) ? opts : []).slice(0, EXAM_LIMITS.options).map((o) => examStr(o, EXAM_LIMITS.option).trim());
+
+    /** Section time allocation: whole minutes 1–600, else null. */
+    function examMinutes(v) {
+      if (v === null || v === undefined || v === '') return null;
+      const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+      return Number.isInteger(n) && n >= 1 && n <= EXAM_LIMITS.sectionMinutes ? n : null;
+    }
+
+    function examNormaliseText(v) {
+      return String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function examNormaliseQuestion(raw) {
+      const q = raw && typeof raw === 'object' ? raw : {};
+      const type = EXAM_TYPES.includes(q.type) ? q.type : 'single';
+      const pts = Number(q.points);
+      const out = {
+        type,
+        prompt: examStr(q.prompt, EXAM_LIMITS.prompt),
+        points: Number.isFinite(pts) ? Math.min(Math.max(pts, 0), EXAM_LIMITS.maxPoints) : 1,
+        options: [],
+        correct: null,
+        accepted: []
+      };
+      if (type === 'single') {
+        out.options = examCleanOptions(q.options);
+        out.correct = examToIndex(q.correct);
+      } else if (type === 'multiple') {
+        out.options = examCleanOptions(q.options);
+        const raw2 = Array.isArray(q.correct) ? q.correct : [];
+        out.correct = [...new Set(raw2.map(examToIndex).filter((i) => i !== null))].sort((a, b) => a - b);
+      } else if (type === 'truefalse') {
+        out.correct = examToBool(q.correct);
+      } else if (type === 'short') {
+        out.accepted = (Array.isArray(q.accepted) ? q.accepted : [])
+          .map((a) => examStr(a, EXAM_LIMITS.acceptedAnswer).trim())
+          .filter(Boolean)
+          .filter((a, i, arr) => arr.indexOf(a) === i)
+          .slice(0, EXAM_LIMITS.accepted);
+      }
+      return out;
+    }
+
+    /** Coerce any exam-ish object into the canonical vLabs exam shape. */
+    function examNormalise(obj) {
+      const o = obj && typeof obj === 'object' ? obj : {};
+      const content = Array.isArray(o.content) ? o.content : [];
+      return {
+        kind: 'exam',
+        title: examStr(o.title, EXAM_LIMITS.title),
+        description: examStr(o.description, EXAM_LIMITS.description),
+        content: content.slice(0, EXAM_LIMITS.sections).map((sec) => {
+          const s = sec && typeof sec === 'object' ? sec : {};
+          return {
+            title: examStr(s.title, EXAM_LIMITS.sectionTitle),
+            minutes: examMinutes(s.minutes),
+            questions: (Array.isArray(s.questions) ? s.questions : [])
+              .slice(0, EXAM_LIMITS.questionsPerSection)
+              .map(examNormaliseQuestion)
+          };
+        })
+      };
+    }
+
+    function examBlankQuestion(type = 'single') {
+      const base = { type, prompt: '', points: 1, options: [], correct: null, accepted: [] };
+      if (type === 'single') return { ...base, options: ['', ''], correct: 0 };
+      if (type === 'multiple') return { ...base, options: ['', ''], correct: [] };
+      if (type === 'truefalse') return { ...base, correct: true };
+      return base;
+    }
+
+    const examIsManual = (q) => q.type === 'long' || (q.type === 'short' && !(q.accepted || []).length);
+
+    /** Per-question authoring errors, exactly as vLabs reports them on save. */
+    function examQuestionErrors(q, at) {
+      const errors = [];
+      if (!String(q.prompt || '').trim()) errors.push(`${at} has an empty prompt`);
+      if (q.type === 'single' || q.type === 'multiple') {
+        if (q.options.length < 2) errors.push(`${at} needs at least two options`);
+        if (q.options.some((o) => !o)) errors.push(`${at} has an empty option`);
+      }
+      if (q.type === 'single' && (q.correct === null || q.correct >= q.options.length)) {
+        errors.push(`${at} needs a correct option`);
+      }
+      if (q.type === 'multiple') {
+        if (!q.correct.length) errors.push(`${at} needs at least one correct option`);
+        if (q.correct.some((i) => i >= q.options.length)) {
+          errors.push(`${at} marks an option that does not exist as correct`);
+        }
+      }
+      if (q.type === 'truefalse' && q.correct === null) {
+        errors.push(`${at} needs the correct answer (true or false)`);
+      }
+      return errors;
+    }
+
+    /** Whole-exam authoring errors (normalised exam), in vLabs' wording. */
+    function examErrorsList(exam) {
+      const errors = [];
+      if (!exam.title.trim()) errors.push('Title is required');
+      if (!exam.content.length) errors.push('At least one section is required');
+      let count = 0;
+      exam.content.forEach((sec, si) => {
+        if (!sec.title.trim()) errors.push(`Section ${si + 1} needs a title`);
+        if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
+        sec.questions.forEach((q, qi) => {
+          count += 1;
+          errors.push(...examQuestionErrors(q, `Section ${si + 1} · question ${qi + 1}`));
+        });
+      });
+      if (exam.content.length && !count) errors.push('The exam has no questions');
+      return errors;
+    }
+
+    /** true / false, or null when a human marks it (as vLabs grades). */
+    function examGrade(q, v) {
+      if (examIsManual(q)) return null;
+      if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return false;
+      if (q.type === 'single' || q.type === 'truefalse') return v === q.correct;
+      if (q.type === 'multiple') {
+        const picked = [...new Set(v)].sort((a, b) => a - b);
+        return picked.length === q.correct.length && picked.every((i, k) => i === q.correct[k]);
+      }
+      if (q.type === 'short') {
+        if (!q.accepted.length) return null;
+        const want = examNormaliseText(v);
+        return q.accepted.some((a) => examNormaliseText(a) === want);
+      }
+      return null;
+    }
+
+    // ---- Markdown (same format as vLabs' shared/exam-format.js) ----------
+    const EXAM_OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
+    const EXAM_DIRECTIVE_RE = /^>\s*(points|answer|accept)\s*:\s*(.*)$/i;
+    const EXAM_FENCE_RE = /^\s*(```|~~~)/;
+    const EXAM_LAB_STEP_TYPES = new Set(['desk', 'computer', 'info']);
+
+    const examSplitPipes = (s) =>
+      String(s).split(/(?<!\\)\|/).map((p) => p.replace(/\\\|/g, '|').trim()).filter(Boolean);
+
+    /** Exam (not lab) Markdown: `kind: exam`, or exam question types. */
+    function looksLikeExamMarkdown(text) {
+      const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+      let i = 0;
+      if (lines[0]?.trim() === '---') {
+        for (i = 1; i < lines.length && lines[i].trim() !== '---'; i += 1) {
+          const m = /^kind\s*:\s*(\w+)/i.exec(lines[i]);
+          if (m) return m[1].toLowerCase() === 'exam';
+        }
+      }
+      let inFence = false;
+      for (; i < lines.length; i += 1) {
+        if (EXAM_FENCE_RE.test(lines[i])) inFence = !inFence;
+        if (inFence) continue;
+        const m = /^##\s+\[([^\]]+)\]/.exec(lines[i]);
+        if (!m) continue;
+        const t = m[1].trim().toLowerCase();
+        if (EXAM_LAB_STEP_TYPES.has(t)) return false;
+        if (EXAM_TYPE_ALIASES[t]) return true;
+      }
+      return false;
+    }
+
+    function examParseMarkdown(text) {
+      const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+      const exam = { kind: 'exam', title: '', description: '', content: [] };
+      let i = 0;
+      if (lines[0]?.trim() === '---') {
+        i = 1;
+        while (i < lines.length && lines[i].trim() !== '---') {
+          const m = /^([A-Za-z_]+)\s*:\s*(.*)$/.exec(lines[i]);
+          if (m) {
+            const key = m[1].toLowerCase();
+            if (key === 'kind' && m[2].trim().toLowerCase() === 'lab') {
+              throw new Error('This file is a lab (kind: lab), not an exam');
+            }
+            if (key === 'title') exam.title = m[2].trim();
+            else if (key === 'description') exam.description = m[2].trim();
+          }
+          i += 1;
+        }
+        i += 1;
+      }
+      let section = null;
+      let q = null;
+      let body = [];
+      let heading = '';
+      let inFence = false;
+      const flush = () => {
+        if (!q) return;
+        q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
+        section.questions.push(q);
+        q = null;
+        body = [];
+        heading = '';
+      };
+      for (; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (EXAM_FENCE_RE.test(line)) inFence = !inFence;
+        if (!inFence && /^#\s+/.test(line)) {
+          flush();
+          section = { title: line.replace(/^#\s+/, '').trim(), questions: [] };
+          exam.content.push(section);
+          continue;
+        }
+        if (!inFence && /^##\s+/.test(line)) {
+          flush();
+          if (!section) {
+            section = { title: 'Section 1', questions: [] };
+            exam.content.push(section);
+          }
+          const rest = line.replace(/^##\s+/, '');
+          const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+          const rawType = m ? m[1].trim().toLowerCase() : 'single';
+          const type = EXAM_TYPE_ALIASES[rawType];
+          if (!type) throw new Error(`Unknown question type "[${m[1]}]" on line ${i + 1}`);
+          q = { type, points: 1, options: [], correct: type === 'multiple' ? [] : null, accepted: [] };
+          heading = m ? m[2] : rest;
+          continue;
+        }
+        if (!q) {
+          const mm = /^>\s*minutes\s*:\s*(.*)$/i.exec(line);
+          if (!inFence && mm && section) section.minutes = mm[1].trim();
+          continue;
+        }
+        if (!inFence) {
+          const opt = EXAM_OPTION_RE.exec(line);
+          if (opt && EXAM_HAS_OPTIONS(q.type)) {
+            q.options.push(opt[2].trim());
+            if (opt[1].toLowerCase() === 'x') {
+              if (q.type === 'multiple') q.correct.push(q.options.length - 1);
+              else q.correct = q.options.length - 1;
+            }
+            continue;
+          }
+          const d = EXAM_DIRECTIVE_RE.exec(line);
+          if (d) {
+            const key = d[1].toLowerCase();
+            if (key === 'points') q.points = Number(d[2]);
+            else if (key === 'answer') q.correct = d[2].trim();
+            else if (key === 'accept') q.accepted.push(...examSplitPipes(d[2]));
+            continue;
+          }
+        }
+        body.push(line);
+      }
+      flush();
+      if (!exam.content.length) throw new Error('No sections found (start one with "# Title")');
+      return examNormalise(exam);
+    }
+
+    function examToMarkdownText(input) {
+      const exam = examNormalise(input);
+      const out = ['---', 'kind: exam', `title: ${exam.title}`];
+      if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
+      out.push('---', '');
+      for (const sec of exam.content) {
+        out.push(`# ${sec.title}`);
+        if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+        out.push('');
+        for (const q of sec.questions) {
+          const prompt = q.prompt.trim();
+          const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
+          out.push(`## [${q.type}]${oneLine ? ` ${prompt}` : ''}`);
+          if (!oneLine && prompt) out.push(prompt);
+          if (EXAM_HAS_OPTIONS(q.type)) {
+            q.options.forEach((o, oi) => {
+              const on = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+              out.push(`- [${on ? 'x' : ' '}] ${o}`);
+            });
+          }
+          if (q.type === 'truefalse') out.push(`> answer: ${q.correct ? 'true' : 'false'}`);
+          if (q.type === 'short' && q.accepted.length) {
+            out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
+          }
+          if (q.points !== 1) out.push(`> points: ${q.points}`);
+          out.push('');
+        }
+      }
+      return `${out.join('\n').trimEnd()}\n`;
+    }
+  </script>
+
   <script>
     // --- Application State Model ---
     function createBlankTemplate() {
@@ -885,6 +1245,7 @@
 
     function cloneStateForHistory(data) {
       return JSON.stringify({
+        ...(data.kind === 'exam' ? { kind: 'exam' } : {}),
         title: data.title,
         description: data.description,
         variables: data.variables,
@@ -1581,6 +1942,8 @@
     }
 
     function renderBuilder() {
+      applyKindChrome();
+      if (isExamMode()) return renderExamBuilder();
       const container = document.getElementById('sectionsContainer');
       if (!container) return;
       container.innerHTML = '';
@@ -1994,7 +2357,7 @@
             <i class="ph ph-image text-xs"></i>
             <span>Image</span>
           </button>
-          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white rounded text-[11px] font-medium flex items-center gap-1 text-brand-600 dark:text-brand-400 transition">
+          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="${isExamMode() ? 'hidden ' : ''}px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white rounded text-[11px] font-medium flex items-center gap-1 text-brand-600 dark:text-brand-400 transition">
             <i class="ph ph-brackets-curly text-xs"></i>
             <span>Token</span>
           </button>
@@ -2061,7 +2424,9 @@
         autoGrowTextarea(target);
       }
 
-      if (action === 'update-step-body') {
+      if (action && action.startsWith('exam-')) {
+        examHandleInput(action, target, sIdx);
+      } else if (action === 'update-step-body') {
         templateData.content[sIdx].steps[stepIdx].body = target.value;
         // Live update split preview if open
         const inlinePreview = document.getElementById(`inline-preview-body-${sIdx}-${stepIdx}`);
@@ -2130,7 +2495,8 @@
       const sIdx = target.dataset.secIdx !== undefined ? parseInt(target.dataset.secIdx, 10) : null;
       const stepIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
 
-      if (action === 'toggle-section') toggleSectionCollapse(sIdx);
+      if (action.startsWith('exam-')) examHandleClick(action, target, sIdx);
+      else if (action === 'toggle-section') toggleSectionCollapse(sIdx);
       else if (action === 'toggle-step') toggleStepCollapse(sIdx, stepIdx);
       else if (action === 'toggle-step-preview') toggleStepPreview(sIdx, stepIdx);
       else if (action === 'add-step') addNewStep(sIdx);
@@ -2154,7 +2520,9 @@
       const sIdx = target.dataset.secIdx !== undefined ? parseInt(target.dataset.secIdx, 10) : null;
       const stepIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
 
-      if (action === 'change-step-type') {
+      if (action && action.startsWith('exam-')) {
+        examHandleChange(action, target, sIdx);
+      } else if (action === 'change-step-type') {
         templateData.content[sIdx].steps[stepIdx].type = target.value;
         pushHistorySnapshot(true);
         renderBuilder();
@@ -2186,11 +2554,12 @@
     function toggleAllSections(collapse) {
       templateData.content.forEach(sec => {
         sec.collapsed = collapse;
-        sec.steps.forEach(st => { st.collapsed = collapse; });
+        (sec.steps || sec.questions || []).forEach(st => { st.collapsed = collapse; });
       });
       renderBuilder();
     }
     function addNewSection() {
+      if (isExamMode()) return addExamSection();
       templateData.content.push({
         title: `Section ${templateData.content.length + 1}`,
         collapsed: false,
@@ -2321,6 +2690,7 @@
     }
 
     function renderOutline() {
+      if (isExamMode()) return renderExamOutline();
       const list = document.getElementById('outlineList');
       const countEl = document.getElementById('outlineStepCount');
       if (!list) return;
@@ -2355,6 +2725,7 @@
     }
 
     function jumpToStep(sIdx, stepIdx) {
+      if (isExamMode()) return jumpToQuestion(sIdx, stepIdx ?? 0);
       switchView('builder');
       if (templateData.content[sIdx]) {
         templateData.content[sIdx].collapsed = false;
@@ -2912,6 +3283,7 @@
     }
 
     function extractReferencedImageNames() {
+      if (isExamMode()) return extractExamImageRefs();
       const referenced = []; // { fileName, rawPath, locLabel, sIdx, stIdx, isDynamic }
       const scanText = (text, locLabel, sIdx, stIdx) => {
         if (!text || typeof text !== 'string') return;
@@ -3017,6 +3389,7 @@
     }
 
     function resetPreviewSimulation(rerender = true) {
+      examPreviewState = { answers: {}, checked: false, showKey: false };
       previewState.clearedCheckpoints = {};
       previewState.openedHints = {};
       previewState.revealedSolutions = {};
@@ -3116,6 +3489,7 @@
     }
 
     function renderParticipantPreview() {
+      if (isExamMode()) return renderExamPreview();
       const container = document.getElementById('previewManualContainer');
       const varsBar = document.getElementById('previewVariablesBar');
       if (!container) return;
@@ -3357,6 +3731,8 @@
       const addError = (loc, msg, nav = {}) => issues.push({ severity: 'error', loc, msg, ...nav });
       const addWarning = (loc, msg, nav = {}) => issues.push({ severity: 'warning', loc, msg, ...nav });
 
+      if (isExamMode()) return renderValidationIssues(issues, showToasts, collectExamIssues(addError, addWarning));
+
       // 1. Front Matter & Structural Limits (§13, §14)
       const title = (templateData.title || '').trim();
       const desc = (templateData.description || '');
@@ -3594,6 +3970,15 @@
         }
       });
 
+      return renderValidationIssues(
+        issues,
+        showToasts,
+        `Checked metadata limits, ${declaredVarNames.size} formula(s) across seats 1/24/100, ${allCaptureLocations.size} capture(s), placeholders, masks, and image assets.`
+      );
+    }
+
+    /** Badge, results list and toasts for a validation run (labs and exams). */
+    function renderValidationIssues(issues, showToasts, okDetail) {
       const errorCount = issues.filter(i => i.severity === 'error').length;
       const warnCount = issues.filter(i => i.severity === 'warning').length;
 
@@ -3615,8 +4000,8 @@
               <div class="flex items-center space-x-2.5">
                 <i class="ph-fill ph-check-circle text-xl text-emerald-500"></i>
                 <div>
-                  <div class="font-bold">All vLabs 1.6.0 Validation Rules Passed</div>
-                  <div class="text-[11px] opacity-80">Checked metadata limits, ${declaredVarNames.size} formula(s) across seats 1/24/100, ${allCaptureLocations.size} capture(s), placeholders, masks, and image assets.</div>
+                  <div class="font-bold">All vLabs 1.7.0 Validation Rules Passed</div>
+                  <div class="text-[11px] opacity-80">${escapeHtml(okDetail)}</div>
                 </div>
               </div>
               <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">READY TO SAVE</span>
@@ -3682,6 +4067,7 @@
     }
 
     function generateMarkdown() {
+      if (isExamMode()) return examToMarkdownText(templateData);
       let out = `---\ntitle: ${(templateData.title || 'Untitled').replace(/\r?\n/g, ' ').trim()}\n`;
       if (templateData.description && templateData.description.trim()) {
         out += `description: ${templateData.description.replace(/\r?\n/g, ' ').trim()}\n`;
@@ -3752,6 +4138,7 @@
     }
 
     function generateCanonicalJson() {
+      if (isExamMode()) return generateExamCanonicalJson();
       const payload = {
         title: (templateData.title || 'Untitled').slice(0, 200),
         description: (templateData.description || '').slice(0, 1000),
@@ -3819,11 +4206,16 @@
       if (/^\s*\{[\s\S]*\}\s*$/.test(normalizedMd)) {
         try {
           const parsedJson = JSON.parse(normalizedMd);
+          if (parsedJson && parsedJson.kind === 'exam') return studioExamFromCanonical(parsedJson);
           if (parsedJson && (parsedJson.title || Array.isArray(parsedJson.content))) {
             return normalizeImportedJsonTemplate(parsedJson);
           }
         } catch (_) {}
       }
+
+      // Exam Markdown (vLabs exam format): front matter `kind: exam`, or
+      // `## [single]`-style question headings.
+      if (looksLikeExamMarkdown(normalizedMd)) return studioExamFromCanonical(examParseMarkdown(normalizedMd));
 
       const template = {
         title: "Imported Lab",
@@ -4074,6 +4466,7 @@
     }
 
     function normalizeImportedJsonTemplate(json) {
+      if (json && json.kind === 'exam') return studioExamFromCanonical(json);
       return {
         title: String(json.title || 'Imported Lab').slice(0, 200),
         description: String(json.description || '').slice(0, 1000),
@@ -4528,6 +4921,40 @@
     }
 
     const GUIDE_PRESETS_MARKDOWN = {
+      exam: `---
+kind: exam
+title: Network Fundamentals — Quiz (Sample)
+description: A short sample exam showing every question type.
+---
+
+# Part 1 · Addressing
+> minutes: 5
+
+## [single] Which address is a valid private IPv4 address?
+- [ ] 8.8.8.8
+- [x] 192.168.1.20
+- [ ] 172.32.0.1
+> points: 2
+
+## [multiple] Select every protocol that normally runs over UDP.
+- [x] DNS
+- [ ] SSH
+- [x] DHCP
+- [ ] HTTPS
+
+## [truefalse] A /24 network has 254 usable host addresses.
+> answer: true
+
+# Part 2 · Short answers
+> minutes: 10
+
+## [short] What TCP port does HTTPS use by default?
+> accept: 443 | tcp/443
+
+## [long]
+In two or three sentences, explain why networks are split into VLANs.
+> points: 5
+`,
       minimal: `---
 title: Course Name — Lab Name
 description: Who it is for, how long it takes, how many seats.
@@ -5112,7 +5539,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           const inspected = parseMarkdown(loadedImportRawContent);
           const secCount = inspected.content ? inspected.content.length : 0;
           let stepCount = 0;
-          (inspected.content || []).forEach(s => stepCount += (s.steps ? s.steps.length : 0));
+          (inspected.content || []).forEach(s => stepCount += (s.steps || s.questions || []).length);
 
           if (detailsEl) {
             detailsEl.textContent = `${sizeKb} KB · "${inspected.title || 'Untitled'}" (${secCount} sections, ${stepCount} steps, ${extractedImages.length} image asset(s))`;
@@ -5143,7 +5570,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           const inspected = parseMarkdown(loadedImportRawContent);
           const secCount = inspected.content ? inspected.content.length : 0;
           let stepCount = 0;
-          (inspected.content || []).forEach(s => stepCount += (s.steps ? s.steps.length : 0));
+          (inspected.content || []).forEach(s => stepCount += (s.steps || s.questions || []).length);
           if (detailsEl) detailsEl.textContent = `${sizeKb} KB · "${inspected.title || 'Untitled'}" (${secCount} sections, ${stepCount} steps)`;
           if (statusEl) statusEl.textContent = `Ready: ${secCount} sections, ${stepCount} steps detected`;
         } catch (_) {
@@ -5319,6 +5746,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     window.addEventListener('click', (e) => {
       if (!e.target.closest('#presetDropdownContainer')) document.getElementById('presetMenu')?.classList.add('hidden');
       if (!e.target.closest('#exportDropdownContainer')) document.getElementById('exportMenu')?.classList.add('hidden');
+      if (!e.target.closest('#newDropdownContainer')) document.getElementById('newMenu')?.classList.add('hidden');
     });
 
     // Global keyboard shortcuts (Escape + Undo/Redo when not inside native text inputs, or global Ctrl+Z/Y)
@@ -5377,6 +5805,609 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       runFullValidation(false);
       autoGrowAllTextareas();
     });
+  </script>
+  <!--
+    Exam authoring (vLabs exams). The Studio edits either a lab or an exam;
+    templateData.kind === 'exam' switches the builder, outline, preview,
+    validation and Markdown/JSON export to the exam format (vlabs-exam-core
+    above). Everything lab-related is untouched.
+  -->
+  <script id="vlabs-exam-ui">
+    function isExamMode() {
+      return templateData && templateData.kind === 'exam';
+    }
+
+    function createBlankExam() {
+      return {
+        kind: 'exam',
+        title: 'Untitled Exam',
+        description: '',
+        variables: [],
+        content: [
+          {
+            title: 'Part 1',
+            minutes: null,
+            collapsed: false,
+            questions: [{ ...examBlankQuestion('single'), prompt: 'Which option is correct?', options: ['Option A', 'Option B'], collapsed: false }]
+          }
+        ],
+        images: []
+      };
+    }
+
+    /** A canonical vLabs exam → the Studio's working copy (UI flags, images kept). */
+    function studioExamFromCanonical(exam) {
+      const e = examNormalise(exam);
+      return {
+        kind: 'exam',
+        title: e.title,
+        description: e.description,
+        variables: [],
+        content: e.content.map(sec => ({
+          ...sec,
+          collapsed: false,
+          questions: sec.questions.map(q => ({ ...q, collapsed: false }))
+        })),
+        images: (templateData && templateData.images) || []
+      };
+    }
+
+    function promptNewBlankExam() {
+      document.getElementById('presetMenu')?.classList.add('hidden');
+      document.getElementById('newMenu')?.classList.add('hidden');
+      openConfirmModal({
+        title: 'Start New Blank Exam?',
+        message: 'This will replace your current workspace with a fresh blank exam. You can still use Undo (Ctrl+Z) right after if needed.',
+        confirmText: 'Create Blank Exam',
+        onConfirm: () => {
+          templateData = createBlankExam();
+          resetPreviewSimulation(false);
+          pushHistorySnapshot(true);
+          refreshAllActiveViews();
+          scheduleAutoSave();
+          showToast('Started a new blank exam', 'success');
+        }
+      });
+    }
+
+    function toggleNewMenu() {
+      document.getElementById('newMenu')?.classList.toggle('hidden');
+    }
+
+    /** Show / hide the lab-only parts of the chrome for the current kind. */
+    function applyKindChrome() {
+      const exam = isExamMode();
+      ['nav-variables', 'nav-dependencies', 'tokensBtn', 'toggleAllPreviewsBtn', 'previewLabControls', 'previewVariablesBar'].forEach(id => {
+        document.getElementById(id)?.classList.toggle('hidden', exam && id !== 'previewVariablesBar');
+      });
+      const label = document.getElementById('specKindLabel');
+      if (label) label.textContent = exam ? 'Exam Specification' : 'Lab Specification';
+      const badge = document.getElementById('kindBadge');
+      if (badge) {
+        badge.textContent = exam ? 'Exam' : 'Lab';
+        badge.className = exam
+          ? 'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+          : 'text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300';
+      }
+      const addLabel = document.getElementById('addSectionLabel');
+      if (addLabel) addLabel.textContent = exam ? 'Add Part' : 'Add Section';
+      const search = document.getElementById('globalStepSearch');
+      if (search) search.placeholder = exam ? 'Filter questions...' : 'Filter steps, tokens...';
+      const outlineFilter = document.getElementById('outlineQuickFilter');
+      if (outlineFilter) outlineFilter.placeholder = exam ? 'Jump to question...' : 'Jump to step...';
+      const title = document.getElementById('templateTitle');
+      if (title) title.placeholder = exam ? 'e.g. Network Fundamentals — Unit Test' : 'e.g. Switch & Host Addressing — Bench Lab';
+      if (exam && (currentView === 'variables' || currentView === 'dependencies')) switchView('builder');
+    }
+
+    const EXAM_TYPE_DOT = { single: 'bg-violet-500', multiple: 'bg-fuchsia-500', truefalse: 'bg-sky-500', short: 'bg-emerald-500', long: 'bg-amber-500' };
+    const examLetter = (i) => String.fromCharCode(65 + i);
+    const examGradingBadge = (q) => examIsManual(q)
+      ? '<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">marked by hand</span>'
+      : '<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">auto-graded</span>';
+    const examAcceptedNote = (q) => q.accepted.length
+      ? 'Graded automatically; case and spacing are ignored.'
+      : 'No accepted answers: marked by hand in the session monitor.';
+    const examAcceptedText = (q) => (q.accepted || []).map(a => a.replace(/\|/g, '\\|')).join(' | ');
+    const examTotalPoints = () => templateData.content.reduce((n, s) => n + (s.questions || []).reduce((m, q) => m + (Number(q.points) || 0), 0), 0);
+    const examQuestionCount = () => templateData.content.reduce((n, s) => n + (s.questions || []).length, 0);
+
+    function examSectionHeaderHtml(section, sIdx) {
+      const isCollapsed = Boolean(section.collapsed);
+      const n = (section.questions || []).length;
+      return `
+        <div class="px-4 py-3 border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between bg-slate-50/50 dark:bg-surface-850/40">
+          <div class="flex items-center space-x-2.5 flex-1 mr-3">
+            <button data-action="toggle-section" data-sec-idx="${sIdx}" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs p-1 rounded-md hover:bg-slate-200/50 dark:hover:bg-white/[0.06] transition" title="Toggle Part">
+              <i class="ph ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'}"></i>
+            </button>
+            <span class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${String(sIdx + 1).padStart(2, '0')}</span>
+            <input type="text" value="${escapeHtml(section.title || '')}" placeholder="Part title..."
+              class="text-sm font-semibold tracking-tight text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
+              data-action="update-sec-title" data-sec-idx="${sIdx}">
+            <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this part, in minutes (empty = none). Time on the part is judged against it.">
+              <i class="ph ph-timer text-xs mr-1"></i>
+              <input type="number" min="1" max="600" step="1" inputmode="numeric" value="${section.minutes ? escapeHtml(String(section.minutes)) : ''}" placeholder="min"
+                class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
+                data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to part ${sIdx + 1}">
+              <span class="ml-1 hidden sm:inline">min</span>
+            </label>
+          </div>
+          <div class="flex items-center space-x-1 shrink-0">
+            <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 mr-1.5 hidden sm:inline">${n} ${n === 1 ? 'question' : 'questions'}</span>
+            <button data-action="move-sec-up" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Move Part Up"><i class="ph ph-arrow-up text-xs"></i></button>
+            <button data-action="move-sec-down" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Move Part Down"><i class="ph ph-arrow-down text-xs"></i></button>
+            <button data-action="duplicate-section" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Duplicate Part"><i class="ph ph-copy text-xs"></i></button>
+            <button data-action="delete-section" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 transition" title="Delete Part"><i class="ph ph-trash text-xs"></i></button>
+          </div>
+        </div>`;
+    }
+
+    function examAnswerEditorHtml(q, sIdx, qIdx) {
+      const at = `data-sec-idx="${sIdx}" data-q-idx="${qIdx}"`;
+      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
+      if (q.type === 'single' || q.type === 'multiple') {
+        const multi = q.type === 'multiple';
+        return `
+          <div class="space-y-1.5">
+            <span class="block text-[10px] font-medium text-slate-400">Options — mark ${multi ? 'every correct one (all must be chosen to score)' : 'the correct one'}</span>
+            ${q.options.map((o, oi) => {
+              const on = multi ? q.correct.includes(oi) : q.correct === oi;
+              return `
+                <div class="flex items-center gap-2">
+                  <input type="${multi ? 'checkbox' : 'radio'}" name="q-correct-${sIdx}-${qIdx}" ${on ? 'checked' : ''} ${at} data-opt-idx="${oi}" data-action="exam-q-correct"
+                    class="shrink-0 text-emerald-600 focus:ring-0" title="Correct answer" aria-label="Option ${examLetter(oi)} is correct">
+                  <span class="text-[11px] font-mono font-semibold w-4 text-slate-400">${examLetter(oi)}</span>
+                  <input type="text" value="${escapeHtml(o)}" placeholder="Option ${examLetter(oi)}" ${at} data-opt-idx="${oi}" data-action="exam-q-option"
+                    class="${inputCls} ${on ? '!border-emerald-400 dark:!border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-500/[0.06]' : ''}">
+                  <button data-action="exam-q-del-option" ${at} data-opt-idx="${oi}" class="p-1 text-slate-400 hover:text-rose-600 rounded disabled:opacity-30" ${q.options.length <= 2 ? 'disabled' : ''} title="Remove option">
+                    <i class="ph ph-x text-xs pointer-events-none"></i>
+                  </button>
+                </div>`;
+            }).join('')}
+            ${q.options.length < EXAM_LIMITS.options ? `
+              <button data-action="exam-q-add-option" ${at} class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add option</button>` : ''}
+          </div>`;
+      }
+      if (q.type === 'truefalse') {
+        return `
+          <div class="flex items-center gap-4 text-xs text-slate-700 dark:text-slate-200">
+            <span class="text-[10px] font-medium text-slate-400">Correct answer</span>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${qIdx}" value="true" ${q.correct === true ? 'checked' : ''} ${at} data-action="exam-q-tf"> True</label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${qIdx}" value="false" ${q.correct === false ? 'checked' : ''} ${at} data-action="exam-q-tf"> False</label>
+          </div>`;
+      }
+      if (q.type === 'short') {
+        return `
+          <div>
+            <label class="block text-[10px] font-medium text-slate-400 mb-1">Accepted answers (separate with <code class="font-mono">|</code>, write <code class="font-mono">\\|</code> for a literal pipe)</label>
+            <input type="text" value="${escapeHtml(examAcceptedText(q))}" placeholder="e.g. 443 | tcp/443" ${at} data-action="exam-q-accepted" class="${inputCls} font-mono">
+            <p id="q-accepted-note-${sIdx}-${qIdx}" class="mt-1 text-[10px] text-slate-400">${examAcceptedNote(q)}</p>
+          </div>`;
+      }
+      return `<p class="text-[11px] text-slate-400"><i class="ph ph-pencil-simple-line"></i> Long answers are always marked by hand in the session monitor.</p>`;
+    }
+
+    function examQuestionCardHtml(q, sIdx, qIdx, number) {
+      const collapsed = Boolean(q.collapsed);
+      const at = `data-sec-idx="${sIdx}" data-q-idx="${qIdx}"`;
+      const promptId = `q-prompt-${sIdx}-${qIdx}`;
+      return `
+        <div id="q-card-${sIdx}-${qIdx}" class="bg-white dark:bg-surface-850/90 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3 transition-all">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-1 min-w-[220px]">
+              <button data-action="exam-toggle-q" ${at} class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]">
+                <i class="ph ${collapsed ? 'ph-caret-right' : 'ph-caret-down'} text-xs"></i>
+              </button>
+              <span class="text-[11px] font-mono font-semibold text-brand-600 dark:text-brand-400">Q${number}</span>
+              <div class="relative flex items-center">
+                <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[q.type]} absolute left-2.5 pointer-events-none"></span>
+                <select data-action="exam-q-type" ${at}
+                  class="text-[11px] font-medium pl-5 pr-2 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.08] bg-slate-50 dark:bg-surface-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 cursor-pointer">
+                  ${EXAM_TYPES.map(t => `<option value="${t}" ${q.type === t ? 'selected' : ''}>${EXAM_TYPE_LABELS[t]} [${t}]</option>`).join('')}
+                </select>
+              </div>
+              <label class="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                <input type="number" min="0" max="100" step="0.5" value="${escapeHtml(String(q.points))}" ${at} data-action="exam-q-points"
+                  class="w-14 text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-1.5 py-1 focus:outline-none focus:border-brand-500" aria-label="Points">
+                pts
+              </label>
+              <span id="q-grading-${sIdx}-${qIdx}">${examGradingBadge(q)}</span>
+              ${collapsed ? `<span class="text-[11px] text-slate-500 truncate max-w-[16rem]">${escapeHtml((q.prompt || '').replace(/\s+/g, ' ').slice(0, 80))}</span>` : ''}
+            </div>
+            <div class="flex items-center space-x-1 shrink-0">
+              <button data-action="exam-move-q-up" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Move Up"><i class="ph ph-arrow-up text-xs"></i></button>
+              <button data-action="exam-move-q-down" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Move Down"><i class="ph ph-arrow-down text-xs"></i></button>
+              <button data-action="exam-dup-q" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Duplicate Question"><i class="ph ph-copy text-xs"></i></button>
+              <button data-action="exam-del-q" ${at} class="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30" title="Delete Question"><i class="ph ph-trash text-xs"></i></button>
+            </div>
+          </div>
+          <div class="${collapsed ? 'hidden' : 'space-y-3'}">
+            <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
+              ${renderMarkdownToolbar(promptId, sIdx, qIdx)}
+              <textarea id="${promptId}" rows="2" ${at} data-action="exam-q-prompt"
+                class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
+                placeholder="Question prompt (Markdown; images by library file name)">${escapeHtml(q.prompt || '')}</textarea>
+            </div>
+            ${examAnswerEditorHtml(q, sIdx, qIdx)}
+          </div>
+        </div>`;
+    }
+
+    function renderExamBuilder() {
+      const container = document.getElementById('sectionsContainer');
+      if (!container) return;
+      document.getElementById('templateTitle').value = templateData.title || '';
+      document.getElementById('templateDescription').value = templateData.description || '';
+      updateMetadataCharCounters();
+      const term = globalSearchQuery.toLowerCase().trim();
+      let number = 0;
+      container.innerHTML = templateData.content.map((section, sIdx) => {
+        const secMatches = !term || (section.title || '').toLowerCase().includes(term);
+        const cards = (section.questions || []).map((q, qIdx) => {
+          number += 1;
+          const hit = !term || secMatches || [q.prompt, ...(q.options || []), ...(q.accepted || [])].join(' ').toLowerCase().includes(term);
+          return hit ? examQuestionCardHtml(q, sIdx, qIdx, number) : '';
+        }).join('');
+        const hidden = term && !secMatches && !cards;
+        return `
+          <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl shadow-2xs overflow-hidden transition-all">
+            ${examSectionHeaderHtml(section, sIdx)}
+            <div id="section-body-${sIdx}" class="${section.collapsed ? 'hidden' : 'p-4 sm:p-5 space-y-4'}">
+              <div class="space-y-3.5">${cards}</div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] text-slate-400 mr-1">Add question:</span>
+                ${EXAM_TYPES.map(t => `
+                  <button data-action="exam-add-q" data-sec-idx="${sIdx}" data-q-type="${t}" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 dark:hover:border-white/[0.2] rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[t]}"></span>${EXAM_TYPE_LABELS[t]}
+                  </button>`).join('')}
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+      renderOutline();
+      updateBadges();
+      runFullValidation(false);
+      autoGrowAllTextareas(container);
+    }
+
+    function renderExamOutline() {
+      const list = document.getElementById('outlineList');
+      const countEl = document.getElementById('outlineStepCount');
+      if (!list) return;
+      let number = 0;
+      list.innerHTML = templateData.content.map((sec, sIdx) => `
+        <div class="pt-2.5 pb-1 px-1 flex items-center space-x-1.5">
+          <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">${String(sIdx + 1).padStart(2, '0')}</span>
+          <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">${escapeHtml(sec.title || 'Untitled')}</span>
+          ${sec.minutes ? `<span class="ml-auto text-[10px] font-mono text-slate-400">${sec.minutes}m</span>` : ''}
+        </div>
+        <div class="border-l border-slate-200/80 dark:border-white/[0.07] ml-2.5 pl-2 space-y-0.5">
+          ${(sec.questions || []).map((q, qIdx) => {
+            number += 1;
+            return `
+              <button onclick="jumpToQuestion(${sIdx}, ${qIdx})" class="w-full text-left px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.05] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 truncate flex items-center space-x-2 transition">
+                <span class="w-1.5 h-1.5 rounded-full shrink-0 ${EXAM_TYPE_DOT[q.type]}"></span>
+                <span class="text-[10px] font-mono text-slate-400 shrink-0">Q${number}</span>
+                <span class="truncate flex-1 text-[11px]">${escapeHtml((q.prompt || '(no prompt)').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').slice(0, 60))}</span>
+              </button>`;
+          }).join('')}
+        </div>`).join('');
+      if (countEl) countEl.textContent = `${examQuestionCount()} questions`;
+    }
+
+    function jumpToQuestion(sIdx, qIdx) {
+      switchView('builder');
+      const sec = templateData.content[sIdx];
+      if (sec) {
+        sec.collapsed = false;
+        if (sec.questions && sec.questions[qIdx]) sec.questions[qIdx].collapsed = false;
+      }
+      renderBuilder();
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`q-card-${sIdx}-${qIdx}`) || document.getElementById(`section-card-${sIdx}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('highlight-jump');
+          setTimeout(() => el.classList.remove('highlight-jump'), 1000);
+        }
+      });
+    }
+
+    function addExamSection() {
+      templateData.content.push({
+        title: `Part ${templateData.content.length + 1}`,
+        minutes: null,
+        collapsed: false,
+        questions: [{ ...examBlankQuestion('single'), collapsed: false }]
+      });
+      pushHistorySnapshot(true);
+      renderBuilder();
+      scheduleAutoSave();
+    }
+
+    /** Change a question's type, keeping what still makes sense. */
+    function convertExamQuestion(q, type) {
+      if (q.type === type) return q;
+      const next = { ...examBlankQuestion(type), prompt: q.prompt, points: q.points, collapsed: q.collapsed };
+      if (EXAM_HAS_OPTIONS(type) && EXAM_HAS_OPTIONS(q.type)) {
+        next.options = [...q.options];
+        if (type === 'single') next.correct = Array.isArray(q.correct) ? (q.correct[0] ?? 0) : (q.correct ?? 0);
+        else next.correct = Array.isArray(q.correct) ? [...q.correct] : (q.correct === null ? [] : [q.correct]);
+      }
+      if (type === 'short' && q.type === 'short') next.accepted = [...q.accepted];
+      return next;
+    }
+
+    function examCommit(rerender = true) {
+      pushHistorySnapshot(true);
+      if (rerender) renderBuilder();
+      else { renderOutline(); runFullValidation(false); }
+      scheduleAutoSave();
+    }
+
+    function examHandleClick(action, target, sIdx) {
+      const qIdx = target.dataset.qIdx !== undefined ? parseInt(target.dataset.qIdx, 10) : null;
+      const sec = templateData.content[sIdx];
+      if (!sec) return;
+      const qs = sec.questions;
+      if (action === 'exam-add-q') {
+        if (qs.length >= EXAM_LIMITS.questionsPerSection) return showToast('Too many questions in this part.', 'error');
+        qs.push({ ...examBlankQuestion(target.dataset.qType || 'single'), collapsed: false });
+        examCommit();
+        requestAnimationFrame(() => document.getElementById(`q-prompt-${sIdx}-${qs.length - 1}`)?.focus());
+        return;
+      }
+      const q = qs[qIdx];
+      if (!q) return;
+      if (action === 'exam-toggle-q') { q.collapsed = !q.collapsed; renderBuilder(); scheduleAutoSave(); }
+      else if (action === 'exam-del-q') {
+        qs.splice(qIdx, 1);
+        examCommit();
+        showToast('Question deleted (Ctrl+Z to undo)', 'info');
+      } else if (action === 'exam-dup-q') {
+        qs.splice(qIdx + 1, 0, JSON.parse(JSON.stringify(q)));
+        examCommit();
+      } else if (action === 'exam-move-q-up' || action === 'exam-move-q-down') {
+        const to = qIdx + (action === 'exam-move-q-up' ? -1 : 1);
+        if (to < 0 || to >= qs.length) return;
+        qs.splice(to, 0, qs.splice(qIdx, 1)[0]);
+        examCommit();
+      } else if (action === 'exam-q-add-option') {
+        if (q.options.length >= EXAM_LIMITS.options) return;
+        q.options.push('');
+        examCommit();
+        requestAnimationFrame(() => {
+          const inputs = document.querySelectorAll(`#q-card-${sIdx}-${qIdx} [data-action="exam-q-option"]`);
+          inputs[inputs.length - 1]?.focus();
+        });
+      } else if (action === 'exam-q-del-option') {
+        const oi = parseInt(target.dataset.optIdx, 10);
+        if (q.options.length <= 2) return;
+        q.options.splice(oi, 1);
+        if (q.type === 'multiple') q.correct = q.correct.filter(i => i !== oi).map(i => (i > oi ? i - 1 : i));
+        else if (q.correct === oi) q.correct = 0;
+        else if (q.correct > oi) q.correct -= 1;
+        examCommit();
+      }
+    }
+
+    function examHandleInput(action, target, sIdx) {
+      const qIdx = parseInt(target.dataset.qIdx, 10);
+      const q = templateData.content[sIdx]?.questions?.[qIdx];
+      if (!q) return;
+      if (action === 'exam-q-prompt') { q.prompt = target.value; examCommit(false); }
+      else if (action === 'exam-q-option') { q.options[parseInt(target.dataset.optIdx, 10)] = target.value; examCommit(false); }
+      else if (action === 'exam-q-accepted') {
+        q.accepted = examSplitPipes(target.value);
+        // Updated in place: re-rendering here would swallow the author's next click.
+        const note = document.getElementById(`q-accepted-note-${sIdx}-${qIdx}`);
+        if (note) note.textContent = examAcceptedNote(q);
+        const badge = document.getElementById(`q-grading-${sIdx}-${qIdx}`);
+        if (badge) badge.innerHTML = examGradingBadge(q);
+        examCommit(false);
+      }
+      else if (action === 'exam-q-points') {
+        const n = Number(target.value);
+        q.points = Number.isFinite(n) ? Math.min(Math.max(n, 0), EXAM_LIMITS.maxPoints) : 1;
+        examCommit(false);
+      }
+    }
+
+    function examHandleChange(action, target, sIdx) {
+      const qIdx = parseInt(target.dataset.qIdx, 10);
+      const qs = templateData.content[sIdx]?.questions;
+      const q = qs?.[qIdx];
+      if (!q) return;
+      if (action === 'exam-q-type') { qs[qIdx] = convertExamQuestion(q, target.value); examCommit(); }
+      else if (action === 'exam-q-correct') {
+        const oi = parseInt(target.dataset.optIdx, 10);
+        if (q.type === 'multiple') {
+          q.correct = target.checked ? [...new Set([...q.correct, oi])].sort((a, b) => a - b) : q.correct.filter(i => i !== oi);
+        } else q.correct = oi;
+        examCommit();
+      } else if (action === 'exam-q-tf') { q.correct = target.value === 'true'; examCommit(false); }
+    }
+
+    // ---- Preview: the exam as a participant sees it, with a self-check ----
+    let examPreviewState = { answers: {}, checked: false, showKey: false };
+
+    function examPreviewSet(key, value, rerender) {
+      examPreviewState.answers[key] = value;
+      if (rerender) renderExamPreview();
+    }
+
+    function renderExamPreview() {
+      const container = document.getElementById('previewManualContainer');
+      const bar = document.getElementById('previewVariablesBar');
+      if (!container) return;
+      const st = examPreviewState;
+      let number = 0;
+      let score = 0;
+      let auto = 0;
+      let manual = 0;
+      const verdictHtml = (v) => v === true
+        ? '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Correct</span>'
+        : v === false
+          ? '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Incorrect</span>'
+          : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Marked by hand</span>';
+      const sectionsHtml = templateData.content.map((sec, sIdx) => {
+        const qsHtml = (sec.questions || []).map((raw, qIdx) => {
+          number += 1;
+          const q = examNormaliseQuestion(raw);
+          const key = `${sIdx}.${qIdx}`;
+          const a = st.answers[key];
+          const answered = !(a === undefined || a === null || a === '' || (Array.isArray(a) && !a.length));
+          const g = examGrade(q, a);
+          if (g === null) manual += Number(q.points) || 0;
+          else { auto += Number(q.points) || 0; if (g) score += Number(q.points) || 0; }
+          let input = '';
+          if (q.type === 'single' || q.type === 'multiple') {
+            input = q.options.map((o, oi) => {
+              const chosen = q.type === 'multiple' ? Array.isArray(a) && a.includes(oi) : a === oi;
+              const isKey = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+              const next = q.type === 'multiple'
+                ? `examPreviewSet('${key}', (examPreviewState.answers['${key}'] || []).filter(i => i !== ${oi}).concat(this.checked ? [${oi}] : []), ${st.checked})`
+                : `examPreviewSet('${key}', ${oi}, ${st.checked})`;
+              return `
+                <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border ${st.showKey && isKey ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200">
+                  <input type="${q.type === 'multiple' ? 'checkbox' : 'radio'}" name="pv-${key}" ${chosen ? 'checked' : ''} onchange="${next}">
+                  <span class="font-mono text-[11px] text-slate-400">${examLetter(oi)}</span>
+                  <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(o, {}))}</span>
+                </label>`;
+            }).join('');
+          } else if (q.type === 'truefalse') {
+            input = [true, false].map(v => `
+              <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${st.showKey && q.correct === v ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200 mr-2">
+                <input type="radio" name="pv-${key}" ${a === v ? 'checked' : ''} onchange="examPreviewSet('${key}', ${v}, ${st.checked})"> ${v ? 'True' : 'False'}
+              </label>`).join('');
+          } else if (q.type === 'short') {
+            input = `<input type="text" value="${escapeHtml(a || '')}" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
+              class="w-full sm:w-80 text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">`;
+          } else {
+            input = `<textarea rows="3" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
+              class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">${escapeHtml(a || '')}</textarea>`;
+          }
+          const keyNote = st.showKey
+            ? (q.type === 'truefalse' ? `Answer: ${q.correct ? 'True' : 'False'}`
+              : q.type === 'short' ? (q.accepted.length ? `Accepted: ${q.accepted.join(' | ')}` : 'Marked by hand')
+              : q.type === 'long' ? 'Marked by hand' : '')
+            : '';
+          return `
+            <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-mono font-semibold text-slate-500">Question ${number} · ${q.points} pt${q.points === 1 ? '' : 's'}</span>
+                ${st.checked ? (answered ? verdictHtml(g) : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">Unanswered</span>') : ''}
+              </div>
+              <div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(q.prompt || '', {}))}</div>
+              <div class="${q.type === 'single' || q.type === 'multiple' ? 'space-y-1.5' : ''}">${input}</div>
+              ${keyNote ? `<p class="text-[11px] text-emerald-700 dark:text-emerald-400">${escapeHtml(keyNote)}</p>` : ''}
+            </div>`;
+        }).join('');
+        return `
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${sIdx + 1}</span>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">${escapeHtml(sec.title || `Part ${sIdx + 1}`)}</h3>
+              ${sec.minutes ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${sec.minutes} min</span>` : ''}
+            </div>
+            ${qsHtml || '<p class="text-xs text-slate-400">No questions yet.</p>'}
+          </div>`;
+      }).join('');
+
+      if (bar) {
+        bar.classList.remove('hidden');
+        bar.innerHTML = `
+          <span class="text-slate-500">${examQuestionCount()} questions · ${examTotalPoints()} points</span>
+          <span class="text-slate-400">· participants see one part at a time; the next unlocks once every question is answered, and nothing is reviewable after submitting.</span>
+          <span class="ml-auto flex items-center gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none bg-slate-50 dark:bg-surface-850 px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.07]">
+              <input type="checkbox" ${st.showKey ? 'checked' : ''} onchange="examPreviewState.showKey = this.checked; renderExamPreview()"> Show answer key
+            </label>
+            <button onclick="examPreviewState.checked = true; renderExamPreview()" class="px-2.5 py-1 bg-brand-600 hover:bg-brand-500 text-white rounded-md text-xs font-medium transition">Check my answers</button>
+            <button onclick="examPreviewState = { answers: {}, checked: false, showKey: examPreviewState.showKey }; renderExamPreview()" class="px-2.5 py-1 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200/70 dark:hover:bg-surface-800 text-slate-600 dark:text-slate-300 rounded-md text-xs font-medium transition">Reset</button>
+          </span>
+          ${st.checked ? `<span class="w-full pt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Self-check: ${score} / ${auto} auto-graded points${manual ? ` · ${manual} point(s) marked by hand` : ''}</span>` : ''}`;
+      }
+      container.innerHTML = sectionsHtml;
+    }
+
+    // ---- Validation and images -------------------------------------------
+    function extractExamImageRefs() {
+      const refs = [];
+      const scan = (text, locLabel, sIdx, stIdx) => {
+        const re = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+        let m;
+        while ((m = re.exec(String(text || ''))) !== null) {
+          const rawPath = m[1];
+          refs.push({ fileName: rawPath.split('/').pop(), rawPath, locLabel, sIdx, stIdx, isDynamic: false });
+        }
+      };
+      templateData.content.forEach((sec, sIdx) => (sec.questions || []).forEach((q, qIdx) => {
+        const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
+        scan(q.prompt, `${at} prompt`, sIdx, qIdx);
+        (q.options || []).forEach((o, oi) => scan(o, `${at} option ${examLetter(oi)}`, sIdx, qIdx));
+      }));
+      return refs;
+    }
+
+    /** Exam rules, in vLabs' own wording, as issues the validation view lists. */
+    function collectExamIssues(addError, addWarning) {
+      const title = (templateData.title || '').trim();
+      if (!title) addError('Front Matter', 'Title is required', { view: 'builder' });
+      else if (title.length > EXAM_LIMITS.title) addError('Front Matter', `Title exceeds ${EXAM_LIMITS.title} characters`, { view: 'builder' });
+      if ((templateData.description || '').length > EXAM_LIMITS.description) {
+        addError('Front Matter', `Description exceeds ${EXAM_LIMITS.description} characters`, { view: 'builder' });
+      }
+      const secs = templateData.content || [];
+      if (!secs.length) addError('Structure', 'At least one section is required', { view: 'builder' });
+      if (secs.length > EXAM_LIMITS.sections) addError('Structure', `Too many sections (${secs.length} / ${EXAM_LIMITS.sections} max)`, { view: 'builder' });
+      let count = 0;
+      secs.forEach((sec, sIdx) => {
+        const loc = `Section ${sIdx + 1}`;
+        if (!(sec.title || '').trim()) addError(loc, `Section ${sIdx + 1} needs a title`, { sIdx, stIdx: 0 });
+        if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
+          addError(loc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
+        }
+        const qs = sec.questions || [];
+        if (!qs.length) addError(loc, `Section ${sIdx + 1} has no questions`, { sIdx, stIdx: 0 });
+        if (qs.length > EXAM_LIMITS.questionsPerSection) addError(loc, `Too many questions (${qs.length} / ${EXAM_LIMITS.questionsPerSection} max)`, { sIdx, stIdx: 0 });
+        qs.forEach((raw, qIdx) => {
+          count += 1;
+          const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
+          if ((raw.prompt || '').length > EXAM_LIMITS.prompt) addError(at, `Prompt exceeds ${EXAM_LIMITS.prompt} characters`, { sIdx, stIdx: qIdx });
+          const q = examNormaliseQuestion(raw);
+          examQuestionErrors(q, at).forEach(msg => addError(at, msg, { sIdx, stIdx: qIdx }));
+          if (q.points === 0) addWarning(at, `${at} is worth 0 points`, { sIdx, stIdx: qIdx });
+          if (EXAM_HAS_OPTIONS(q.type)) {
+            const seen = q.options.filter(Boolean).map(o => o.toLowerCase());
+            if (new Set(seen).size !== seen.length) addWarning(at, `${at} has two identical options`, { sIdx, stIdx: qIdx });
+          }
+        });
+      });
+      if (secs.length && !count) addError('Structure', 'The exam has no questions', { view: 'builder' });
+      const lib = templateData.images || [];
+      extractExamImageRefs().forEach(ref => {
+        if (!lib.some(img => (img.name || '').toLowerCase() === ref.fileName.toLowerCase())) {
+          addError(ref.locLabel, `Image "${ref.fileName}" referenced in ${ref.locLabel} is not in the image library — upload it first`, { sIdx: ref.sIdx, stIdx: ref.stIdx });
+        }
+      });
+      return `Checked ${secs.length} part(s), ${count} question(s): types, correct answers, points, time allocations and image assets.`;
+    }
+
+    function generateExamCanonicalJson() {
+      const exam = examNormalise(templateData);
+      return JSON.stringify({
+        kind: 'exam',
+        title: (exam.title || 'Untitled').trim(),
+        description: exam.description,
+        content: exam.content.map(sec => ({
+          title: sec.title.trim(),
+          ...(sec.minutes ? { minutes: sec.minutes } : {}),
+          questions: sec.questions
+        }))
+      }, null, 2);
+    }
   </script>
 </body>
 </html>

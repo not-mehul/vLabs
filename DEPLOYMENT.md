@@ -157,7 +157,10 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
 - **During:** the monitor refreshes every 5 s. Amber / red rows (80 % / over
   the section's allocated minutes, or 8 / 15 min when a section has none) are
   your cue to walk over. **Start break** pauses every section timer for the
-  class (the session countdown keeps running); **End break** resumes them. Edits to the template don't reach the
+  class (the session countdown keeps running); **End break** resumes them.
+  Click a card in **Sections** to see that section's average time against
+  its allocation, who is stuck on it, and which checkpoint answers trip
+  people up. Edits to the template don't reach the
   class until you press **Push latest version**.
 - **End:** _End session_ revokes every participant token instantly. Export CSV
   or JSON if you want the analytics; sessions stay on the dashboard regardless.

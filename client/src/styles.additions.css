@@ -1363,19 +1363,116 @@ input.field__input--sm[type='number'] {
 }
 
 /* Section time allocation and class averages on the section cards. */
-.flow__time {
+/* Sections panel: each card is a button that opens the section drawer. */
+.flow > li {
   display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.3rem;
+  min-width: 0;
+}
+.flow__card--button {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.flow__card--button:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+}
+.flow__card--button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.text-success {
+  color: var(--success);
+}
+
+/* Section drawer */
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.6rem;
+}
+.kv > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.kv dt {
+  font-size: 0.72rem;
   color: var(--text-3);
+}
+.kv dd {
+  margin: 0;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.flow__time .icon {
-  vertical-align: -0.12em;
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
 }
-.flow__avg {
-  color: var(--text-2);
+.chips .tag {
+  margin-left: 0;
+}
+.tag--button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  color: inherit;
+}
+.tag--button:hover {
+  border-color: var(--brand);
+}
+.table--compact td {
+  padding: 0.45rem 0.6rem;
+}
+.table--compact td.num--time {
+  width: 9rem;
+  text-align: right;
+}
+.table td.num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.steplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.steplist__item {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.steplist__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.steplist__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.35rem;
+}
+.steplist__cp {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+.steplist__cp p {
+  margin: 0 0 0.35rem;
 }
 
 /* Time allocated to a section (lab and exam editors) */

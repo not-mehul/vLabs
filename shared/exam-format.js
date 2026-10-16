@@ -3,6 +3,7 @@
  * format (client/src/lib/templateFormat.js), which is unchanged.
  *
  *   ---
+ *   kind: exam
  *   title: Network Fundamentals — Unit Test
  *   description: 20 minutes, closed book
  *   ---
@@ -32,7 +33,9 @@
  *   Any Markdown works here, including images: ![topology](topology.png)
  *   > points: 5
  *
- * `# ` starts a section and `## [type]` a question. `> minutes: N` under a
+ * `kind: exam` in the front matter marks the file as an exam (optional here;
+ * it lets importers that also read labs tell the two apart — see
+ * looksLikeExamMarkdown). `# ` starts a section and `## [type]` a question. `> minutes: N` under a
  * section heading allocates N minutes to that section (optional). Text after the type and
  * the lines below it form the prompt. Types: single (multiple choice, one
  * answer), multiple (select all that apply), truefalse, short, long — plus
@@ -70,6 +73,38 @@ const OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
 const DIRECTIVE_RE = /^>\s*(points|answer|accept)\s*:\s*(.*)$/i;
 const FENCE_RE = /^\s*(```|~~~)/;
 
+/** Lab step types: a `## [desk]`-style heading means a lab, not an exam. */
+const LAB_STEP_TYPES = new Set(['desk', 'computer', 'info']);
+
+/**
+ * True when Markdown text is an exam rather than a lab: `kind: exam` in the
+ * front matter, or a `## [type]` heading with an exam question type (labs
+ * only use [desk] / [computer] / [info]). Fenced code is ignored.
+ */
+export function looksLikeExamMarkdown(text) {
+  const lines = String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
+  let i = 0;
+  if (lines[0]?.trim() === '---') {
+    for (i = 1; i < lines.length && lines[i].trim() !== '---'; i += 1) {
+      const m = /^kind\s*:\s*(\w+)/i.exec(lines[i]);
+      if (m) return m[1].toLowerCase() === 'exam';
+    }
+  }
+  let inFence = false;
+  for (; i < lines.length; i += 1) {
+    if (FENCE_RE.test(lines[i])) inFence = !inFence;
+    if (inFence) continue;
+    const m = /^##\s+\[([^\]]+)\]/.exec(lines[i]);
+    if (!m) continue;
+    const t = m[1].trim().toLowerCase();
+    if (LAB_STEP_TYPES.has(t)) return false;
+    if (TYPE_ALIASES[t]) return true;
+  }
+  return false;
+}
+
 const splitPipes = (s) =>
   String(s)
     .split(/(?<!\\)\|/)
@@ -90,6 +125,9 @@ export function parseExamMarkdown(text) {
       const m = /^([A-Za-z_]+)\s*:\s*(.*)$/.exec(lines[i]);
       if (m) {
         const key = m[1].toLowerCase();
+        if (key === 'kind' && m[2].trim().toLowerCase() === 'lab') {
+          throw new Error('This file is a lab (kind: lab), not an exam');
+        }
         if (key === 'title') exam.title = m[2].trim();
         else if (key === 'description') exam.description = m[2].trim();
       }
@@ -173,7 +211,7 @@ export function parseExamMarkdown(text) {
 /** Serialise a canonical exam to the Markdown format above. */
 export function examToMarkdown(input) {
   const exam = normaliseExam(input);
-  const out = ['---', `title: ${exam.title}`];
+  const out = ['---', 'kind: exam', `title: ${exam.title}`];
   if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
   out.push('---', '');
   for (const sec of exam.content) {
@@ -203,6 +241,7 @@ export function examToMarkdown(input) {
 }
 
 export const SAMPLE_EXAM_MARKDOWN = `---
+kind: exam
 title: Network Fundamentals — Quiz (Sample)
 description: A short sample exam showing every question type.
 ---

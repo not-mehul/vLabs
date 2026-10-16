@@ -34,6 +34,7 @@ import {
 import { listQuestions, totalPoints, describeExpected } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
+import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
 import { log } from '../lib/logger.js';
 
 const router = Router();
@@ -537,6 +538,41 @@ router.get('/:id/questions/:key', (req, res) => {
   );
   if (!out) throw httpError(404, 'Unknown question');
   res.json(withImages(out));
+});
+
+/**
+ * GET /api/sessions/:id/sections/:index — the monitor's section drawer: who is
+ * on the section, who completed it and how long it took against the time
+ * allocated (breaks excluded), plus per-step activity (labs) or per-question
+ * results (exams).
+ */
+router.get('/:id/sections/:index', (req, res) => {
+  const row = ownedOr404(req);
+  const index = Number(req.params.index);
+  const content = JSON.parse(row.content);
+  if (!Number.isInteger(index) || index < 0 || index >= content.length) {
+    throw httpError(404, 'Unknown section');
+  }
+  const section = content[index];
+  const rows = q.participants.all(row.id);
+  const breaks = breaksOf(row);
+  if (isExam(row)) {
+    const views = rows.map((p) => examParticipantView(p, content, breaks));
+    return res.json({
+      kind: 'exam',
+      ...sectionTimeDetail(section, index, views),
+      question_count: (section.questions || []).length,
+      questions: examQuestionStats(rows, content).filter((x) => x.section_index === index),
+    });
+  }
+  const views = rows.map((p) => participantView(p, content, breaks));
+  res.json({
+    kind: 'lab',
+    ...sectionTimeDetail(section, index, views),
+    optional: isOptionalSection(section),
+    step_count: (section.steps || []).length,
+    steps: labStepStats(section, index, rows),
+  });
 });
 
 /** Monitor data for an EXAM session. */
