@@ -68,6 +68,26 @@ description: d
 ## [single] Before any section
 - [x] only one option
 `,
+  `# [submit] Hand in early
+> review: false
+> minutes: 4
+Bye.
+
+# [checklist] Bench
+> minutes: 12
+Do it.
+## Not a question heading
+\`\`\`
+- [ ] fenced
+\`\`\`
+- [ ] one
+- [X] two
+* [ ] three
+
+# [weird] Literal title
+## [tf] ok
+> answer: no
+`,
 ];
 
 const json = (v) => JSON.parse(JSON.stringify(v));
@@ -81,6 +101,10 @@ test('Studio exam Markdown parsing and export match vLabs exactly', () => {
     assert.deepEqual(json(studio.examErrorsList(app)), examErrors(app));
   }
   assert.throws(() => studio.examParseMarkdown('# A\n\n## [nope] x\n'), /Unknown question type/);
+  assert.throws(
+    () => studio.examParseMarkdown('# [info] I\n## [mcq] x\n'),
+    /cannot go in a \[info\] section/,
+  );
   assert.deepEqual(json(studio.EXAM_TYPE_ALIASES), json(TYPE_ALIASES));
 });
 
@@ -91,6 +115,8 @@ test('Studio tells labs and exams apart like vLabs', () => {
     '---\nkind: lab\n---\n# S\n## [single] x\n',
     '# S\n```\n## [single] x\n```\n## [info] y\n',
     '# S\n\n## No type\n',
+    '# [checklist] Only a checklist\n- [ ] a\n',
+    '# [nope] S\n',
   ];
   for (const c of cases) assert.equal(studio.looksLikeExamMarkdown(c), looksLikeExamMarkdown(c), c);
 });
@@ -112,6 +138,9 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
         ],
       },
       { minutes: 0, questions: 'nope' },
+      { type: 'submit', title: 'Go', review: 'no', minutes: 9, questions: [{}] },
+      { type: 'info', title: 'I', body: 7, tasks: [' a ', '', null, 'b'], questions: [{}] },
+      { type: 'submit', title: 'Dropped' },
     ],
   };
   const app = normaliseExam(odd);

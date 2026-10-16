@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, participantSession, clockOffset } from '../api.js';
 import { useCountdown } from '../hooks/useCountdown.js';
 import ExamQuestion from '../components/ExamQuestion.jsx';
+import Markdown from '../components/Markdown.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import Icon from '../components/Icon.jsx';
 
@@ -16,12 +17,54 @@ const isAnswered = (v) =>
 const TYPE_DELAY_MS = 800;
 
 /**
+ * Sessions launched before exams carried their own submit section get the
+ * one every exam now ends with (shared/exam-schema.js), added here so the
+ * page works the same for them. It is never reported to the server.
+ */
+function withSubmitSection(res) {
+  if (res.submitted || res.submit_section >= 0) return res;
+  const total = res.total_sections;
+  const open = (res.unlocked_section ?? 0) >= total - 1;
+  const submit = {
+    index: total,
+    type: 'submit',
+    title: 'Review and submit',
+    body: '',
+    review: true,
+    questions: [],
+    virtual: true,
+  };
+  return {
+    ...res,
+    total_sections: total + 1,
+    unlocked_section: open ? total : res.unlocked_section,
+    sections: open ? [...res.sections, submit] : res.sections,
+  };
+}
+
+/** True when a section lets the participant move on (questions / checklist). */
+const sectionDone = (s, answers) =>
+  s.type === 'info'
+    ? (s.tasks || []).every((t) => answers[t.key] === true)
+    : s.type === 'submit'
+      ? false
+      : s.questions.every((q) => isAnswered(answers[q.key]));
+
+/** Header badge for the autosave state of every answer together. */
+const SAVE_BADGE = {
+  saving: ['cloud-up', 'Saving…'],
+  saved: ['cloud', 'Saved'],
+  error: ['cloud-off', 'Not saved, retrying'],
+};
+
+/**
  * Participant exam, one section per page. Sections unlock like a lab's: the
- * next section opens once every question in this one is answered (the server
- * decides and only sends unlocked sections); earlier sections stay open to
- * revisit. Answers save as they are given; the participant is never told
- * whether an answer is right. Submitting is final — the exam is no longer
- * shown afterwards, not even for review.
+ * next section opens once every question in this one is answered, or every
+ * item on its checklist ticked (the server decides and only sends unlocked
+ * sections); earlier sections stay open to revisit. The exam ends with its
+ * submit section. Answers save as they are given, shown once in the header;
+ * the participant is never told whether an answer is right. Submitting is
+ * final — the exam is no longer shown afterwards, not even for review.
  */
 export default function Exam() {
   const location = useLocation();
@@ -32,7 +75,7 @@ export default function Exam() {
   const [data, setData] = useState(null);
   const [answers, setAnswers] = useState({});
   const [saveState, setSaveState] = useState({}); // key → saving | saved | error
-  const [view, setView] = useState(0); // section index, or 'review'
+  const [view, setView] = useState(0); // section index
   const [error, setError] = useState('');
   const [ended, setEnded] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -72,7 +115,7 @@ export default function Exam() {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await api.exam(token);
+      const res = withSubmitSection(await api.exam(token));
       setData(res);
       setLiveExpiry(res.expires_at);
       setOffsetMs(clockOffset(res.server_time));
@@ -86,7 +129,7 @@ export default function Exam() {
           initialisedRef.current = true;
           setView(Math.min(res.current_section ?? 0, last));
         } else {
-          setView((v) => (v === 'review' ? v : Math.min(v, last)));
+          setView((v) => Math.min(v, last));
         }
       }
       // Keep anything typed but not yet saved.
@@ -158,7 +201,8 @@ export default function Exam() {
   // Report the section being viewed: drives time per section (breaks
   // excluded) and the instructor's view of where everyone is.
   useEffect(() => {
-    if (!data || submitted || view === 'review' || reportedRef.current === view) return;
+    if (!data || submitted || reportedRef.current === view) return;
+    if (data.sections[view]?.virtual) return;
     reportedRef.current = view;
     api.examProgress(token, view).catch(() => {});
   }, [view, data, submitted, token]);
@@ -249,9 +293,8 @@ export default function Exam() {
   const totalSections = data?.total_sections ?? sections.length;
   const unlocked = data?.unlocked_section ?? 0;
   const allQuestions = sections.flatMap((s) => s.questions);
-  const answeredCount = Object.values(answers).filter(isAnswered).length;
+  const answeredCount = allQuestions.filter((q) => isAnswered(answers[q.key])).length;
   const total = data?.question_count ?? allQuestions.length;
-  const canReview = sections.length > 0 && unlocked >= totalSections - 1;
 
   if (submitted) {
     return (
@@ -259,13 +302,12 @@ export default function Exam() {
         <ThemeToggle className="theme-toggle--corner" />
         <div className="ended-card ended-card--done">
           <span className="ended-card__icon ended-card__icon--done">
-            <Icon name="check-circle" size={44} strokeWidth={1.9} />
+            <Icon name="flag" size={40} strokeWidth={1.9} />
           </span>
-          <h1>Exam submitted</h1>
+          <h1>Exam completed</h1>
           <p>
-            Thank you, {displayName || `#${seatNumber}`}. Your answers
-            {data?.answered_count != null ? ` (${data.answered_count} of ${total})` : ''} have been
-            recorded. Your instructor will share results.
+            Thank you, {displayName || `#${seatNumber}`}. Your exam is complete and your answers
+            have been recorded.
           </p>
           <div className="ended-actions">
             <button className="btn btn--primary" onClick={logout}>
@@ -277,14 +319,49 @@ export default function Exam() {
     );
   }
 
-  const reviewing = view === 'review' && canReview;
-  const section = reviewing ? null : sections[view === 'review' ? sections.length - 1 : view];
-  const sectionComplete = section
-    ? section.questions.every((q) => isAnswered(answers[q.key]))
-    : false;
-  const nextUnlocked = typeof view === 'number' && view < unlocked;
+  const section = sections[view];
+  const sectionComplete = section ? sectionDone(section, answers) : false;
+  const nextUnlocked = view < unlocked;
+  const nextSection = sections[view + 1];
   const unanswered = allQuestions.filter((q) => !isAnswered(answers[q.key]));
+  const unticked = sections.filter((s) => s.type === 'info' && !sectionDone(s, answers));
   const unsaved = Object.values(saveState).some((s) => s === 'saving' || s === 'error');
+  const states = Object.values(saveState);
+  const saveBadge = states.includes('error')
+    ? 'error'
+    : states.includes('saving')
+      ? 'saving'
+      : states.length
+        ? 'saved'
+        : null;
+
+  function jumpTo(si, anchor) {
+    goTo(si);
+    if (!anchor) return;
+    setTimeout(
+      () =>
+        document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      120,
+    );
+  }
+
+  function confirmSubmit() {
+    const left = [];
+    if (unanswered.length) {
+      left.push(
+        `${unanswered.length} question${unanswered.length === 1 ? ' is' : 's are'} unanswered`,
+      );
+    }
+    if (unticked.length) {
+      left.push(
+        `${unticked.length} checklist${unticked.length === 1 ? ' is' : 's are'} not complete`,
+      );
+    }
+    const msg = left.length
+      ? `${left.join(' and ')}. Submit anyway? You won't be able to change or review your answers afterwards.`
+      : "Submit your exam? You won't be able to change or review your answers afterwards.";
+    if (window.confirm(msg)) handleSubmit();
+  }
 
   return (
     <div className="lab exam">
@@ -296,6 +373,21 @@ export default function Exam() {
             <span className="lab__session">{data?.title || session?.title}</span>
           </div>
           <div className="lab__bar-right">
+            {saveBadge && (
+              <span
+                className={`save-badge save-badge--${saveBadge}`}
+                role="status"
+                aria-live="polite"
+                title={
+                  saveBadge === 'saved'
+                    ? 'Your answers are saved on the server (this does not mean they are right)'
+                    : undefined
+                }
+              >
+                <Icon name={SAVE_BADGE[saveBadge][0]} size={16} />
+                <span className="save-badge__label">{SAVE_BADGE[saveBadge][1]}</span>
+              </span>
+            )}
             <span
               className={`lab__timer ${remaining === 'expired' ? 'is-warn' : ''}`}
               role="timer"
@@ -319,8 +411,10 @@ export default function Exam() {
           {Array.from({ length: totalSections }).map((_, i) => {
             const s = sections[i];
             const locked = i > unlocked || !s;
-            const done = !locked && s.questions.every((q) => isAnswered(answers[q.key]));
+            const submitStep = s?.type === 'submit' || i === totalSections - 1;
+            const done = !locked && sectionDone(s, answers);
             const state = i === view ? 'current' : locked ? 'locked' : done ? 'done' : 'open';
+            const what = s?.type === 'info' ? 'all ticked' : 'all answered';
             return (
               <button
                 key={i}
@@ -329,28 +423,25 @@ export default function Exam() {
                 disabled={locked}
                 onClick={() => goTo(i)}
                 aria-current={i === view ? 'step' : undefined}
-                aria-label={`Section ${i + 1}${done ? ' (all answered)' : locked ? ' (locked)' : ''}`}
-                title={s ? s.title : 'Locked — answer every question in the sections before it'}
+                aria-label={
+                  submitStep
+                    ? s?.title || 'Submit'
+                    : `Section ${i + 1}${done ? ` (${what})` : locked ? ' (locked)' : ''}`
+                }
+                title={s ? s.title : 'Locked: finish the sections before it'}
               >
                 <span className="stepper__dot" aria-hidden="true">
-                  {done && i !== view ? <Icon name="check" size={15} strokeWidth={2.25} /> : i + 1}
+                  {submitStep ? (
+                    <Icon name="flag" size={14} />
+                  ) : done && i !== view ? (
+                    <Icon name="check" size={15} strokeWidth={2.25} />
+                  ) : (
+                    i + 1
+                  )}
                 </span>
               </button>
             );
           })}
-          <button
-            type="button"
-            className={`stepper__node stepper__node--${reviewing ? 'current' : canReview ? 'open' : 'locked'}`}
-            disabled={!canReview}
-            onClick={() => goTo('review')}
-            aria-current={reviewing ? 'step' : undefined}
-            aria-label="Review and submit"
-            title="Review and submit"
-          >
-            <span className="stepper__dot" aria-hidden="true">
-              <Icon name="check-circle" size={15} />
-            </span>
-          </button>
         </nav>
 
         <div className="lab__progress">
@@ -385,7 +476,7 @@ export default function Exam() {
         {error && <p className="form__error lab__error">{error}</p>}
         {!data && !error && <p className="lab__loading">Loading your exam…</p>}
 
-        {section && (
+        {section && section.type !== 'submit' && (
           <div key={view} className="section-view section-view--next">
             <div className="section-head">
               <span className="section-head__eyebrow">
@@ -393,15 +484,48 @@ export default function Exam() {
               </span>
               <h1 className="section-head__title">{section.title}</h1>
             </div>
-            {section.questions.map((q) => (
-              <ExamQuestion
-                key={q.key}
-                q={q}
-                value={answers[q.key]}
-                saveState={saveState[q.key]}
-                onChange={(v, opts) => change(q.key, v, opts)}
-              />
-            ))}
+            {section.type === 'info' ? (
+              <div className="panel exam-info">
+                {section.body && <Markdown>{section.body}</Markdown>}
+                {section.tasks.length > 0 && (
+                  <fieldset className="exam-checklist">
+                    <legend className="exam-checklist__legend">
+                      <Icon name="checklist" size={15} /> Tick each item once it is done
+                    </legend>
+                    {section.tasks.map((t) => {
+                      const on = answers[t.key] === true;
+                      return (
+                        <label
+                          key={t.key}
+                          id={`task-${t.key}`}
+                          className={`choice exam-checklist__item ${on ? 'choice--on' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) =>
+                              change(t.key, e.target.checked ? true : null, { immediate: true })
+                            }
+                          />
+                          <span className="choice__text">
+                            <Markdown>{t.text}</Markdown>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </fieldset>
+                )}
+              </div>
+            ) : (
+              section.questions.map((q) => (
+                <ExamQuestion
+                  key={q.key}
+                  q={q}
+                  value={answers[q.key]}
+                  onChange={(v, opts) => change(q.key, v, opts)}
+                />
+              ))
+            )}
             <div className="section-nav">
               <button
                 className="btn btn--ghost"
@@ -412,69 +536,89 @@ export default function Exam() {
               </button>
               {!sectionComplete && !nextUnlocked && (
                 <span className="section-nav__hint" role="status">
-                  <Icon name="lock" size={14} /> Answer every question to continue
+                  <Icon name="lock" size={14} />{' '}
+                  {section.type === 'info'
+                    ? 'Tick every item to continue'
+                    : 'Answer every question to continue'}
                 </span>
               )}
-              {section.index < totalSections - 1 ? (
+              {section.index < totalSections - 1 && (
                 <button
                   className="btn btn--primary"
                   disabled={!nextUnlocked}
                   onClick={() => goTo(section.index + 1)}
-                  title={nextUnlocked ? '' : 'Answer every question in this section first'}
+                  title={nextUnlocked ? '' : 'Finish this section first'}
                 >
-                  {sectionComplete && !nextUnlocked ? 'Saving…' : 'Next'}{' '}
+                  {sectionComplete && !nextUnlocked
+                    ? 'Saving…'
+                    : nextSection?.type === 'submit'
+                      ? nextSection.title || 'Submit'
+                      : 'Next'}{' '}
                   <Icon name="chevronRight" size={16} />
-                </button>
-              ) : (
-                <button className="btn btn--primary" onClick={() => goTo('review')}>
-                  Review &amp; submit <Icon name="chevronRight" size={16} />
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {reviewing && data && (
-          <div className="section-view section-view--next">
+        {section && section.type === 'submit' && (
+          <div key={view} className="section-view section-view--next">
             <div className="section-head">
               <span className="section-head__eyebrow">Final step</span>
-              <h1 className="section-head__title">Review &amp; submit</h1>
+              <h1 className="section-head__title">{section.title || 'Submit'}</h1>
             </div>
             <div className="panel exam-review">
-              <p>
-                You have answered <strong>{answeredCount}</strong> of <strong>{total}</strong>{' '}
-                questions.
-              </p>
-              {unanswered.length > 0 && (
-                <div className="banner banner--warn" role="status">
-                  <span>
-                    <strong>Unanswered:</strong>{' '}
-                    {unanswered.map((q, i) => {
-                      const si = sections.findIndex((s) => s.questions.includes(q));
-                      return (
-                        <span key={q.key}>
-                          <button
-                            type="button"
-                            className="linklike"
-                            onClick={() => {
-                              goTo(si);
-                              setTimeout(
-                                () =>
-                                  document
-                                    .getElementById(`q-${q.key}`)
-                                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
-                                120,
-                              );
-                            }}
-                          >
-                            Q{q.number}
-                          </button>
-                          {i < unanswered.length - 1 ? ', ' : ''}
-                        </span>
-                      );
-                    })}
-                  </span>
-                </div>
+              {section.body && <Markdown>{section.body}</Markdown>}
+              {section.review && (
+                <>
+                  <p>
+                    You have answered <strong>{answeredCount}</strong> of <strong>{total}</strong>{' '}
+                    questions.
+                  </p>
+                  {unanswered.length > 0 && (
+                    <div className="banner banner--warn" role="status">
+                      <span>
+                        <strong>Unanswered:</strong>{' '}
+                        {unanswered.map((q, i) => (
+                          <span key={q.key}>
+                            <button
+                              type="button"
+                              className="linklike"
+                              onClick={() =>
+                                jumpTo(
+                                  sections.findIndex((s) => s.questions.includes(q)),
+                                  `q-${q.key}`,
+                                )
+                              }
+                            >
+                              Q{q.number}
+                            </button>
+                            {i < unanswered.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
+                  {unticked.length > 0 && (
+                    <div className="banner banner--warn" role="status">
+                      <span>
+                        <strong>Checklist not complete:</strong>{' '}
+                        {unticked.map((s, i) => (
+                          <span key={s.index}>
+                            <button
+                              type="button"
+                              className="linklike"
+                              onClick={() => jumpTo(s.index)}
+                            >
+                              {s.title}
+                            </button>
+                            {i < unticked.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
               <p className="muted small">
                 Once submitted your answers are final: you will not be able to change them or see
@@ -482,20 +626,15 @@ export default function Exam() {
                 page and come back before submitting.
               </p>
               <div className="section-nav">
-                <button className="btn btn--ghost" onClick={() => goTo(sections.length - 1)}>
-                  <Icon name="chevronLeft" size={16} /> Back to questions
-                </button>
                 <button
-                  className="btn btn--primary"
-                  disabled={submitting}
-                  onClick={() => {
-                    const msg = unanswered.length
-                      ? `${unanswered.length} question${unanswered.length === 1 ? ' is' : 's are'} unanswered. Submit anyway? You won't be able to change or review your answers afterwards.`
-                      : "Submit your exam? You won't be able to change or review your answers afterwards.";
-                    if (window.confirm(msg)) handleSubmit();
-                  }}
+                  className="btn btn--ghost"
+                  disabled={view === 0}
+                  onClick={() => goTo(view - 1)}
                 >
-                  <Icon name="check-circle" size={16} />{' '}
+                  <Icon name="chevronLeft" size={16} /> Previous
+                </button>
+                <button className="btn btn--primary" disabled={submitting} onClick={confirmSubmit}>
+                  <Icon name="flag" size={16} />{' '}
                   {submitting ? 'Submitting…' : unsaved ? 'Save & submit' : 'Submit exam'}
                 </button>
               </div>

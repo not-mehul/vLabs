@@ -33,6 +33,15 @@
  *   Any Markdown works here, including images: ![topology](topology.png)
  *   > points: 5
  *
+ *   # [info] Part 2 · Bench check
+ *   > minutes: 15
+ *   Cable the switch to the router, then call your instructor over.
+ *   - [ ] Switch Gi0/1 is cabled to the router
+ *   - [ ] My instructor has checked my bench
+ *
+ *   # [submit] Review and submit
+ *   Check every part before you hand in.
+ *
  * `kind: exam` in the front matter marks the file as an exam (optional here;
  * it lets importers that also read labs tell the two apart — see
  * looksLikeExamMarkdown). `# ` starts a section and `## [type]` a question. `> minutes: N` under a
@@ -45,6 +54,14 @@
  * separated by ` | ` (write `\|` for a literal pipe) — a short question
  * without `> accept:` is marked by hand, as is every long question. Fenced
  * code blocks are copied verbatim.
+ *
+ * A section heading may carry a section type: `# [info] Title` is an
+ * instructions-and-checklist section (its text is the body, `- [ ]` lines are
+ * the checklist the participant ticks off; no questions), `# [submit] Title`
+ * the final submit section (its text is shown above the button; `> review:
+ * false` leaves out the answered / unanswered summary). Without a tag a
+ * section holds questions. An exam without a submit section gets the default
+ * one (see normaliseExam), and exports always write it.
  */
 
 import { normaliseExam, QUESTION_TYPES } from './exam-schema.js';
@@ -67,6 +84,16 @@ export const TYPE_ALIASES = Object.freeze({
   long: 'long',
   essay: 'long',
   'long-answer': 'long',
+});
+
+/** Section type tags on `# [tag] Title` headings. */
+export const SECTION_ALIASES = Object.freeze({
+  questions: 'questions',
+  info: 'info',
+  checklist: 'info',
+  tasks: 'info',
+  submit: 'submit',
+  review: 'submit',
 });
 
 const OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
@@ -96,6 +123,8 @@ export function looksLikeExamMarkdown(text) {
   for (; i < lines.length; i += 1) {
     if (FENCE_RE.test(lines[i])) inFence = !inFence;
     if (inFence) continue;
+    const sm = /^#\s+\[([^\]]+)\]/.exec(lines[i]);
+    if (sm && SECTION_ALIASES[sm[1].trim().toLowerCase()]) return true;
     const m = /^##\s+\[([^\]]+)\]/.exec(lines[i]);
     if (!m) continue;
     const t = m[1].trim().toLowerCase();
@@ -143,6 +172,11 @@ export function parseExamMarkdown(text) {
   let inFence = false;
 
   const flush = () => {
+    if (section && section.type !== 'questions') {
+      section.body = body.join('\n').trim();
+      body = [];
+      return;
+    }
     if (!q) return;
     q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
     section.questions.push(q);
@@ -156,14 +190,46 @@ export function parseExamMarkdown(text) {
     if (FENCE_RE.test(line)) inFence = !inFence;
     if (!inFence && /^#\s+/.test(line)) {
       flush();
-      section = { title: line.replace(/^#\s+/, '').trim(), questions: [] };
+      const rest = line.replace(/^#\s+/, '').trim();
+      const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+      const type = tag ? SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
+      section = {
+        type: type || 'questions',
+        title: type ? tag[2].trim() : rest,
+        questions: [],
+        tasks: [],
+      };
       exam.content.push(section);
+      continue;
+    }
+    if (section && section.type !== 'questions') {
+      // Info / submit section: directives, checklist items, and body text.
+      if (!inFence) {
+        const qm = /^##\s+\[([^\]]+)\]/.exec(line);
+        if (qm && TYPE_ALIASES[qm[1].trim().toLowerCase()]) {
+          throw new Error(
+            `Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`,
+          );
+        }
+        const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
+        if (mm) {
+          if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
+          else section.review = mm[2].trim();
+          continue;
+        }
+        const task = OPTION_RE.exec(line);
+        if (task && section.type === 'info') {
+          section.tasks.push(task[2].trim());
+          continue;
+        }
+      }
+      body.push(line);
       continue;
     }
     if (!inFence && /^##\s+/.test(line)) {
       flush();
       if (!section) {
-        section = { title: 'Section 1', questions: [] };
+        section = { type: 'questions', title: 'Section 1', questions: [] };
         exam.content.push(section);
       }
       const rest = line.replace(/^##\s+/, '');
@@ -215,9 +281,17 @@ export function examToMarkdown(input) {
   if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
   out.push('---', '');
   for (const sec of exam.content) {
-    out.push(`# ${sec.title}`);
+    out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
     if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+    if (sec.type === 'submit' && !sec.review) out.push('> review: false');
     out.push('');
+    if (sec.type !== 'questions') {
+      if (sec.body.trim()) out.push(sec.body.trim(), '');
+      if (sec.type === 'info' && sec.tasks.length) {
+        out.push(...sec.tasks.map((t) => `- [ ] ${t}`), '');
+      }
+      continue;
+    }
     for (const q of sec.questions) {
       const prompt = q.prompt.trim();
       const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
@@ -273,4 +347,18 @@ description: A short sample exam showing every question type.
 ## [long]
 In two or three sentences, explain why networks are split into VLANs.
 > points: 5
+
+# [info] Part 3 · Bench check
+> minutes: 10
+
+Cable your switch to the router as shown on the bench card, then raise your
+hand so your instructor can check it. Tick each item once it is done.
+
+- [ ] Switch port Gi0/1 is cabled to the router
+- [ ] My instructor has checked my bench
+
+# [submit] Review and submit
+
+Check that every question has an answer. Once you submit you cannot change
+your answers.
 `;

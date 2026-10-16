@@ -52,9 +52,11 @@ export function validateExamPayload(payload, opts = {}) {
   });
 
   const exam = normaliseExam(payload);
-  const content = exam.content.map((sec) => ({
+  const content = exam.content.map(({ minutes, ...sec }) => ({
+    ...sec,
     title: sec.title.trim(),
-    ...(sec.minutes ? { minutes: sec.minutes } : {}),
+    ...(minutes ? { minutes } : {}),
+    ...('body' in sec ? { body: sec.body.trim() } : {}),
     questions: sec.questions.map((q) => ({ ...q, prompt: q.prompt.trim() })),
   }));
   const clean = {
@@ -69,20 +71,24 @@ export function validateExamPayload(payload, opts = {}) {
   if (opts.imageNames) {
     const have = new Set([...opts.imageNames].map((n) => String(n).toLowerCase()));
     const missing = new Set();
-    content.forEach((sec, si) =>
-      sec.questions.forEach((q, qi) => {
-        for (const text of [q.prompt, ...q.options]) {
-          for (const m of String(text).matchAll(IMAGE_MD_RE)) {
-            const name = imageRefName(m[2]);
-            if (!name || have.has(name.toLowerCase()) || missing.has(name)) continue;
-            missing.add(name);
-            errors.push(
-              `Image "${name}" referenced in Section ${si + 1} · question ${qi + 1} is not in the image library — upload it first`,
-            );
-          }
+    const check = (texts, where) => {
+      for (const text of texts) {
+        for (const m of String(text).matchAll(IMAGE_MD_RE)) {
+          const name = imageRefName(m[2]);
+          if (!name || have.has(name.toLowerCase()) || missing.has(name)) continue;
+          missing.add(name);
+          errors.push(
+            `Image "${name}" referenced in ${where} is not in the image library — upload it first`,
+          );
         }
-      }),
-    );
+      }
+    };
+    content.forEach((sec, si) => {
+      check([sec.body || '', ...(sec.tasks || [])], `Section ${si + 1}`);
+      sec.questions.forEach((q, qi) =>
+        check([q.prompt, ...q.options], `Section ${si + 1} · question ${qi + 1}`),
+      );
+    });
   }
 
   if (errors.length) return fail(errors);

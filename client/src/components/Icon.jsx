@@ -167,6 +167,33 @@ const P = {
     </>
   ),
   play: <path d="M7 5.5 18.5 12 7 18.5z" />,
+  // Saved to the server — a cloud
+  cloud: (
+    <path d="M7.5 18.5h9.5a4 4 0 0 0 .6-7.95 5.5 5.5 0 0 0-10.7-1.3A4.6 4.6 0 0 0 7.5 18.5Z" />
+  ),
+  // Saving — a cloud with an upward arrow
+  'cloud-up': (
+    <>
+      <path d="M7.5 18.5h9.5a4 4 0 0 0 .6-7.95 5.5 5.5 0 0 0-10.7-1.3A4.6 4.6 0 0 0 7.5 18.5Z" />
+      <path d="M12 16v-4.5m0 0-2 2m2-2 2 2" />
+    </>
+  ),
+  // Not saved — a struck-through cloud
+  'cloud-off': (
+    <>
+      <path d="M7.5 18.5h9.5a4 4 0 0 0 .6-7.95 5.5 5.5 0 0 0-10.7-1.3A4.6 4.6 0 0 0 7.5 18.5Z" />
+      <path d="M4 4l16 16" />
+    </>
+  ),
+  // Hand in — a flag
+  flag: <path d="M5.5 21V4m0 0h11.5l-2.5 4.25L17 12.5H5.5" />,
+  // Checklist — ticked lines
+  checklist: (
+    <>
+      <path d="M10 6.5h10M10 12h10M10 17.5h10" />
+      <path d="m3.5 6.5 1.5 1.5 2.5-2.75M3.5 12l1.5 1.5 2.5-2.75M3.5 17.5 5 19l2.5-2.75" />
+    </>
+  ),
   power: (
     <>
       <path d="M12 4v8" />

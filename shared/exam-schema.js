@@ -13,9 +13,18 @@
  *   title: string,
  *   description: string,
  *   content: [{                        // sections ("parts") of the exam
+ *     type: 'questions' | 'info' | 'submit',
  *     title: string,
  *     minutes: number | null,          // time allocated (1–600), null = none
- *     questions: [{
+ *                                      //   (always null on the submit section)
+ *     body: string,                    // info / submit only: Markdown shown
+ *                                      //   above the checklist / the submit button
+ *     tasks: string[],                 // info only: requirements the participant
+ *                                      //   ticks off before moving on
+ *     review: boolean,                 // submit only: list answered / unanswered
+ *                                      //   before the button ("Review and submit")
+ *                                      //   or just the button ("Submit")
+ *     questions: [{                    // questions sections only ([] otherwise)
  *       type: 'single' | 'multiple' | 'truefalse' | 'short' | 'long',
  *       prompt: string,                // Markdown (images by library name)
  *       points: number,                // 0–100, default 1
@@ -30,6 +39,16 @@
  *     }],
  *   }],
  * }
+ *
+ * Section types
+ * -------------
+ *   questions  the default: questions to answer
+ *   info       instructions and a checklist the participant ticks off on their
+ *              own (e.g. "cable the bench, then have your instructor check
+ *              it"); nothing is graded and nobody approves it
+ *   submit     the last section, always exactly one: where the participant
+ *              hands the exam in. normaliseExam adds one when a template has
+ *              none and moves it to the end.
  *
  * Correct answers never leave the server for participants: `publicQuestion`
  * strips them, and participants are never told whether an answer was right.
@@ -60,8 +79,23 @@ export const EXAM_LIMITS = Object.freeze({
   shortResponse: 500,
   longResponse: 10_000,
   maxPoints: 100,
+  body: 20_000,
+  tasks: 30,
+  task: 300,
   serialisedBytes: 900_000,
 });
+
+/** Section types (see the header comment) with their editor labels. */
+export const SECTION_TYPES = Object.freeze({
+  questions: 'Questions',
+  info: 'Instructions & checklist',
+  submit: 'Submit',
+});
+export const SECTION_TYPE_NAMES = Object.freeze(Object.keys(SECTION_TYPES));
+
+/** Type of a stored section; sections saved before types existed are questions. */
+export const sectionType = (sec) =>
+  SECTION_TYPE_NAMES.includes(sec?.type) ? sec.type : 'questions';
 
 const str = (v, max) => {
   const s = v === null || v === undefined ? '' : String(v);
@@ -255,24 +289,81 @@ export function normaliseQuestion(raw) {
   return out;
 }
 
-/** Coerce any exam-ish object into canonical shape. Never throws. */
+/** The submit section added to an exam that has none. */
+export function defaultSubmitSection() {
+  return {
+    type: 'submit',
+    title: 'Review and submit',
+    minutes: null,
+    body: '',
+    review: true,
+    questions: [],
+  };
+}
+
+/** A fresh section of the given type in canonical shape. */
+export function blankSection(type = 'questions', n = 1) {
+  if (type === 'submit') return defaultSubmitSection();
+  if (type === 'info') {
+    return { type, title: `Section ${n}`, minutes: null, body: '', tasks: [''], questions: [] };
+  }
+  return { type: 'questions', title: `Section ${n}`, minutes: null, questions: [blankQuestion()] };
+}
+
+/** Normalise one section into canonical shape. Never throws. */
+export function normaliseSection(raw) {
+  const s = raw && typeof raw === 'object' ? raw : {};
+  const type = sectionType(s);
+  const title = str(s.title, EXAM_LIMITS.sectionTitle);
+  if (type === 'submit') {
+    return {
+      type,
+      title,
+      minutes: null,
+      body: str(s.body, EXAM_LIMITS.body),
+      review: toBool(s.review) !== false,
+      questions: [],
+    };
+  }
+  if (type === 'info') {
+    return {
+      type,
+      title,
+      minutes: normaliseMinutes(s.minutes),
+      body: str(s.body, EXAM_LIMITS.body),
+      tasks: (Array.isArray(s.tasks) ? s.tasks : [])
+        .map((t) => str(t, EXAM_LIMITS.task).trim())
+        .filter(Boolean)
+        .slice(0, EXAM_LIMITS.tasks),
+      questions: [],
+    };
+  }
+  return {
+    type,
+    title,
+    minutes: normaliseMinutes(s.minutes),
+    questions: (Array.isArray(s.questions) ? s.questions : [])
+      .slice(0, EXAM_LIMITS.questionsPerSection)
+      .map(normaliseQuestion),
+  };
+}
+
+/**
+ * Coerce any exam-ish object into canonical shape. Never throws. The exam
+ * always ends with exactly one submit section (the first one found, else a
+ * default "Review and submit").
+ */
 export function normaliseExam(obj) {
   const o = obj && typeof obj === 'object' ? obj : {};
-  const content = Array.isArray(o.content) ? o.content : [];
+  const sections = (Array.isArray(o.content) ? o.content : [])
+    .slice(0, EXAM_LIMITS.sections)
+    .map(normaliseSection);
+  const submit = sections.find((sec) => sec.type === 'submit') || defaultSubmitSection();
   return {
     kind: 'exam',
     title: str(o.title, EXAM_LIMITS.title),
     description: str(o.description, EXAM_LIMITS.description),
-    content: content.slice(0, EXAM_LIMITS.sections).map((sec) => {
-      const s = sec && typeof sec === 'object' ? sec : {};
-      return {
-        title: str(s.title, EXAM_LIMITS.sectionTitle),
-        minutes: normaliseMinutes(s.minutes),
-        questions: (Array.isArray(s.questions) ? s.questions : [])
-          .slice(0, EXAM_LIMITS.questionsPerSection)
-          .map(normaliseQuestion),
-      };
-    }),
+    content: [...sections.filter((sec) => sec.type !== 'submit'), submit],
   };
 }
 
@@ -283,10 +374,19 @@ export function normaliseExam(obj) {
 export function examErrors(exam) {
   const errors = [];
   if (!exam.title.trim()) errors.push('Title is required');
-  if (!exam.content.length) errors.push('At least one section is required');
+  const parts = exam.content.filter((sec) => sectionType(sec) !== 'submit');
+  if (!parts.length) errors.push('At least one section is required');
   let count = 0;
   exam.content.forEach((sec, si) => {
     if (!sec.title.trim()) errors.push(`Section ${si + 1} needs a title`);
+    const type = sectionType(sec);
+    if (type === 'submit') return;
+    if (type === 'info') {
+      if (!sec.body.trim() && !sec.tasks.length) {
+        errors.push(`Section ${si + 1} needs instructions or a checklist`);
+      }
+      return;
+    }
     if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
     sec.questions.forEach((q, qi) => {
       count += 1;
@@ -295,12 +395,27 @@ export function examErrors(exam) {
       QUESTION_TYPES[q.type].validate(q, at, errors);
     });
   });
-  if (exam.content.length && !count) errors.push('The exam has no questions');
+  if (parts.length && !count && !parts.some((sec) => sectionType(sec) === 'info')) {
+    errors.push('The exam has no questions');
+  }
   return errors;
 }
 
 /** Stable key of a question: "<section>.<question>" (like lab checkpoints). */
 export const questionKey = (si, qi) => `${si}.${qi}`;
+
+/** Stable key of a checklist item in an info section: "<section>.t<item>". */
+export const taskKey = (si, ti) => `${si}.t${ti}`;
+
+/** Every checklist item in reading order with its key and position. */
+export function listTasks(content) {
+  const out = [];
+  (Array.isArray(content) ? content : []).forEach((sec, si) => {
+    if (sectionType(sec) !== 'info') return;
+    (sec.tasks || []).forEach((text, ti) => out.push({ key: taskKey(si, ti), si, ti, text }));
+  });
+  return out;
+}
 
 /** Every question in reading order with its key and position. */
 export function listQuestions(content) {
@@ -379,21 +494,37 @@ export function totalPoints(content) {
 /*  Section progression (exams unlock section by section, like labs)          */
 /* -------------------------------------------------------------------------- */
 
-/** True when every question in section `si` has a response. */
+/**
+ * True when section `si` lets the participant move on: every question
+ * answered, or every checklist item ticked (a tick is stored in the answers
+ * under its taskKey as `true`). The submit section is always complete.
+ */
 export function isExamSectionComplete(content, si, answers) {
-  const questions = content?.[si]?.questions || [];
-  return questions.every((_, qi) => isAnswered((answers || {})[questionKey(si, qi)]));
+  const sec = content?.[si];
+  const a = answers || {};
+  const type = sectionType(sec);
+  if (type === 'submit') return true;
+  if (type === 'info') return (sec.tasks || []).every((_, ti) => a[taskKey(si, ti)] === true);
+  return (sec?.questions || []).every((_, qi) => isAnswered(a[questionKey(si, qi)]));
 }
 
 /**
  * Highest section index a participant may open: a section unlocks once every
- * question in all earlier sections has been answered (the exam counterpart of
- * a lab's checkpoints). `reached` is the participant's stored high-water mark,
- * so clearing an answer later never re-locks a section already opened.
+ * question in all earlier sections has been answered and every checklist
+ * ticked (the exam counterpart of a lab's checkpoints). After a questions
+ * section the submit section opens straight away, so a participant can hand
+ * in with questions left blank; a checklist must always be ticked. `reached` is the participant's stored
+ * high-water mark, so clearing an answer later never re-locks a section
+ * already opened.
  */
 export function examUnlockedSection(content, answers, reached = 0) {
   const n = Array.isArray(content) ? content.length : 0;
+  const passable = (i) =>
+    isExamSectionComplete(content, i, answers) ||
+    (sectionType(content[i]) === 'questions' && sectionType(content[i + 1]) === 'submit');
   let s = 0;
-  while (s < n - 1 && isExamSectionComplete(content, s, answers)) s += 1;
-  return Math.min(Math.max(s, reached || 0), Math.max(n - 1, 0));
+  while (s < n - 1 && passable(s)) s += 1;
+  s = Math.min(Math.max(s, reached || 0), Math.max(n - 1, 0));
+  while (s < n - 1 && passable(s)) s += 1;
+  return s;
 }

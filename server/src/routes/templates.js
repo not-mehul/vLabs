@@ -4,7 +4,7 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
 import { validateExamPayload } from '../lib/validateExam.js';
-import { listQuestions, totalPoints } from '../../../shared/exam-schema.js';
+import { listQuestions, totalPoints, sectionType } from '../../../shared/exam-schema.js';
 import {
   renderManual,
   countSteps,
@@ -360,9 +360,12 @@ router.post(
       return res.json({
         kind,
         sections: content.map((sec, si) => ({
+          ...sec,
           index: si,
-          title: sec.title,
-          questions: sec.questions.map((qq, qi) => ({
+          type: sectionType(sec),
+          ...(sec.body ? { body: injectImages(sec.body, images) } : {}),
+          ...(sec.tasks ? { tasks: sec.tasks.map((t) => injectImages(t, images)) } : {}),
+          questions: (sec.questions || []).map((qq, qi) => ({
             ...qq,
             index: qi,
             prompt: injectImages(qq.prompt, images),

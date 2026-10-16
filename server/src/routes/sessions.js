@@ -40,6 +40,9 @@ import { log } from '../lib/logger.js';
 const router = Router();
 router.use(requireInstructor);
 
+/** Session length when the launcher sends none, in minutes. */
+export const DEFAULT_SESSION_MINUTES = Object.freeze({ lab: 8 * 60, exam: 60 });
+
 const q = {
   codeClash: db.prepare('SELECT 1 FROM sessions WHERE room_code = ? AND is_active = 1'),
   template: db.prepare('SELECT * FROM templates WHERE id = ?'),
@@ -381,10 +384,6 @@ router.post(
   asyncHandler(async (req, res) => {
     sweepExpiredSessions();
     const templateId = Number(req.body?.template_id);
-    const durationMinutes = Math.min(
-      Math.max(parseInt(req.body?.duration_minutes ?? 120, 10) || 120, 5),
-      24 * 60,
-    );
     const title = String(req.body?.title || '')
       .trim()
       .slice(0, 200);
@@ -393,6 +392,13 @@ router.post(
     if (!template) throw httpError(400, 'template_id does not reference a template');
     if (template.archived_at)
       throw httpError(409, 'This template is archived — restore it to launch a session');
+
+    // Default length: a lab day (8 h) or an exam hour.
+    const fallback = DEFAULT_SESSION_MINUTES[template.kind === 'exam' ? 'exam' : 'lab'];
+    const durationMinutes = Math.min(
+      Math.max(parseInt(req.body?.duration_minutes ?? fallback, 10) || fallback, 5),
+      24 * 60,
+    );
 
     const roomCode = generateRoomCode();
     const info = q.insert.run(

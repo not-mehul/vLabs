@@ -868,8 +868,18 @@
     const EXAM_LIMITS = Object.freeze({
       sections: 50, questionsPerSection: 200, options: 12, accepted: 20, title: 200,
       description: 1000, sectionTitle: 200, prompt: 10000, option: 500, acceptedAnswer: 200,
-      maxPoints: 100, sectionMinutes: 600
+      maxPoints: 100, sectionMinutes: 600, body: 20000, tasks: 30, task: 300
     });
+
+    /** Section types: questions (default), info (instructions + a checklist the
+        participant ticks off) and submit (the last section, always exactly one). */
+    const EXAM_SECTION_TYPES = Object.freeze({
+      questions: 'Questions', info: 'Instructions & checklist', submit: 'Submit'
+    });
+    const EXAM_SECTION_ALIASES = Object.freeze({
+      questions: 'questions', info: 'info', checklist: 'info', tasks: 'info', submit: 'submit', review: 'submit'
+    });
+    const examSectionType = (sec) => (Object.prototype.hasOwnProperty.call(EXAM_SECTION_TYPES, sec?.type) ? sec.type : 'questions');
 
     const EXAM_TYPE_LABELS = Object.freeze({
       single: 'Multiple choice', multiple: 'Select all that apply', truefalse: 'True / false',
@@ -946,24 +956,53 @@
       return out;
     }
 
-    /** Coerce any exam-ish object into the canonical vLabs exam shape. */
+    function examDefaultSubmitSection() {
+      return { type: 'submit', title: 'Review and submit', minutes: null, body: '', review: true, questions: [] };
+    }
+
+    function examNormaliseSection(raw) {
+      const s = raw && typeof raw === 'object' ? raw : {};
+      const type = examSectionType(s);
+      const title = examStr(s.title, EXAM_LIMITS.sectionTitle);
+      if (type === 'submit') {
+        return { type, title, minutes: null, body: examStr(s.body, EXAM_LIMITS.body), review: examToBool(s.review) !== false, questions: [] };
+      }
+      if (type === 'info') {
+        return {
+          type,
+          title,
+          minutes: examMinutes(s.minutes),
+          body: examStr(s.body, EXAM_LIMITS.body),
+          tasks: (Array.isArray(s.tasks) ? s.tasks : [])
+            .map((t) => examStr(t, EXAM_LIMITS.task).trim())
+            .filter(Boolean)
+            .slice(0, EXAM_LIMITS.tasks),
+          questions: []
+        };
+      }
+      return {
+        type,
+        title,
+        minutes: examMinutes(s.minutes),
+        questions: (Array.isArray(s.questions) ? s.questions : [])
+          .slice(0, EXAM_LIMITS.questionsPerSection)
+          .map(examNormaliseQuestion)
+      };
+    }
+
+    /** Coerce any exam-ish object into the canonical vLabs exam shape (always
+        ending with exactly one submit section). */
     function examNormalise(obj) {
       const o = obj && typeof obj === 'object' ? obj : {};
-      const content = Array.isArray(o.content) ? o.content : [];
+      const sections = (Array.isArray(o.content) ? o.content : [])
+        .slice(0, EXAM_LIMITS.sections)
+        .map(examNormaliseSection);
+      const submit = sections.find((sec) => sec.type === 'submit') || examDefaultSubmitSection();
       return {
         kind: 'exam',
         title: examStr(o.title, EXAM_LIMITS.title),
         description: examStr(o.description, EXAM_LIMITS.description),
-        content: content.slice(0, EXAM_LIMITS.sections).map((sec) => {
-          const s = sec && typeof sec === 'object' ? sec : {};
-          return {
-            title: examStr(s.title, EXAM_LIMITS.sectionTitle),
-            minutes: examMinutes(s.minutes),
-            questions: (Array.isArray(s.questions) ? s.questions : [])
-              .slice(0, EXAM_LIMITS.questionsPerSection)
-              .map(examNormaliseQuestion)
-          };
-        })
+        content: [...sections.filter((sec) => sec.type !== 'submit'), submit]
       };
     }
 
@@ -1004,17 +1043,26 @@
     function examErrorsList(exam) {
       const errors = [];
       if (!exam.title.trim()) errors.push('Title is required');
-      if (!exam.content.length) errors.push('At least one section is required');
+      const parts = exam.content.filter((sec) => examSectionType(sec) !== 'submit');
+      if (!parts.length) errors.push('At least one section is required');
       let count = 0;
       exam.content.forEach((sec, si) => {
         if (!sec.title.trim()) errors.push(`Section ${si + 1} needs a title`);
+        const type = examSectionType(sec);
+        if (type === 'submit') return;
+        if (type === 'info') {
+          if (!sec.body.trim() && !sec.tasks.length) errors.push(`Section ${si + 1} needs instructions or a checklist`);
+          return;
+        }
         if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
         sec.questions.forEach((q, qi) => {
           count += 1;
           errors.push(...examQuestionErrors(q, `Section ${si + 1} · question ${qi + 1}`));
         });
       });
-      if (exam.content.length && !count) errors.push('The exam has no questions');
+      if (parts.length && !count && !parts.some((sec) => examSectionType(sec) === 'info')) {
+        errors.push('The exam has no questions');
+      }
       return errors;
     }
 
@@ -1058,6 +1106,8 @@
       for (; i < lines.length; i += 1) {
         if (EXAM_FENCE_RE.test(lines[i])) inFence = !inFence;
         if (inFence) continue;
+        const sm = /^#\s+\[([^\]]+)\]/.exec(lines[i]);
+        if (sm && EXAM_SECTION_ALIASES[sm[1].trim().toLowerCase()]) return true;
         const m = /^##\s+\[([^\]]+)\]/.exec(lines[i]);
         if (!m) continue;
         const t = m[1].trim().toLowerCase();
@@ -1093,6 +1143,11 @@
       let heading = '';
       let inFence = false;
       const flush = () => {
+        if (section && section.type !== 'questions') {
+          section.body = body.join('\n').trim();
+          body = [];
+          return;
+        }
         if (!q) return;
         q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
         section.questions.push(q);
@@ -1105,14 +1160,38 @@
         if (EXAM_FENCE_RE.test(line)) inFence = !inFence;
         if (!inFence && /^#\s+/.test(line)) {
           flush();
-          section = { title: line.replace(/^#\s+/, '').trim(), questions: [] };
+          const rest = line.replace(/^#\s+/, '').trim();
+          const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+          const type = tag ? EXAM_SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
+          section = { type: type || 'questions', title: type ? tag[2].trim() : rest, questions: [], tasks: [] };
           exam.content.push(section);
+          continue;
+        }
+        if (section && section.type !== 'questions') {
+          if (!inFence) {
+            const qm = /^##\s+\[([^\]]+)\]/.exec(line);
+            if (qm && EXAM_TYPE_ALIASES[qm[1].trim().toLowerCase()]) {
+              throw new Error(`Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`);
+            }
+            const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
+            if (mm) {
+              if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
+              else section.review = mm[2].trim();
+              continue;
+            }
+            const task = EXAM_OPTION_RE.exec(line);
+            if (task && section.type === 'info') {
+              section.tasks.push(task[2].trim());
+              continue;
+            }
+          }
+          body.push(line);
           continue;
         }
         if (!inFence && /^##\s+/.test(line)) {
           flush();
           if (!section) {
-            section = { title: 'Section 1', questions: [] };
+            section = { type: 'questions', title: 'Section 1', questions: [] };
             exam.content.push(section);
           }
           const rest = line.replace(/^##\s+/, '');
@@ -1161,9 +1240,15 @@
       if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
       out.push('---', '');
       for (const sec of exam.content) {
-        out.push(`# ${sec.title}`);
+        out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
         if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+        if (sec.type === 'submit' && !sec.review) out.push('> review: false');
         out.push('');
+        if (sec.type !== 'questions') {
+          if (sec.body.trim()) out.push(sec.body.trim(), '');
+          if (sec.type === 'info' && sec.tasks.length) out.push(...sec.tasks.map((t) => `- [ ] ${t}`), '');
+          continue;
+        }
         for (const q of sec.questions) {
           const prompt = q.prompt.trim();
           const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
@@ -1975,13 +2060,7 @@
               <input type="text" value="${escapeHtml(section.title || '')}" placeholder="Section title..."
                 class="text-sm font-semibold tracking-tight text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
                 data-action="update-sec-title" data-sec-idx="${sIdx}">
-              <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this section, in minutes (empty = none). Time on the section is judged against it.">
-                <i class="ph ph-timer text-xs mr-1"></i>
-                <input type="number" min="1" max="600" step="1" inputmode="numeric" value="${section.minutes ? escapeHtml(String(section.minutes)) : ''}" placeholder="min"
-                  class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
-                  data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to section ${sIdx + 1}">
-                <span class="ml-1 hidden sm:inline">min</span>
-              </label>
+              ${sectionTimeInputsHtml(section, sIdx, 'section')}
             </div>
 
             <div class="flex items-center space-x-1 shrink-0">
@@ -2437,9 +2516,13 @@
         pushHistorySnapshot();
         runFullValidation(false);
         scheduleAutoSave();
-      } else if (action === 'update-sec-minutes') {
-        const raw = String(target.value || '').trim();
-        templateData.content[sIdx].minutes = raw === '' ? null : Number(raw);
+      } else if (action === 'update-sec-time') {
+        // Hours + minutes boxes → whole minutes (both empty = no allocation).
+        const box = (unit) => document.querySelector(`[data-action="update-sec-time"][data-sec-idx="${sIdx}"][data-unit="${unit}"]`);
+        const h = String(box('h')?.value || '').trim();
+        const m = String(box('m')?.value || '').trim();
+        const total = (parseInt(h, 10) || 0) * 60 + (parseInt(m, 10) || 0);
+        templateData.content[sIdx].minutes = total > 0 ? total : null;
         pushHistorySnapshot();
         runFullValidation(false);
         scheduleAutoSave();
@@ -2594,6 +2677,14 @@
       scheduleAutoSave();
     }
     function deleteSection(sIdx) {
+      if (isExamMode()) {
+        // The submit section stays, and so does at least one part before it.
+        if (examSectionType(templateData.content[sIdx]) === 'submit') return;
+        if (templateData.content.length <= 2) {
+          showToast("At least one part is required.", "error");
+          return;
+        }
+      }
       if (templateData.content.length <= 1) {
         showToast("At least one section is required.", "error");
         return;
@@ -2618,6 +2709,8 @@
     function moveSection(sIdx, dir) {
       const target = sIdx + dir;
       if (target < 0 || target >= templateData.content.length) return;
+      // An exam's submit section is always last.
+      if (isExamMode() && [sIdx, target].some(i => examSectionType(templateData.content[i]) === 'submit')) return;
       const [sec] = templateData.content.splice(sIdx, 1);
       templateData.content.splice(target, 0, sec);
       pushHistorySnapshot(true);
@@ -2635,6 +2728,7 @@
       scheduleAutoSave();
     }
     function duplicateSection(sIdx) {
+      if (isExamMode() && examSectionType(templateData.content[sIdx]) === 'submit') return;
       const clone = JSON.parse(JSON.stringify(templateData.content[sIdx]));
       clone.title += " (Copy)";
       templateData.content.splice(sIdx + 1, 0, clone);
@@ -3845,7 +3939,7 @@
         }
         validateTextPlaceholders(sec.title, `${secLoc} title`, sIdx, 0);
         if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
-          addError(secLoc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
+          addError(secLoc, `Section ${sIdx + 1} time allocated must be between 1 minute and 10 hours (or empty)`, { sIdx, stIdx: 0 });
         }
 
         const steps = sec.steps || [];
@@ -4062,6 +4156,30 @@
     }
 
     /** A section's time allocation: whole minutes from 1 to 600 (vLabs 1.6.0). */
+    /** 90 → "1h 30m", 45 → "45m". */
+    function formatSectionTime(minutes) {
+      const n = Number(minutes) || 0;
+      const h = Math.floor(n / 60);
+      const m = n % 60;
+      return h ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`;
+    }
+
+    /** Hours + minutes boxes for a section's time allocation (stored as minutes). */
+    function sectionTimeInputsHtml(section, sIdx, noun) {
+      const total = Number(section.minutes);
+      const set = section.minutes !== null && section.minutes !== undefined && section.minutes !== '' && Number.isFinite(total);
+      const box = (unit, value, max, label) => `
+        <input type="number" min="0" max="${max}" step="1" inputmode="numeric" value="${set ? value : ''}" placeholder="–"
+          class="w-9 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
+          data-action="update-sec-time" data-unit="${unit}" data-sec-idx="${sIdx}" aria-label="${label} allocated to ${noun} ${sIdx + 1}">`;
+      return `
+        <label class="flex items-center gap-0.5 shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this ${noun}, in hours and minutes (empty = none). Time on the ${noun} is judged against it.">
+          <i class="ph ph-timer text-xs mr-1"></i>
+          ${box('h', Math.floor(total / 60), 10, 'Hours')}<span>h</span>
+          ${box('m', total % 60, 59, 'Minutes')}<span>m</span>
+        </label>`;
+    }
+
     function validSectionMinutes(v) {
       return v !== null && v !== '' && Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 600;
     }
@@ -4954,6 +5072,20 @@ description: A short sample exam showing every question type.
 ## [long]
 In two or three sentences, explain why networks are split into VLANs.
 > points: 5
+
+# [info] Part 3 · Bench check
+> minutes: 10
+
+Cable your switch to the router as shown on the bench card, then raise your
+hand so your instructor can check it. Tick each item once it is done.
+
+- [ ] Switch port Gi0/1 is cabled to the router
+- [ ] My instructor has checked my bench
+
+# [submit] Review and submit
+
+Check that every question has an answer. Once you submit you cannot change
+your answers.
 `,
       minimal: `---
 title: Course Name — Lab Name
@@ -5825,11 +5957,13 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         variables: [],
         content: [
           {
+            type: 'questions',
             title: 'Part 1',
             minutes: null,
             collapsed: false,
             questions: [{ ...examBlankQuestion('single'), prompt: 'Which option is correct?', options: ['Option A', 'Option B'], collapsed: false }]
-          }
+          },
+          { ...examDefaultSubmitSection(), collapsed: false }
         ],
         images: []
       };
@@ -5900,6 +6034,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if (exam && (currentView === 'variables' || currentView === 'dependencies')) switchView('builder');
     }
 
+    const EXAM_SECTION_BADGE = {
+      questions: 'bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-slate-300',
+      info: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+      submit: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+    };
     const EXAM_TYPE_DOT = { single: 'bg-violet-500', multiple: 'bg-fuchsia-500', truefalse: 'bg-sky-500', short: 'bg-emerald-500', long: 'bg-amber-500' };
     const examLetter = (i) => String.fromCharCode(65 + i);
     const examGradingBadge = (q) => examIsManual(q)
@@ -5914,31 +6053,35 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
 
     function examSectionHeaderHtml(section, sIdx) {
       const isCollapsed = Boolean(section.collapsed);
+      const type = examSectionType(section);
       const n = (section.questions || []).length;
+      const last = templateData.content.length - 1;
+      const btn = (action, icon, title, disabled, danger) => `
+        <button data-action="${action}" data-sec-idx="${sIdx}" ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06]'} rounded-md transition disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs"></i></button>`;
+      const count = type === 'questions'
+        ? `${n} ${n === 1 ? 'question' : 'questions'}`
+        : type === 'info' ? `${(section.tasks || []).length} checklist items` : 'last step';
       return `
         <div class="px-4 py-3 border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between bg-slate-50/50 dark:bg-surface-850/40">
           <div class="flex items-center space-x-2.5 flex-1 mr-3">
             <button data-action="toggle-section" data-sec-idx="${sIdx}" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs p-1 rounded-md hover:bg-slate-200/50 dark:hover:bg-white/[0.06] transition" title="Toggle Part">
               <i class="ph ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'}"></i>
             </button>
-            <span class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${String(sIdx + 1).padStart(2, '0')}</span>
-            <input type="text" value="${escapeHtml(section.title || '')}" placeholder="Part title..."
+            <span class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${type === 'submit' ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
+            <input type="text" value="${escapeHtml(section.title || '')}" placeholder="${type === 'submit' ? 'Review and submit' : 'Part title...'}"
               class="text-sm font-semibold tracking-tight text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
               data-action="update-sec-title" data-sec-idx="${sIdx}">
-            <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this part, in minutes (empty = none). Time on the part is judged against it.">
-              <i class="ph ph-timer text-xs mr-1"></i>
-              <input type="number" min="1" max="600" step="1" inputmode="numeric" value="${section.minutes ? escapeHtml(String(section.minutes)) : ''}" placeholder="min"
-                class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
-                data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to part ${sIdx + 1}">
-              <span class="ml-1 hidden sm:inline">min</span>
-            </label>
+            <span class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${EXAM_SECTION_BADGE[type]}">${EXAM_SECTION_TYPES[type]}</span>
+            ${type === 'submit' ? '' : sectionTimeInputsHtml(section, sIdx, 'part')}
           </div>
           <div class="flex items-center space-x-1 shrink-0">
-            <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 mr-1.5 hidden sm:inline">${n} ${n === 1 ? 'question' : 'questions'}</span>
-            <button data-action="move-sec-up" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Move Part Up"><i class="ph ph-arrow-up text-xs"></i></button>
-            <button data-action="move-sec-down" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Move Part Down"><i class="ph ph-arrow-down text-xs"></i></button>
-            <button data-action="duplicate-section" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Duplicate Part"><i class="ph ph-copy text-xs"></i></button>
-            <button data-action="delete-section" data-sec-idx="${sIdx}" class="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 transition" title="Delete Part"><i class="ph ph-trash text-xs"></i></button>
+            <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 mr-1.5 hidden sm:inline">${count}</span>
+            ${type === 'submit' ? '' : [
+              btn('move-sec-up', 'ph-arrow-up', 'Move Part Up', sIdx === 0),
+              btn('move-sec-down', 'ph-arrow-down', 'Move Part Down', sIdx >= last - 1),
+              btn('duplicate-section', 'ph-copy', 'Duplicate Part', false),
+              btn('delete-section', 'ph-trash', 'Delete Part', last <= 1, true)
+            ].join('')}
           </div>
         </div>`;
     }
@@ -6034,26 +6177,73 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         </div>`;
     }
 
+    /** Body (instructions / text above the button) and checklist of an info or submit part. */
+    function examSectionBodyHtml(section, sIdx) {
+      const type = examSectionType(section);
+      const bodyId = `sec-body-${sIdx}`;
+      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
+      const body = `
+        <div>
+          <label class="block text-[10px] font-medium text-slate-400 mb-1">${type === 'submit' ? 'Text above the submit button (Markdown, optional)' : 'Instructions (Markdown; images by library file name)'}</label>
+          <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
+            ${renderMarkdownToolbar(bodyId, sIdx, 0)}
+            <textarea id="${bodyId}" rows="3" data-sec-idx="${sIdx}" data-action="exam-sec-body"
+              class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
+              placeholder="${type === 'submit' ? 'e.g. Check every part before you hand in.' : 'e.g. Cable the switch to the router, then call your instructor over to check it.'}">${escapeHtml(section.body || '')}</textarea>
+          </div>
+        </div>`;
+      if (type === 'submit') {
+        return `${body}
+          <label class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+            <input type="checkbox" class="mt-0.5" data-action="exam-sec-review" data-sec-idx="${sIdx}" ${section.review !== false ? 'checked' : ''}>
+            <span>Show a review first: how many questions are answered, with links to any unanswered question or unfinished checklist. Untick for a plain submit button.</span>
+          </label>`;
+      }
+      const tasks = section.tasks || [];
+      return `${body}
+        <div class="space-y-1.5">
+          <span class="block text-[10px] font-medium text-slate-400">Checklist: the participant ticks every item to move on (nobody approves it)</span>
+          ${tasks.map((t, ti) => `
+            <div class="flex items-center gap-2">
+              <i class="ph ph-check-square text-sm text-amber-500 shrink-0"></i>
+              <input type="text" value="${escapeHtml(t)}" placeholder="e.g. My instructor has checked my cabling" data-sec-idx="${sIdx}" data-task-idx="${ti}" data-action="exam-task" class="${inputCls}">
+              <button data-action="exam-del-task" data-sec-idx="${sIdx}" data-task-idx="${ti}" class="p-1 text-slate-400 hover:text-rose-600 rounded" title="Remove item"><i class="ph ph-x text-xs pointer-events-none"></i></button>
+            </div>`).join('')}
+          ${tasks.length < EXAM_LIMITS.tasks ? `<button data-action="exam-add-task" data-sec-idx="${sIdx}" class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add checklist item</button>` : ''}
+        </div>`;
+    }
+
+    /** Keep exactly one submit section, last (older saved workspaces have none). */
+    function ensureExamSubmitSection() {
+      const content = templateData.content;
+      const submits = content.filter(sec => examSectionType(sec) === 'submit');
+      const rest = content.filter(sec => examSectionType(sec) !== 'submit');
+      const last = submits[0] || { ...examDefaultSubmitSection(), collapsed: false };
+      if (submits.length === 1 && content[content.length - 1] === last) return;
+      templateData.content = [...rest, last];
+    }
+
     function renderExamBuilder() {
       const container = document.getElementById('sectionsContainer');
       if (!container) return;
+      ensureExamSubmitSection();
       document.getElementById('templateTitle').value = templateData.title || '';
       document.getElementById('templateDescription').value = templateData.description || '';
       updateMetadataCharCounters();
       const term = globalSearchQuery.toLowerCase().trim();
+      const last = templateData.content.length - 1;
       let number = 0;
       container.innerHTML = templateData.content.map((section, sIdx) => {
-        const secMatches = !term || (section.title || '').toLowerCase().includes(term);
+        const type = examSectionType(section);
+        const secMatches = !term || [section.title, section.body, ...(section.tasks || [])].join(' ').toLowerCase().includes(term);
         const cards = (section.questions || []).map((q, qIdx) => {
           number += 1;
           const hit = !term || secMatches || [q.prompt, ...(q.options || []), ...(q.accepted || [])].join(' ').toLowerCase().includes(term);
           return hit ? examQuestionCardHtml(q, sIdx, qIdx, number) : '';
         }).join('');
         const hidden = term && !secMatches && !cards;
-        return `
-          <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl shadow-2xs overflow-hidden transition-all">
-            ${examSectionHeaderHtml(section, sIdx)}
-            <div id="section-body-${sIdx}" class="${section.collapsed ? 'hidden' : 'p-4 sm:p-5 space-y-4'}">
+        const inner = type === 'questions'
+          ? `
               <div class="space-y-3.5">${cards}</div>
               <div class="flex flex-wrap items-center gap-1.5">
                 <span class="text-[11px] text-slate-400 mr-1">Add question:</span>
@@ -6061,9 +6251,19 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                   <button data-action="exam-add-q" data-sec-idx="${sIdx}" data-q-type="${t}" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 dark:hover:border-white/[0.2] rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[t]}"></span>${EXAM_TYPE_LABELS[t]}
                   </button>`).join('')}
-              </div>
-            </div>
-          </div>`;
+              </div>`
+          : examSectionBodyHtml(section, sIdx);
+        const addRow = sIdx === last - 1 ? `
+          <div class="flex flex-wrap items-center gap-1.5 px-1">
+            <span class="text-[11px] text-slate-400 mr-1">Add a part before the submit step:</span>
+            <button data-action="exam-add-section" data-sec-type="questions" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Questions</button>
+            <button data-action="exam-add-section" data-sec-type="info" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Instructions &amp; checklist</button>
+          </div>` : '';
+        return `
+          <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border ${type === 'submit' ? 'border-dashed border-violet-300/80 dark:border-violet-500/30' : 'border-slate-200/80 dark:border-white/[0.07]'} rounded-xl shadow-2xs overflow-hidden transition-all">
+            ${examSectionHeaderHtml(section, sIdx)}
+            <div id="section-body-${sIdx}" class="${section.collapsed ? 'hidden' : 'p-4 sm:p-5 space-y-4'}">${inner}</div>
+          </div>${addRow}`;
       }).join('');
       renderOutline();
       updateBadges();
@@ -6078,9 +6278,10 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       let number = 0;
       list.innerHTML = templateData.content.map((sec, sIdx) => `
         <div class="pt-2.5 pb-1 px-1 flex items-center space-x-1.5">
-          <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">${String(sIdx + 1).padStart(2, '0')}</span>
-          <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">${escapeHtml(sec.title || 'Untitled')}</span>
-          ${sec.minutes ? `<span class="ml-auto text-[10px] font-mono text-slate-400">${sec.minutes}m</span>` : ''}
+          <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">${examSectionType(sec) === 'submit' ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
+          <button onclick="jumpToQuestion(${sIdx}, null)" class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate hover:text-brand-600 text-left">${escapeHtml(sec.title || 'Untitled')}</button>
+          ${examSectionType(sec) === 'info' ? '<i class="ph ph-check-square text-[11px] text-amber-500"></i>' : ''}
+          ${sec.minutes ? `<span class="ml-auto text-[10px] font-mono text-slate-400">${formatSectionTime(sec.minutes)}</span>` : ''}
         </div>
         <div class="border-l border-slate-200/80 dark:border-white/[0.07] ml-2.5 pl-2 space-y-0.5">
           ${(sec.questions || []).map((q, qIdx) => {
@@ -6101,11 +6302,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const sec = templateData.content[sIdx];
       if (sec) {
         sec.collapsed = false;
-        if (sec.questions && sec.questions[qIdx]) sec.questions[qIdx].collapsed = false;
+        if (qIdx !== null && sec.questions && sec.questions[qIdx]) sec.questions[qIdx].collapsed = false;
       }
       renderBuilder();
       requestAnimationFrame(() => {
-        const el = document.getElementById(`q-card-${sIdx}-${qIdx}`) || document.getElementById(`section-card-${sIdx}`);
+        const el = (qIdx !== null && document.getElementById(`q-card-${sIdx}-${qIdx}`)) || document.getElementById(`section-card-${sIdx}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           el.classList.add('highlight-jump');
@@ -6114,13 +6315,16 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       });
     }
 
-    function addExamSection() {
-      templateData.content.push({
-        title: `Part ${templateData.content.length + 1}`,
-        minutes: null,
-        collapsed: false,
-        questions: [{ ...examBlankQuestion('single'), collapsed: false }]
-      });
+    /** Add a part just before the submit section (which always stays last). */
+    function addExamSection(type = 'questions') {
+      const content = templateData.content;
+      const at = content.findIndex(sec => examSectionType(sec) === 'submit');
+      const where = at < 0 ? content.length : at;
+      const part = type === 'info'
+        ? { type: 'info', title: `Part ${where + 1}`, minutes: null, body: '', tasks: [''], questions: [], collapsed: false }
+        : { type: 'questions', title: `Part ${where + 1}`, minutes: null, collapsed: false, questions: [{ ...examBlankQuestion('single'), collapsed: false }] };
+      content.splice(where, 0, part);
+      if (at < 0) content.push({ ...examDefaultSubmitSection(), collapsed: false });
       pushHistorySnapshot(true);
       renderBuilder();
       scheduleAutoSave();
@@ -6147,9 +6351,26 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     }
 
     function examHandleClick(action, target, sIdx) {
+      if (action === 'exam-add-section') return addExamSection(target.dataset.secType || 'questions');
       const qIdx = target.dataset.qIdx !== undefined ? parseInt(target.dataset.qIdx, 10) : null;
       const sec = templateData.content[sIdx];
       if (!sec) return;
+      if (action === 'exam-add-task') {
+        sec.tasks = sec.tasks || [];
+        if (sec.tasks.length >= EXAM_LIMITS.tasks) return;
+        sec.tasks.push('');
+        examCommit();
+        requestAnimationFrame(() => {
+          const inputs = document.querySelectorAll(`#section-card-${sIdx} [data-action="exam-task"]`);
+          inputs[inputs.length - 1]?.focus();
+        });
+        return;
+      }
+      if (action === 'exam-del-task') {
+        sec.tasks.splice(parseInt(target.dataset.taskIdx, 10), 1);
+        examCommit();
+        return;
+      }
       const qs = sec.questions;
       if (action === 'exam-add-q') {
         if (qs.length >= EXAM_LIMITS.questionsPerSection) return showToast('Too many questions in this part.', 'error');
@@ -6193,6 +6414,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     }
 
     function examHandleInput(action, target, sIdx) {
+      const sec = templateData.content[sIdx];
+      if (action === 'exam-sec-body' && sec) { sec.body = target.value; examCommit(false); return; }
+      if (action === 'exam-task' && sec) { sec.tasks[parseInt(target.dataset.taskIdx, 10)] = target.value; examCommit(false); return; }
       const qIdx = parseInt(target.dataset.qIdx, 10);
       const q = templateData.content[sIdx]?.questions?.[qIdx];
       if (!q) return;
@@ -6215,6 +6439,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     }
 
     function examHandleChange(action, target, sIdx) {
+      if (action === 'exam-sec-review') {
+        const sec = templateData.content[sIdx];
+        if (sec) { sec.review = target.checked; examCommit(false); }
+        return;
+      }
       const qIdx = parseInt(target.dataset.qIdx, 10);
       const qs = templateData.content[sIdx]?.questions;
       const q = qs?.[qIdx];
@@ -6304,14 +6533,45 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
               ${keyNote ? `<p class="text-[11px] text-emerald-700 dark:text-emerald-400">${escapeHtml(keyNote)}</p>` : ''}
             </div>`;
         }).join('');
+        const type = examSectionType(sec);
+        let inner = qsHtml || '<p class="text-xs text-slate-400">No questions yet.</p>';
+        if (type !== 'questions') {
+          const bodyHtml = (sec.body || '').trim()
+            ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(sec.body, {}))}</div>`
+            : '';
+          if (type === 'info') {
+            const tasks = (sec.tasks || []).filter(t => String(t).trim());
+            inner = `
+              <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
+                ${bodyHtml}
+                ${tasks.length ? `<p class="text-[11px] font-semibold text-slate-500">Tick each item once it is done</p>` : ''}
+                ${tasks.map((t, ti) => {
+                  const key = `${sIdx}.t${ti}`;
+                  return `
+                    <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer text-xs text-slate-700 dark:text-slate-200">
+                      <input type="checkbox" ${st.answers[key] ? 'checked' : ''} onchange="examPreviewSet('${key}', this.checked, false)">
+                      <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(t, {}))}</span>
+                    </label>`;
+                }).join('')}
+                ${!bodyHtml && !tasks.length ? '<p class="text-xs text-slate-400">No instructions or checklist yet.</p>' : ''}
+              </div>`;
+          } else {
+            inner = `
+              <div class="bg-white dark:bg-surface-900 border border-dashed border-violet-300/80 dark:border-violet-500/30 rounded-xl p-4 space-y-3">
+                ${bodyHtml}
+                <p class="text-xs text-slate-500">${sec.review !== false ? 'Participants see how many questions they answered, with links to anything left, then:' : 'Participants see only:'}</p>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-xs font-medium"><i class="ph ph-flag"></i> Submit exam</span>
+              </div>`;
+          }
+        }
         return `
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${sIdx + 1}</span>
+              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${type === 'submit' ? '<i class="ph ph-flag"></i>' : sIdx + 1}</span>
               <h3 class="text-sm font-semibold text-slate-900 dark:text-white">${escapeHtml(sec.title || `Part ${sIdx + 1}`)}</h3>
-              ${sec.minutes ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${sec.minutes} min</span>` : ''}
+              ${sec.minutes && type !== 'submit' ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${formatSectionTime(sec.minutes)}</span>` : ''}
             </div>
-            ${qsHtml || '<p class="text-xs text-slate-400">No questions yet.</p>'}
+            ${inner}
           </div>`;
       }).join('');
 
@@ -6319,7 +6579,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         bar.classList.remove('hidden');
         bar.innerHTML = `
           <span class="text-slate-500">${examQuestionCount()} questions · ${examTotalPoints()} points</span>
-          <span class="text-slate-400">· participants see one part at a time; the next unlocks once every question is answered, and nothing is reviewable after submitting.</span>
+          <span class="text-slate-400">· participants see one part at a time; the next unlocks once every question is answered (or every checklist item ticked), and nothing is reviewable after submitting.</span>
           <span class="ml-auto flex items-center gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none bg-slate-50 dark:bg-surface-850 px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.07]">
               <input type="checkbox" ${st.showKey ? 'checked' : ''} onchange="examPreviewState.showKey = this.checked; renderExamPreview()"> Show answer key
@@ -6343,11 +6603,15 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           refs.push({ fileName: rawPath.split('/').pop(), rawPath, locLabel, sIdx, stIdx, isDynamic: false });
         }
       };
-      templateData.content.forEach((sec, sIdx) => (sec.questions || []).forEach((q, qIdx) => {
-        const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
-        scan(q.prompt, `${at} prompt`, sIdx, qIdx);
-        (q.options || []).forEach((o, oi) => scan(o, `${at} option ${examLetter(oi)}`, sIdx, qIdx));
-      }));
+      templateData.content.forEach((sec, sIdx) => {
+        scan(sec.body, `Section ${sIdx + 1}`, sIdx, 0);
+        (sec.tasks || []).forEach((t, ti) => scan(t, `Section ${sIdx + 1} checklist item ${ti + 1}`, sIdx, 0));
+        (sec.questions || []).forEach((q, qIdx) => {
+          const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
+          scan(q.prompt, `${at} prompt`, sIdx, qIdx);
+          (q.options || []).forEach((o, oi) => scan(o, `${at} option ${examLetter(oi)}`, sIdx, qIdx));
+        });
+      });
       return refs;
     }
 
@@ -6360,14 +6624,28 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         addError('Front Matter', `Description exceeds ${EXAM_LIMITS.description} characters`, { view: 'builder' });
       }
       const secs = templateData.content || [];
-      if (!secs.length) addError('Structure', 'At least one section is required', { view: 'builder' });
+      const parts = secs.filter(sec => examSectionType(sec) !== 'submit');
+      if (!parts.length) addError('Structure', 'At least one section is required', { view: 'builder' });
       if (secs.length > EXAM_LIMITS.sections) addError('Structure', `Too many sections (${secs.length} / ${EXAM_LIMITS.sections} max)`, { view: 'builder' });
+      if (secs.filter(sec => examSectionType(sec) === 'submit').length !== 1 || examSectionType(secs[secs.length - 1]) !== 'submit') {
+        addWarning('Structure', 'The exam should end with exactly one submit section (it is added on export)', { view: 'builder' });
+      }
       let count = 0;
       secs.forEach((sec, sIdx) => {
         const loc = `Section ${sIdx + 1}`;
+        const type = examSectionType(sec);
         if (!(sec.title || '').trim()) addError(loc, `Section ${sIdx + 1} needs a title`, { sIdx, stIdx: 0 });
         if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
-          addError(loc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
+          addError(loc, `Section ${sIdx + 1} time allocated must be between 1 minute and 10 hours (or empty)`, { sIdx, stIdx: 0 });
+        }
+        if ((sec.body || '').length > EXAM_LIMITS.body) addError(loc, `Text exceeds ${EXAM_LIMITS.body} characters`, { sIdx, stIdx: 0 });
+        if (type === 'submit') return;
+        if (type === 'info') {
+          const tasks = (sec.tasks || []).filter(t => String(t).trim());
+          if (!(sec.body || '').trim() && !tasks.length) addError(loc, `Section ${sIdx + 1} needs instructions or a checklist`, { sIdx, stIdx: 0 });
+          if ((sec.tasks || []).length !== tasks.length) addWarning(loc, `${loc} has an empty checklist item (left out on export)`, { sIdx, stIdx: 0 });
+          if (tasks.length > EXAM_LIMITS.tasks) addError(loc, `Too many checklist items (${tasks.length} / ${EXAM_LIMITS.tasks} max)`, { sIdx, stIdx: 0 });
+          return;
         }
         const qs = sec.questions || [];
         if (!qs.length) addError(loc, `Section ${sIdx + 1} has no questions`, { sIdx, stIdx: 0 });
@@ -6385,14 +6663,14 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           }
         });
       });
-      if (secs.length && !count) addError('Structure', 'The exam has no questions', { view: 'builder' });
+      if (parts.length && !count && !parts.some(sec => examSectionType(sec) === 'info')) addError('Structure', 'The exam has no questions', { view: 'builder' });
       const lib = templateData.images || [];
       extractExamImageRefs().forEach(ref => {
         if (!lib.some(img => (img.name || '').toLowerCase() === ref.fileName.toLowerCase())) {
           addError(ref.locLabel, `Image "${ref.fileName}" referenced in ${ref.locLabel} is not in the image library — upload it first`, { sIdx: ref.sIdx, stIdx: ref.stIdx });
         }
       });
-      return `Checked ${secs.length} part(s), ${count} question(s): types, correct answers, points, time allocations and image assets.`;
+      return `Checked ${parts.length} part(s), ${count} question(s): types, correct answers, checklists, points, time allocations and image assets.`;
     }
 
     function generateExamCanonicalJson() {
@@ -6401,10 +6679,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         kind: 'exam',
         title: (exam.title || 'Untitled').trim(),
         description: exam.description,
-        content: exam.content.map(sec => ({
+        content: exam.content.map(({ minutes, ...sec }) => ({
+          ...sec,
           title: sec.title.trim(),
-          ...(sec.minutes ? { minutes: sec.minutes } : {}),
-          questions: sec.questions
+          ...('body' in sec ? { body: sec.body.trim() } : {}),
+          ...(minutes ? { minutes } : {})
         }))
       }, null, 2);
     }
