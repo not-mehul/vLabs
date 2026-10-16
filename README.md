@@ -152,6 +152,17 @@ The portal shows a banner until this password is changed (**Account → Change
 password**). In production the server refuses to _create_ the bootstrap account
 with the default password at all.
 
+**Default no longer works?** The account is only created on an empty
+database, and a changed password is kept across restarts. If your local
+`server/data/vlabs.sqlite` already has an `instructor` whose password was
+changed, the server says so at start-up. Reset it with:
+
+```bash
+node server/scripts/instructors.js reset-password instructor labmanual123
+```
+
+(or delete `server/data/` to start from a fresh database).
+
 Other root commands: `npm test`, `npm run lint`, `npm run format`,
 `npm run build` (writes `client/dist/`), and `npm start` (serves the built SPA
 from the API like the Pi does — useful to check a production build locally:

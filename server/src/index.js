@@ -71,6 +71,14 @@ if (isProd && !config.trustProxyConfigured) {
 // Ensure a bootstrap instructor + sample template exist on first run.
 ensureSeed();
 const onDefaultPassword = accountsOnDefaultPassword();
+// Dev: the seeder only creates the bootstrap account on an empty database, so
+// once its password has been changed the documented default stops working.
+const seedName = config.seedInstructor.username;
+const seedPasswordChanged =
+  config.env !== 'production' &&
+  config.seedPasswordIsDefault &&
+  !onDefaultPassword.includes(seedName) &&
+  Boolean(db.prepare('SELECT 1 FROM instructors WHERE username = ?').get(seedName));
 sweepExpiredSessions();
 
 const app = createApp();
@@ -92,6 +100,13 @@ const server = app.listen(config.port, config.host, () => {
     console.warn(
       `  ${YELLOW}Note: ${onDefaultPassword.join(', ')} still use${onDefaultPassword.length === 1 ? 's' : ''} the default password.\n` +
         `  Change it from the portal (Account → Change password).${RESET}`,
+    );
+  }
+  if (seedPasswordChanged) {
+    console.warn(
+      `  ${YELLOW}Note: "${seedName}" no longer uses the default password (${config.devSeedPassword}) in\n` +
+        `  ${config.dbPath}.\n` +
+        `  Reset it with: node server/scripts/instructors.js reset-password ${seedName} ${config.devSeedPassword}${RESET}`,
     );
   }
   console.log('');
