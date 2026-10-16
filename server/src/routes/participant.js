@@ -11,10 +11,11 @@ import {
 } from '../middleware/rateLimit.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { signParticipantToken } from '../lib/tokens.js';
-import { nowIso, parseUtc, secondsBetween } from '../lib/time.js';
+import { nowIso, parseUtc } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
 import { labProgress } from '../lib/labProgress.js';
+import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
 import {
   resolveVariables,
   matchCheckpoint,
@@ -157,9 +158,10 @@ function sectionTimesOf(p) {
 }
 
 /** Fold the open visit (section_entered_at → now) into the per-section totals. */
-function closeOpenVisit(p, times, now) {
+function closeOpenVisit(p, times, now, breaks = []) {
   const key = String(p.current_section);
-  times[key] = (Number(times[key]) || 0) + secondsBetween(p.section_entered_at, now);
+  // Break time (instructor-toggled, class-wide) never counts towards a section.
+  times[key] = (Number(times[key]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaks);
   return times;
 }
 
@@ -168,9 +170,9 @@ function closeOpenVisit(p, times, now) {
  * (total time = joined → completed) and lets the monitor show "Complete" even
  * if the participant keeps reviewing instead of pressing Finish.
  */
-function markCompleted(p, now) {
+function markCompleted(p, now, breaks = []) {
   if (p.completed_at) return false;
-  const times = closeOpenVisit(p, sectionTimesOf(p), now);
+  const times = closeOpenVisit(p, sectionTimesOf(p), now, breaks);
   const { changes } = q.complete.run(now, JSON.stringify(times), now, p.id);
   if (changes) {
     log.info('participant.completed', { participant: p.id, session: p.session_id });
@@ -429,6 +431,7 @@ router.get(
       expires_at: req.session.expires_at,
       // Lets the client correct its countdown for device clock skew.
       server_time: nowIso(),
+      on_break: Boolean(currentBreak(breaksOf(req.session))),
       template_version: req.session.template_version,
       sections: rendered,
     });
@@ -504,7 +507,9 @@ router.post(
       section: si,
       step: sti,
     });
-    if (labProgress(sections, p, completed, si).complete) markCompleted(p, now);
+    if (labProgress(sections, p, completed, si).complete) {
+      markCompleted(p, now, breaksOf(req.session));
+    }
     res.json({
       correct: true,
       section_cleared: isSectionCleared(sections[si], si, completed),
@@ -537,7 +542,9 @@ router.post(
       // then move. max_section is a monotonic high-water mark so progress never
       // drops when a participant navigates back to review an earlier section.
       // Once complete the clock is frozen: later visits are not accumulated.
-      const times = p.completed_at ? sectionTimesOf(p) : closeOpenVisit(p, sectionTimesOf(p), now);
+      const times = p.completed_at
+        ? sectionTimesOf(p)
+        : closeOpenVisit(p, sectionTimesOf(p), now, breaksOf(req.session));
       q.setSection.run(si, si, JSON.stringify(times), now, now, p.id);
       p.current_section = si;
       p.section_entered_at = now;
@@ -546,7 +553,7 @@ router.post(
       touchSeat(p.id, now);
     }
     // Reaching a checkpoint-free last counting section is what completes such a manual.
-    if (labProgress(sections, p, completed).complete) markCompleted(p, now);
+    if (labProgress(sections, p, completed).complete) markCompleted(p, now, breaksOf(req.session));
     res.json({ current_section: si, completed: Boolean(p.completed_at) });
   }),
 );
@@ -638,7 +645,7 @@ router.post(
     }
 
     const now = nowIso();
-    markCompleted(p, now);
+    markCompleted(p, now, breaksOf(req.session));
     if (!p.finished_at) {
       q.finish.run(now, now, p.id);
       log.info('participant.finished', { participant: p.id, session: req.session.id });
@@ -665,6 +672,7 @@ router.get('/status', contentLimiter, (req, res) => {
     kind: req.session.kind || 'lab',
     expires_at: req.session.expires_at,
     server_time: now,
+    on_break: Boolean(currentBreak(breaksOf(req.session))),
     completed: Boolean(p.completed_at),
     finished: Boolean(p.finished_at),
     submitted: Boolean(p.submitted_at),

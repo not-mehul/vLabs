@@ -14,6 +14,7 @@
  *   description: string,
  *   content: [{                        // sections ("parts") of the exam
  *     title: string,
+ *     minutes: number | null,          // time allocated (1–600), null = none
  *     questions: [{
  *       type: 'single' | 'multiple' | 'truefalse' | 'short' | 'long',
  *       prompt: string,                // Markdown (images by library name)
@@ -42,6 +43,8 @@
  * API, manual marking, exports — works off that interface. Then teach the
  * client how to render it (ExamQuestion.jsx) and edit it (ExamEditor.jsx).
  */
+
+import { normaliseMinutes } from './template-schema.js';
 
 export const EXAM_LIMITS = Object.freeze({
   sections: 50,
@@ -264,6 +267,7 @@ export function normaliseExam(obj) {
       const s = sec && typeof sec === 'object' ? sec : {};
       return {
         title: str(s.title, EXAM_LIMITS.sectionTitle),
+        minutes: normaliseMinutes(s.minutes),
         questions: (Array.isArray(s.questions) ? s.questions : [])
           .slice(0, EXAM_LIMITS.questionsPerSection)
           .map(normaliseQuestion),
@@ -369,4 +373,27 @@ export function describeExpected(q) {
 /** Total available points. */
 export function totalPoints(content) {
   return listQuestions(content).reduce((n, { q }) => n + (Number(q.points) || 0), 0);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Section progression (exams unlock section by section, like labs)          */
+/* -------------------------------------------------------------------------- */
+
+/** True when every question in section `si` has a response. */
+export function isExamSectionComplete(content, si, answers) {
+  const questions = content?.[si]?.questions || [];
+  return questions.every((_, qi) => isAnswered((answers || {})[questionKey(si, qi)]));
+}
+
+/**
+ * Highest section index a participant may open: a section unlocks once every
+ * question in all earlier sections has been answered (the exam counterpart of
+ * a lab's checkpoints). `reached` is the participant's stored high-water mark,
+ * so clearing an answer later never re-locks a section already opened.
+ */
+export function examUnlockedSection(content, answers, reached = 0) {
+  const n = Array.isArray(content) ? content.length : 0;
+  let s = 0;
+  while (s < n - 1 && isExamSectionComplete(content, s, answers)) s += 1;
+  return Math.min(Math.max(s, reached || 0), Math.max(n - 1, 0));
 }

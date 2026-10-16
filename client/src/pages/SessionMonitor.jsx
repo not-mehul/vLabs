@@ -17,13 +17,22 @@ import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
 import ExamMonitor from '../components/ExamMonitor.jsx';
+import SectionFlow, { timeRowClass, timeAgainst } from '../components/SectionFlow.jsx';
 
-/** Highlight seats that appear stuck (long time on a section). */
-function stuckClass(seconds) {
-  if (seconds >= 15 * 60) return 'row--stuck';
-  if (seconds >= 8 * 60) return 'row--slow';
-  return '';
-}
+/** One line under each lab section card: steps and checkpoints. */
+const labMeta = (s) => (
+  <>
+    {s.step_count} step{s.step_count === 1 ? '' : 's'}
+    {s.checkpoint_count ? (
+      <span title={`${s.checkpoint_count} checkpoint${s.checkpoint_count === 1 ? '' : 's'}`}>
+        {' '}
+        · <Icon name="lock" size={11} /> {s.checkpoint_count}
+      </span>
+    ) : (
+      ' · no checkpoint'
+    )}
+  </>
+);
 
 function CopyCode({ code }) {
   const [copied, setCopied] = useState(false);
@@ -62,81 +71,6 @@ function StatusPill({ p }) {
     );
   }
   return <span className="muted">{fmtDuration(p.seconds_since_seen)} ago</span>;
-}
-
-/**
- * How far the class has got: one card per section (seats whose furthest
- * section it is, seats that have completed it) plus a final "Complete" card.
- * Seats are placed by their furthest section, so a participant going back to
- * review doesn't show up as stuck on an earlier one. Optional / wrap-up
- * sections are tagged and don't count towards progress.
- */
-function SectionFlow({ data }) {
-  const total = data.participants.length;
-  const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
-  return (
-    <div className="panel">
-      <div className="panel__head">
-        <h2 className="panel__title">Where everyone got to</h2>
-        <span className="muted small">
-          {total} registered · {data.complete_count} complete
-        </span>
-      </div>
-      <ol className="flow" aria-label="Seats per section">
-        {data.section_distribution.map((s) => (
-          <li
-            className={`flow__card ${s.seats_here ? 'flow__card--busy' : ''} ${s.optional ? 'flow__card--optional' : ''}`}
-            key={s.index}
-            title={`${s.seats_here} got this far · ${s.seats_past} completed${s.optional ? ' · optional: not counted in progress' : ''}`}
-          >
-            <div className="flow__top">
-              <span className="dist__index">{s.index + 1}</span>
-              <span className="flow__title">{s.title}</span>
-              {s.optional && <span className="tag tag--optional">optional</span>}
-            </div>
-            <div className="flow__num">
-              {s.seats_here}
-              <span className="flow__num-label">here</span>
-            </div>
-            <div className="flow__bar" aria-hidden="true">
-              <span className="flow__bar-past" style={{ width: `${pct(s.seats_past)}%` }} />
-              <span className="flow__bar-here" style={{ width: `${pct(s.seats_here)}%` }} />
-            </div>
-            <div className="flow__meta muted small">
-              {s.step_count} step{s.step_count === 1 ? '' : 's'}
-              {s.checkpoint_count ? (
-                <span
-                  title={`${s.checkpoint_count} checkpoint${s.checkpoint_count === 1 ? '' : 's'}`}
-                >
-                  {' '}
-                  · <Icon name="lock" size={11} /> {s.checkpoint_count}
-                </span>
-              ) : (
-                ' · no checkpoint'
-              )}{' '}
-              · {s.seats_past} done
-            </div>
-          </li>
-        ))}
-        <li className="flow__card flow__card--done" title="All sections cleared">
-          <div className="flow__top">
-            <span className="dist__index dist__index--done">
-              <Icon name="check" size={13} />
-            </span>
-            <span className="flow__title">Complete</span>
-          </div>
-          <div className="flow__num">
-            {data.complete_count}
-            <span className="flow__num-label">done</span>
-          </div>
-          <div className="flow__bar" aria-hidden="true">
-            <span className="flow__bar-done" style={{ width: `${pct(data.complete_count)}%` }} />
-          </div>
-          <div className="flow__meta muted small">{pct(data.complete_count)}% of the class</div>
-        </li>
-      </ol>
-    </div>
-  );
 }
 
 /** Slide-over with one participant's answers, attempts, hints and timings. Live-refreshes. */
@@ -293,9 +227,11 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
                       />
                     </span>
                     <span
-                      className={`timebars__val ${s.seconds >= 15 * 60 && s.current ? 'text-warn' : ''}`}
+                      className={`timebars__val ${s.minutes && s.seconds > s.minutes * 60 ? 'text-warn' : ''}`}
+                      title={s.minutes ? `${s.minutes} min allocated` : 'No time allocated'}
                     >
                       {s.seconds ? fmtDuration(s.seconds) : '—'}
+                      {s.minutes ? <span className="muted"> / {s.minutes}m</span> : null}
                     </span>
                   </li>
                 ))}
@@ -457,6 +393,9 @@ export default function SessionMonitor() {
     });
 
   const extend = () => act((t) => api.extendSession(t, id, 30));
+
+  // Class-wide break: section timers pause for everyone until it ends.
+  const toggleBreak = () => act((t) => api.setBreak(t, id, !data.on_break));
 
   const pushTemplate = () =>
     act((t) => api.pushTemplate(t, id), {
@@ -624,6 +563,14 @@ export default function SessionMonitor() {
         <div className="monitor-head__actions">
           {active && (
             <>
+              <button
+                className={`btn btn--sm ${data.on_break ? 'btn--primary' : 'btn--ghost'}`}
+                onClick={toggleBreak}
+                disabled={busy}
+                title="Pause every participant's section timer (e.g. lunch); press again to resume"
+              >
+                <Icon name="clock" size={15} /> {data.on_break ? 'End break' : 'Start break'}
+              </button>
               <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
                 <Icon name="clock" size={15} /> +30 min
               </button>
@@ -704,12 +651,24 @@ export default function SessionMonitor() {
           {notice}
         </div>
       )}
+      {data.on_break && (
+        <div className="banner banner--info" role="status">
+          <span>
+            <strong>On break</strong> since {formatDateTime(data.break_started_at)} — section timers
+            are paused for everyone and resume when the break ends. The session countdown keeps
+            running (+30 min if you need it).
+          </span>
+          <button className="btn btn--sm btn--primary" onClick={toggleBreak} disabled={busy}>
+            End break
+          </button>
+        </div>
+      )}
 
       {isExam ? (
         <ExamMonitor data={data} sessionId={id} onChanged={refresh} />
       ) : (
         <>
-          <SectionFlow data={data} />
+          <SectionFlow data={data} meta={labMeta} />
 
           <div className="panel">
             <div className="panel__head">
@@ -739,7 +698,7 @@ export default function SessionMonitor() {
                       <tr
                         key={p.id}
                         tabIndex={0}
-                        className={`${p.complete ? 'row--done' : stuckClass(p.seconds_on_furthest_section)} ${
+                        className={`${p.complete ? 'row--done' : timeRowClass(p.time_status)} ${
                           selected === p.id ? 'row--selected' : ''
                         }`}
                         onClick={() => setSelected(p.id)}
@@ -789,13 +748,16 @@ export default function SessionMonitor() {
                           </div>
                         </td>
                         <td
-                          className={
-                            !p.complete && p.seconds_on_furthest_section >= 15 * 60
-                              ? 'text-warn'
-                              : ''
+                          className={!p.complete && p.time_status === 'over' ? 'text-warn' : ''}
+                          title={
+                            p.allocated_seconds
+                              ? 'Time on this section / time allocated'
+                              : 'No time allocated: highlighted from 8 min, red after 15'
                           }
                         >
-                          {p.complete ? '—' : fmtDuration(p.seconds_on_furthest_section)}
+                          {p.complete
+                            ? '—'
+                            : timeAgainst(p.seconds_on_furthest_section, p.allocated_seconds)}
                         </td>
                         <td>
                           <StatusPill p={p} />
@@ -807,9 +769,10 @@ export default function SessionMonitor() {
               </div>
             )}
             <p className="muted small legend">
-              <span className="dot dot--slow" /> 8+ min on a section ·{' '}
-              <span className="dot dot--stuck" /> 15+ min (may need help) ·{' '}
-              <span className="dot dot--live" /> complete
+              <span className="dot dot--slow" /> nearing the section&apos;s allocated time (80%) ·{' '}
+              <span className="dot dot--stuck" /> over the allocated time (may need help) ·{' '}
+              <span className="dot dot--live" /> complete. Sections without an allocation use 8 / 15
+              min. Break time never counts.
             </p>
           </div>
 

@@ -174,11 +174,26 @@ test('an exam template is created as kind exam and launches an exam session', as
   bob = j2.data.token;
 });
 
-test('the participant gets every question but never the answers; lab routes are refused', async () => {
+test('sections unlock like a lab: locked sections are neither sent nor answerable; no answers leak', async () => {
   const res = await call('/api/participant/exam', { token: ada });
   assert.equal(res.status, 200);
   assert.equal(res.data.question_count, 6);
-  assert.equal(res.data.sections.length, 2);
+  assert.equal(res.data.total_sections, 2);
+  assert.equal(res.data.unlocked_section, 0);
+  assert.equal(res.data.sections.length, 1, 'only the unlocked section is delivered');
+  assert.ok(!JSON.stringify(res.data).includes('Port?'), 'locked questions never sent');
+  const locked = await call('/api/participant/exam/answer', {
+    method: 'PUT',
+    token: ada,
+    body: { key: '1.0', value: '443' },
+  });
+  assert.equal(locked.status, 403);
+  const lockedNav = await call('/api/participant/exam/progress', {
+    method: 'POST',
+    token: ada,
+    body: { section_index: 1 },
+  });
+  assert.equal(lockedNav.status, 403);
   const raw = JSON.stringify(res.data);
   assert.ok(!/"correct"/.test(raw), 'no correct answers');
   assert.ok(!/"accepted"/.test(raw), 'no accepted answers');
@@ -241,7 +256,11 @@ test('submitting locks the exam (idempotent)', async () => {
   assert.equal(late.data.code, 'SUBMITTED');
   const view = await call('/api/participant/exam', { token: ada });
   assert.equal(view.data.submitted, true);
-  assert.equal(view.data.answers['0.0'], 1, 'answer unchanged');
+  // No going back to review: neither questions nor answers are served.
+  assert.deepEqual(view.data.sections, []);
+  assert.deepEqual(view.data.answers, {});
+  assert.equal(view.data.answered_count, 6);
+  assert.ok(!JSON.stringify(view.data).includes('Pick B'));
 });
 
 test('the monitor grades automatically and lists what still needs a manual mark', async () => {
@@ -431,4 +450,42 @@ test('answer history lives in its own table, one small row per change', async ()
   assert.equal(row.answer_log, '[]', 'the participants row no longer carries the log');
   const st = await call('/api/participant/status', { token: ada });
   assert.ok(Date.parse(st.data.server_time) > 0, 'status reports server time');
+});
+
+test('exam sections are timed like lab sections; submitting stops the clock', async () => {
+  const fresh = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: roomCode, first_name: 'Tess', last_name: 'Timer' },
+  });
+  const t = fresh.data.token;
+  const put = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+  await put('0.0', 1);
+  await put('0.1', [0]);
+  const last = await put('0.2', true);
+  assert.equal(last.data.unlocked_section, 1, 'answering the whole section unlocks the next');
+  assert.equal(last.data.section_complete, true);
+  const nav = await call('/api/participant/exam/progress', {
+    method: 'POST',
+    token: t,
+    body: { section_index: 1 },
+  });
+  assert.equal(nav.status, 200);
+  // Clearing an earlier answer never re-locks a section already opened.
+  await put('0.0', null);
+  const view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.unlocked_section, 1);
+  assert.equal(view.data.sections.length, 2);
+
+  const detail = await call(`/api/sessions/${sessionId}`, { token });
+  const tess = detail.data.participants.find((p) => p.name === 'Tess Timer');
+  assert.equal(tess.furthest_section, 1);
+  assert.deepEqual(tess.sections_done, [true, false]);
+  assert.equal(detail.data.section_distribution[0].completed_count >= 1, true);
+
+  await call('/api/participant/exam/submit', { method: 'POST', token: t });
+  const after = await call(`/api/sessions/${sessionId}/participants/${tess.id}`, { token });
+  assert.equal(after.data.submitted, true);
+  assert.equal(after.data.time_status, 'ok');
+  assert.ok(Array.isArray(after.data.section_times));
 });

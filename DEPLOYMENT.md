@@ -154,8 +154,10 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
   Guided Access; pair it with Guided Access if the devices are managed.
 - **Start:** Dashboard → _Launch a session_ (duration = class length + slack;
   you can always _+30 min_). Show the 6-digit room code.
-- **During:** the monitor refreshes every 5 s. "Stuck" rows (8/15 min on a
-  section) are your cue to walk over. Edits to the template don't reach the
+- **During:** the monitor refreshes every 5 s. Amber / red rows (80 % / over
+  the section's allocated minutes, or 8 / 15 min when a section has none) are
+  your cue to walk over. **Start break** pauses every section timer for the
+  class (the session countdown keeps running); **End break** resumes them. Edits to the template don't reach the
   class until you press **Push latest version**.
 - **End:** _End session_ revokes every participant token instantly. Export CSV
   or JSON if you want the analytics; sessions stay on the dashboard regardless.

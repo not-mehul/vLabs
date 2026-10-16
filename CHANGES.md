@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.5.1). The first section is the original code
+Newest entry at the bottom (1.6.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -480,3 +480,52 @@ Full audit of architecture, security, data safety and operations; report in
   runs on `smarty/**` pushes.
 - Docs: deployment runbook (instructor accounts, exam day, troubleshooting),
   exam guide, README API.
+
+## 1.6.0 — time allocated per section, class breaks, gated exams
+
+### Time allocated per section (labs and exams)
+
+- A section may declare the **minutes allocated** to it: `> minutes: N` under
+  the `#` heading (lab and exam Markdown), `"minutes": N` in JSON, the minutes
+  box in Template Studio's section header, or the field under each section in
+  the portal's lab / exam editor. Whole minutes 1–600; optional.
+- The allocation decides when a participant is spending too long. The monitor
+  judges time on the furthest section against it: amber from 80 %, red over
+  100 %. Sections without one keep the old 8 / 15 min thresholds. The time
+  column reads _spent / allocated_.
+- **Average time per section**: the section cards show the allocation and the
+  average time of the participants who completed the section. The average is
+  marked final once everyone has moved on. It is in the JSON export too
+  (`minutes`, `avg_seconds`, `completed_count`, `avg_final`).
+- Backward compatible: the lab Markdown parser is unchanged except for this
+  one directive, which sits where text under `#` was always discarded. Older
+  vLabs and Studio versions ignore it. Templates without it behave as before.
+
+### Class breaks
+
+- **Start break / End break** on the session monitor
+  (`POST /sessions/:id/break`). Break time is excluded from every
+  section-time figure, including visits that straddle a break and
+  participants who join mid-break. Counters resume for everyone when the
+  break ends. Participants see a banner. The session countdown is not
+  paused. Ending a session ends a running break. Stored as intervals in
+  `sessions.breaks` (**migration 7**).
+
+### Exams
+
+- **Sections unlock like a lab's**: a section opens once every question
+  before it is answered. Locked sections are not sent and cannot be answered
+  (`403`). Participants navigate freely up to the furthest section reached.
+- **No review after submitting**: once handed in, the exam API returns no
+  questions and no answers, only the answered count.
+- Exams are timed per section like labs (`POST /participant/exam/progress`).
+  Submitting stops the clock. The monitor gains _Where everyone got to_,
+  per-participant section and time against the allocation, and time per
+  section in the drawer. Results CSV adds `furthest_section` and
+  `time_s<N>_…` columns.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual — migration 7 runs on start. Running sessions
+continue; add `> minutes:` to templates (or set it in the editor) when you
+want allocation-based alerts.

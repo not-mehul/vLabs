@@ -27,6 +27,8 @@ const SAMPLE_VARIABLES = [
 const SAMPLE_CONTENT = [
   {
     title: 'Section 1 · Bench Preparation',
+    // Time allocated: drives the monitor's "over time" highlighting.
+    minutes: 10,
     steps: [
       {
         type: 'info',
@@ -87,6 +89,7 @@ const SAMPLE_CONTENT = [
   },
   {
     title: 'Section 2 · Network Configuration',
+    minutes: 15,
     steps: [
       {
         type: 'computer',

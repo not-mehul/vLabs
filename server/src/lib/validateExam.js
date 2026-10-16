@@ -1,4 +1,5 @@
-import { IMAGE_MD_RE, imageRefName } from '../../../shared/template-schema.js';
+import { IMAGE_MD_RE, imageRefName, LIMITS } from '../../../shared/template-schema.js';
+import { minutesInvalid } from './validateTemplate.js';
 import { EXAM_LIMITS, normaliseExam, examErrors } from '../../../shared/exam-schema.js';
 
 /**
@@ -30,6 +31,11 @@ export function validateExamPayload(payload, opts = {}) {
     errors.push(`Too many sections (max ${EXAM_LIMITS.sections})`);
   }
   rawSections.forEach((s, si) => {
+    if (minutesInvalid(s?.minutes)) {
+      errors.push(
+        `Section ${si + 1} time allocated must be a whole number of minutes from 1 to ${LIMITS.sectionMinutes} (or empty)`,
+      );
+    }
     const n = Array.isArray(s?.questions) ? s.questions.length : 0;
     if (n > EXAM_LIMITS.questionsPerSection) {
       errors.push(
@@ -48,6 +54,7 @@ export function validateExamPayload(payload, opts = {}) {
   const exam = normaliseExam(payload);
   const content = exam.content.map((sec) => ({
     title: sec.title.trim(),
+    ...(sec.minutes ? { minutes: sec.minutes } : {}),
     questions: sec.questions.map((q) => ({ ...q, prompt: q.prompt.trim() })),
   }));
   const clean = {

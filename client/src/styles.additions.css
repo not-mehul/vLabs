@@ -1361,3 +1361,33 @@ input.field__input--sm[type='number'] {
   gap: 0.4rem;
   margin: 0 0 1rem;
 }
+
+/* Section time allocation and class averages on the section cards. */
+.flow__time {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.flow__time .icon {
+  vertical-align: -0.12em;
+}
+.flow__avg {
+  color: var(--text-2);
+}
+
+/* Time allocated to a section (lab and exam editors) */
+.field--minutes .field__input {
+  width: 7.5rem;
+}
+.editor-section__head .field--minutes {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+.editor-section__head .field--minutes .field__input {
+  width: 5.5rem;
+}

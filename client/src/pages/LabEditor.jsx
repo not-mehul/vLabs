@@ -11,6 +11,7 @@ import Icon from '../components/Icon.jsx';
 import LabPreview from '../components/editor/LabPreview.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
+import MinutesField from '../components/editor/MinutesField.jsx';
 import {
   normaliseTemplate,
   findUnknownPlaceholders,
@@ -396,6 +397,10 @@ export default function LabEditor({ id, initial }) {
                       value={sec.title}
                       max={LIMITS.sectionTitle}
                       onChange={(v) => update((t) => (t.content[si].title = v))}
+                    />
+                    <MinutesField
+                      value={sec.minutes}
+                      onChange={(v) => update((t) => (t.content[si].minutes = v))}
                     />
                     {steps.map(({ st, sti }) => (
                       <div className="typo-step" key={sti}>

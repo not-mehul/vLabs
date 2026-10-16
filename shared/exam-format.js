@@ -8,6 +8,7 @@
  *   ---
  *
  *   # Part 1 · Addressing
+ *   > minutes: 10
  *
  *   ## [single] Which address is a valid private IPv4 address?
  *   - [ ] 8.8.8.8
@@ -31,7 +32,8 @@
  *   Any Markdown works here, including images: ![topology](topology.png)
  *   > points: 5
  *
- * `# ` starts a section and `## [type]` a question. Text after the type and
+ * `# ` starts a section and `## [type]` a question. `> minutes: N` under a
+ * section heading allocates N minutes to that section (optional). Text after the type and
  * the lines below it form the prompt. Types: single (multiple choice, one
  * answer), multiple (select all that apply), truefalse, short, long — plus
  * the aliases in TYPE_ALIASES. Options are `- [ ]` / `- [x]` lines (x marks
@@ -135,7 +137,12 @@ export function parseExamMarkdown(text) {
       heading = m ? m[2] : rest;
       continue;
     }
-    if (!q) continue; // text outside a question (e.g. section intro) is ignored
+    if (!q) {
+      // Section-level directive; any other text outside a question is ignored.
+      const mm = /^>\s*minutes\s*:\s*(.*)$/i.exec(line);
+      if (!inFence && mm && section) section.minutes = mm[1].trim();
+      continue;
+    }
     if (!inFence) {
       const opt = OPTION_RE.exec(line);
       if (opt && QUESTION_TYPES[q.type].hasOptions) {
@@ -170,7 +177,9 @@ export function examToMarkdown(input) {
   if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
   out.push('---', '');
   for (const sec of exam.content) {
-    out.push(`# ${sec.title}`, '');
+    out.push(`# ${sec.title}`);
+    if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+    out.push('');
     for (const q of sec.questions) {
       const prompt = q.prompt.trim();
       const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
@@ -199,6 +208,7 @@ description: A short sample exam showing every question type.
 ---
 
 # Part 1 · Addressing
+> minutes: 5
 
 ## [single] Which address is a valid private IPv4 address?
 - [ ] 8.8.8.8
@@ -216,6 +226,7 @@ description: A short sample exam showing every question type.
 > answer: true
 
 # Part 2 · Short answers
+> minutes: 10
 
 ## [short] What TCP port does HTTPS use by default?
 > accept: 443 | tcp/443

@@ -128,7 +128,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   is_active        INTEGER NOT NULL DEFAULT 1,
   expires_at       TEXT NOT NULL,
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  ended_at         TEXT
+  ended_at         TEXT,
+  -- Class-wide breaks toggled by the instructor: [{ start, end|null }]. Time
+  -- inside a break never counts towards anyone's section time.
+  breaks           TEXT NOT NULL DEFAULT '[]'
 );
 
 -- Only one ACTIVE session may hold a given room_code at a time. Expired /
@@ -379,6 +382,13 @@ const MIGRATIONS = [
         }
         db.exec("UPDATE participants SET answer_log = '[]'");
       })();
+    },
+  },
+  {
+    version: 7,
+    name: 'session breaks (time-on-section excludes breaks)',
+    up() {
+      addColumnIfMissing('sessions', 'breaks', "TEXT NOT NULL DEFAULT '[]'");
     },
   },
 ];

@@ -34,6 +34,7 @@ export default function Lab() {
   const [remoteFinished, setRemoteFinished] = useState(false);
   const [updatedNotice, setUpdatedNotice] = useState(false);
   const [offsetMs, setOffsetMs] = useState(0);
+  const [onBreak, setOnBreak] = useState(false);
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
   const versionRef = useRef(null);
@@ -52,6 +53,7 @@ export default function Lab() {
       setData(res);
       setLiveExpiry(res.expires_at);
       setOffsetMs(clockOffset(res.server_time));
+      setOnBreak(Boolean(res.on_break));
       setError('');
       // Keep the persisted session's expiry fresh so resume shows the right time.
       participantSession.set({
@@ -98,6 +100,7 @@ export default function Lab() {
       const res = await api.status(token);
       setLiveExpiry(res.expires_at);
       setOffsetMs(clockOffset(res.server_time));
+      setOnBreak(Boolean(res.on_break));
       if (res.finished) setRemoteFinished(true);
       setError('');
       if (versionRef.current !== null && res.template_version !== versionRef.current) {
@@ -319,6 +322,14 @@ export default function Lab() {
 
       <main className="lab__content">
         <div aria-live="polite">
+          {onBreak && (
+            <div className="banner banner--info lab__notice" role="status">
+              <span>
+                <strong>Break.</strong> Your instructor has paused the class — time on this section
+                isn&apos;t counted until the break ends.
+              </span>
+            </div>
+          )}
           {error && <p className="form__error lab__error">{error}</p>}
           {updatedNotice && (
             <div className="banner banner--info lab__notice">

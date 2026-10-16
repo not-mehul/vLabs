@@ -212,6 +212,9 @@ export const api = {
   /** Exam sessions: every participant's response to one question. */
   questionResponses: (token, sessionId, key) =>
     request(`/sessions/${sessionId}/questions/${key}`, { token }),
+  /** Start (on: true) or end (on: false) a class-wide break. */
+  setBreak: (token, id, on) =>
+    request(`/sessions/${id}/break`, { method: 'POST', body: { on }, token }),
   removeParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { method: 'DELETE', token }),
   /** Exams: let the seat be resumed on another device (signs out the current one). */
@@ -311,6 +314,13 @@ export const api = {
   saveAnswer: (token, key, value) =>
     request('/participant/exam/answer', { method: 'PUT', body: { key, value }, token }),
   submitExam: (token) => request('/participant/exam/submit', { method: 'POST', token }),
+  /** Exams: the section being viewed (time per section, furthest section). */
+  examProgress: (token, sectionIndex) =>
+    request('/participant/exam/progress', {
+      method: 'POST',
+      body: { section_index: sectionIndex },
+      token,
+    }),
   /**
    * Fire-and-forget save that survives the page closing (fetch keepalive):
    * used to flush a typed answer still waiting for its debounce on pagehide.

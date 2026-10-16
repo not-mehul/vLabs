@@ -877,8 +877,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 6: exam answer events, seat resume keys)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 6);
+test('database schema version is recorded (migration 7: session breaks)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 7);
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()
@@ -912,4 +912,105 @@ test('template saves refuse to overwrite a newer version (optimistic concurrency
   assert.equal(stale.data.code, 'VERSION_CONFLICT');
   const current = await call(`/api/templates/${id}`, { token: instructorToken });
   assert.equal(current.data.title, 'Concurrency (A)', 'the newer save survived');
+});
+
+test('sections may allocate minutes; invalid allocations are rejected with a reason', async () => {
+  const withMinutes = tinyTemplate('Timed');
+  withMinutes.content[0].minutes = 20;
+  const ok = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: withMinutes,
+  });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.data.content[0].minutes, 20);
+  const none = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: tinyTemplate('Untimed'),
+  });
+  assert.equal('minutes' in none.data.content[0], false, 'storage omits unset minutes');
+  for (const bad of [0, 601, 'abc', 2.5]) {
+    const t = tinyTemplate('Bad time');
+    t.content[0].minutes = bad;
+    const res = await call('/api/templates', { method: 'POST', token: instructorToken, body: t });
+    assert.equal(res.status, 400, `minutes ${bad}`);
+    assert.match(res.data.details.join(' '), /time allocated/);
+  }
+});
+
+test('time on a section is judged against its allocation and excludes class breaks', async () => {
+  // Fresh session of the seeded lab (Section 1 allocates 10 min, Section 2 15).
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  const j = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: s.data.room_code, first_name: 'Tim', last_name: 'Er' },
+  });
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  db.prepare('UPDATE participants SET section_entered_at = ?, joined_at = ? WHERE id = ?').run(
+    ago(30),
+    ago(30),
+    (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data.participants[0].id,
+  );
+
+  let d = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data;
+  let p = d.participants[0];
+  assert.equal(p.allocated_seconds, 600);
+  assert.ok(Math.abs(p.seconds_on_furthest_section - 1800) < 5);
+  assert.equal(p.time_status, 'over');
+  assert.equal(d.section_distribution[0].minutes, 10);
+
+  // A 25-minute break inside that window leaves 5 minutes: under 80 % of 10.
+  db.prepare('UPDATE sessions SET breaks = ? WHERE id = ?').run(
+    JSON.stringify([{ start: ago(28), end: ago(3) }]),
+    s.data.id,
+  );
+  p = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data.participants[0];
+  assert.ok(Math.abs(p.seconds_on_furthest_section - 300) < 5, 'break time excluded');
+  assert.equal(p.time_status, 'ok');
+  assert.ok(Math.abs(p.total_seconds - 300) < 5);
+
+  // Toggle a break from the monitor: participants are told, timers pause.
+  const on = await call(`/api/sessions/${s.data.id}/break`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { on: true },
+  });
+  assert.equal(on.data.on_break, true);
+  assert.equal(
+    (await call('/api/participant/status', { token: j.data.token })).data.on_break,
+    true,
+  );
+  const off = await call(`/api/sessions/${s.data.id}/break`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { on: false },
+  });
+  assert.equal(off.data.on_break, false);
+  assert.ok(off.data.break_total_seconds >= 25 * 60);
+
+  // Finishing Section 1 records the (break-free) time and the class average.
+  await call('/api/participant/checkpoint', {
+    method: 'POST',
+    token: j.data.token,
+    body: { section_index: 0, step_index: 3, answer: 'abcd1234wxyz' },
+  });
+  await call('/api/participant/progress', {
+    method: 'POST',
+    token: j.data.token,
+    body: { section_index: 1 },
+  });
+  d = (await call(`/api/sessions/${s.data.id}`, { token: instructorToken })).data;
+  const s1 = d.section_distribution[0];
+  assert.equal(s1.completed_count, 1);
+  assert.ok(Math.abs(s1.avg_seconds - 300) < 5);
+  assert.equal(s1.final, true, 'everyone has moved on');
+  assert.equal(d.section_distribution[1].avg_seconds, null, 'nobody has finished Section 2');
+  const exp = (await call(`/api/sessions/${s.data.id}/export`, { token: instructorToken })).data;
+  assert.equal(exp.sections[0].minutes, 10);
+  assert.ok(Math.abs(exp.sections[0].avg_seconds - 300) < 5);
 });

@@ -148,7 +148,7 @@
       </div>
 
       <span class="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.06]">
-        1.5.0
+        1.6.0
       </span>
 
       <div class="h-4 w-px bg-slate-200 dark:bg-white/[0.08] mx-1 hidden sm:block"></div>
@@ -537,7 +537,7 @@
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-4">
             <div>
               <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
-                Specification Audit (vLabs 1.5.0)
+                Specification Audit (vLabs 1.6.0)
               </h2>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Verifies structural limits, formulas across Seats 1/24/100, placeholder resolution, capture order, pattern masks, and image assets.
@@ -1612,6 +1612,13 @@
               <input type="text" value="${escapeHtml(section.title || '')}" placeholder="Section title..."
                 class="text-sm font-semibold tracking-tight text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
                 data-action="update-sec-title" data-sec-idx="${sIdx}">
+              <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this section, in minutes (empty = none). Time on the section is judged against it.">
+                <i class="ph ph-timer text-xs mr-1"></i>
+                <input type="number" min="1" max="600" step="1" inputmode="numeric" value="${section.minutes ? escapeHtml(String(section.minutes)) : ''}" placeholder="min"
+                  class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
+                  data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to section ${sIdx + 1}">
+                <span class="ml-1 hidden sm:inline">min</span>
+              </label>
             </div>
 
             <div class="flex items-center space-x-1 shrink-0">
@@ -2062,6 +2069,12 @@
           const sampleCtx = buildEvaluatedContext(1, 'Mary-Jane', "O'Neil");
           inlinePreview.innerHTML = parseMarkdownSafe(resolveMarkdownImages(target.value, sampleCtx));
         }
+        pushHistorySnapshot();
+        runFullValidation(false);
+        scheduleAutoSave();
+      } else if (action === 'update-sec-minutes') {
+        const raw = String(target.value || '').trim();
+        templateData.content[sIdx].minutes = raw === '' ? null : Number(raw);
         pushHistorySnapshot();
         runFullValidation(false);
         scheduleAutoSave();
@@ -3455,6 +3468,9 @@
           addError(secLoc, `Section ${sIdx + 1} title exceeds 200 characters`, { sIdx, stIdx: 0 });
         }
         validateTextPlaceholders(sec.title, `${secLoc} title`, sIdx, 0);
+        if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
+          addError(secLoc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
+        }
 
         const steps = sec.steps || [];
         if (steps.length === 0) {
@@ -3599,7 +3615,7 @@
               <div class="flex items-center space-x-2.5">
                 <i class="ph-fill ph-check-circle text-xl text-emerald-500"></i>
                 <div>
-                  <div class="font-bold">All vLabs 1.5.0 Validation Rules Passed</div>
+                  <div class="font-bold">All vLabs 1.6.0 Validation Rules Passed</div>
                   <div class="text-[11px] opacity-80">Checked metadata limits, ${declaredVarNames.size} formula(s) across seats 1/24/100, ${allCaptureLocations.size} capture(s), placeholders, masks, and image assets.</div>
                 </div>
               </div>
@@ -3660,6 +3676,11 @@
       return String(str || '').replace(/\\::/g, '::');
     }
 
+    /** A section's time allocation: whole minutes from 1 to 600 (vLabs 1.6.0). */
+    function validSectionMinutes(v) {
+      return v !== null && v !== '' && Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 600;
+    }
+
     function generateMarkdown() {
       let out = `---\ntitle: ${(templateData.title || 'Untitled').replace(/\r?\n/g, ' ').trim()}\n`;
       if (templateData.description && templateData.description.trim()) {
@@ -3677,6 +3698,7 @@
 
       (templateData.content || []).forEach((sec, sIdx) => {
         out += `# ${(sec.title || `Section ${sIdx + 1}`).trim()}\n\n`;
+        if (validSectionMinutes(sec.minutes)) out += `> minutes: ${Number(sec.minutes)}\n\n`;
         (sec.steps || []).forEach(st => {
           const type = st.type || 'desk';
           const title = (st.title || '').trim() ? ` ${st.title.trim()}` : '';
@@ -3739,6 +3761,7 @@
         })),
         content: (templateData.content || []).map(sec => ({
           title: (sec.title || '').trim(),
+          ...(validSectionMinutes(sec.minutes) ? { minutes: Number(sec.minutes) } : {}),
           steps: (sec.steps || []).map(st => {
             const type = st.type || 'desk';
             if (type === 'info') {
@@ -3925,7 +3948,13 @@
         }
 
         if (!currentStep) {
-          // Per TEMPLATE_GUIDE.md §3.2: Text directly under # (before the first ##) is discarded
+          // Per TEMPLATE_GUIDE.md §3.2: Text directly under # (before the first ##) is discarded,
+          // except the section's `> minutes: N` time allocation.
+          const minutesMatch = !inFence && currentSection && line.match(/^>\s*minutes:\s*(.*)$/i);
+          if (minutesMatch) {
+            const n = Number(minutesMatch[1].trim());
+            currentSection.minutes = validSectionMinutes(n) ? n : null;
+          }
           continue;
         }
 
@@ -4054,6 +4083,7 @@
         })) : [],
         content: Array.isArray(json.content) && json.content.length > 0 ? json.content.map((sec, sIdx) => ({
           title: String(sec.title || `Section ${sIdx + 1}`).slice(0, 200),
+          minutes: validSectionMinutes(Number(sec.minutes)) ? Number(sec.minutes) : null,
           collapsed: false,
           steps: Array.isArray(sec.steps) && sec.steps.length > 0 ? sec.steps.map(st => {
             const type = ['desk', 'computer', 'info'].includes(st.type) ? st.type : 'desk';

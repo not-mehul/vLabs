@@ -16,9 +16,12 @@ const isAnswered = (v) =>
 const TYPE_DELAY_MS = 800;
 
 /**
- * Participant exam. Every question is available from the start (no gating),
- * one section per page. Answers save as they are given; the participant is
- * never told whether an answer is right. Submitting locks the exam.
+ * Participant exam, one section per page. Sections unlock like a lab's: the
+ * next section opens once every question in this one is answered (the server
+ * decides and only sends unlocked sections); earlier sections stay open to
+ * revisit. Answers save as they are given; the participant is never told
+ * whether an answer is right. Submitting is final — the exam is no longer
+ * shown afterwards, not even for review.
  */
 export default function Exam() {
   const location = useLocation();
@@ -36,6 +39,10 @@ export default function Exam() {
   const [submitting, setSubmitting] = useState(false);
   const [liveExpiry, setLiveExpiry] = useState(null);
   const [offsetMs, setOffsetMs] = useState(0);
+  const [onBreak, setOnBreak] = useState(false);
+  const initialisedRef = useRef(false);
+  const reportedRef = useRef(-1);
+  const unlockedRef = useRef(0);
   const timers = useRef({});
   const pending = useRef({}); // key → latest unsaved value
   const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
@@ -69,7 +76,19 @@ export default function Exam() {
       setData(res);
       setLiveExpiry(res.expires_at);
       setOffsetMs(clockOffset(res.server_time));
+      setOnBreak(Boolean(res.on_break));
       setSubmitted(res.submitted);
+      unlockedRef.current = res.unlocked_section ?? 0;
+      if (!res.submitted) {
+        const last = res.unlocked_section ?? 0;
+        if (!initialisedRef.current) {
+          // Resume on the section they were last on.
+          initialisedRef.current = true;
+          setView(Math.min(res.current_section ?? 0, last));
+        } else {
+          setView((v) => (v === 'review' ? v : Math.min(v, last)));
+        }
+      }
       // Keep anything typed but not yet saved.
       setAnswers({ ...res.answers, ...pending.current });
       setError('');
@@ -96,6 +115,7 @@ export default function Exam() {
         const st = await api.status(token);
         setLiveExpiry(st.expires_at);
         setOffsetMs(clockOffset(st.server_time));
+        setOnBreak(Boolean(st.on_break));
         if (st.submitted) setSubmitted(true);
         if (data && st.template_version !== data.template_version) load();
       } catch (err) {
@@ -109,9 +129,15 @@ export default function Exam() {
     async (key, value) => {
       setSaveState((s) => ({ ...s, [key]: 'saving' }));
       try {
-        await api.saveAnswer(token, key, value);
+        const res = await api.saveAnswer(token, key, value);
         if (pending.current[key] === value) delete pending.current[key];
         setSaveState((s) => ({ ...s, [key]: 'saved' }));
+        // Answering the last open question of a section unlocks the next one:
+        // fetch it (the server only sends unlocked sections).
+        if (res && res.unlocked_section > unlockedRef.current) {
+          unlockedRef.current = res.unlocked_section;
+          load();
+        }
       } catch (err) {
         if (handleAuthError(err)) return;
         if (err instanceof ApiError && err.code === 'SUBMITTED') {
@@ -126,8 +152,16 @@ export default function Exam() {
         }, 4000);
       }
     },
-    [token, handleAuthError],
+    [token, handleAuthError, load],
   );
+
+  // Report the section being viewed: drives time per section (breaks
+  // excluded) and the instructor's view of where everyone is.
+  useEffect(() => {
+    if (!data || submitted || view === 'review' || reportedRef.current === view) return;
+    reportedRef.current = view;
+    api.examProgress(token, view).catch(() => {});
+  }, [view, data, submitted, token]);
 
   const change = useCallback(
     (key, value, { immediate = false } = {}) => {
@@ -211,10 +245,13 @@ export default function Exam() {
   if (!token) return null;
 
   const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
-  const sections = data?.sections || [];
+  const sections = data?.sections || []; // unlocked sections only
+  const totalSections = data?.total_sections ?? sections.length;
+  const unlocked = data?.unlocked_section ?? 0;
   const allQuestions = sections.flatMap((s) => s.questions);
-  const answeredCount = allQuestions.filter((q) => isAnswered(answers[q.key])).length;
-  const total = allQuestions.length;
+  const answeredCount = Object.values(answers).filter(isAnswered).length;
+  const total = data?.question_count ?? allQuestions.length;
+  const canReview = sections.length > 0 && unlocked >= totalSections - 1;
 
   if (submitted) {
     return (
@@ -226,8 +263,9 @@ export default function Exam() {
           </span>
           <h1>Exam submitted</h1>
           <p>
-            Thank you, {displayName || `#${seatNumber}`}. Your answers ({answeredCount} of {total})
-            have been recorded. Your instructor will share results.
+            Thank you, {displayName || `#${seatNumber}`}. Your answers
+            {data?.answered_count != null ? ` (${data.answered_count} of ${total})` : ''} have been
+            recorded. Your instructor will share results.
           </p>
           <div className="ended-actions">
             <button className="btn btn--primary" onClick={logout}>
@@ -239,8 +277,12 @@ export default function Exam() {
     );
   }
 
-  const reviewing = view === 'review';
-  const section = reviewing ? null : sections[view];
+  const reviewing = view === 'review' && canReview;
+  const section = reviewing ? null : sections[view === 'review' ? sections.length - 1 : view];
+  const sectionComplete = section
+    ? section.questions.every((q) => isAnswered(answers[q.key]))
+    : false;
+  const nextUnlocked = typeof view === 'number' && view < unlocked;
   const unanswered = allQuestions.filter((q) => !isAnswered(answers[q.key]));
   const unsaved = Object.values(saveState).some((s) => s === 'saving' || s === 'error');
 
@@ -274,18 +316,21 @@ export default function Exam() {
         </header>
 
         <nav className="stepper" aria-label="Exam sections">
-          {sections.map((s, i) => {
-            const done = s.questions.every((q) => isAnswered(answers[q.key]));
-            const state = i === view ? 'current' : done ? 'done' : 'open';
+          {Array.from({ length: totalSections }).map((_, i) => {
+            const s = sections[i];
+            const locked = i > unlocked || !s;
+            const done = !locked && s.questions.every((q) => isAnswered(answers[q.key]));
+            const state = i === view ? 'current' : locked ? 'locked' : done ? 'done' : 'open';
             return (
               <button
                 key={i}
                 type="button"
                 className={`stepper__node stepper__node--${state}`}
+                disabled={locked}
                 onClick={() => goTo(i)}
                 aria-current={i === view ? 'step' : undefined}
-                aria-label={`Section ${i + 1}${done ? ' (all answered)' : ''}`}
-                title={s.title}
+                aria-label={`Section ${i + 1}${done ? ' (all answered)' : locked ? ' (locked)' : ''}`}
+                title={s ? s.title : 'Locked — answer every question in the sections before it'}
               >
                 <span className="stepper__dot" aria-hidden="true">
                   {done && i !== view ? <Icon name="check" size={15} strokeWidth={2.25} /> : i + 1}
@@ -295,7 +340,8 @@ export default function Exam() {
           })}
           <button
             type="button"
-            className={`stepper__node stepper__node--${reviewing ? 'current' : 'open'}`}
+            className={`stepper__node stepper__node--${reviewing ? 'current' : canReview ? 'open' : 'locked'}`}
+            disabled={!canReview}
             onClick={() => goTo('review')}
             aria-current={reviewing ? 'step' : undefined}
             aria-label="Review and submit"
@@ -328,6 +374,14 @@ export default function Exam() {
       </div>
 
       <main className="lab__content">
+        {onBreak && (
+          <div className="banner banner--info lab__notice" role="status">
+            <span>
+              <strong>Break.</strong> Your instructor has paused the class — time on this section
+              isn&apos;t counted until the break ends.
+            </span>
+          </div>
+        )}
         {error && <p className="form__error lab__error">{error}</p>}
         {!data && !error && <p className="lab__loading">Loading your exam…</p>}
 
@@ -335,7 +389,7 @@ export default function Exam() {
           <div key={view} className="section-view section-view--next">
             <div className="section-head">
               <span className="section-head__eyebrow">
-                Section {view + 1} of {sections.length}
+                Section {section.index + 1} of {totalSections}
               </span>
               <h1 className="section-head__title">{section.title}</h1>
             </div>
@@ -356,9 +410,20 @@ export default function Exam() {
               >
                 <Icon name="chevronLeft" size={16} /> Previous
               </button>
-              {view < sections.length - 1 ? (
-                <button className="btn btn--primary" onClick={() => goTo(view + 1)}>
-                  Next <Icon name="chevronRight" size={16} />
+              {!sectionComplete && !nextUnlocked && (
+                <span className="section-nav__hint" role="status">
+                  <Icon name="lock" size={14} /> Answer every question to continue
+                </span>
+              )}
+              {section.index < totalSections - 1 ? (
+                <button
+                  className="btn btn--primary"
+                  disabled={!nextUnlocked}
+                  onClick={() => goTo(section.index + 1)}
+                  title={nextUnlocked ? '' : 'Answer every question in this section first'}
+                >
+                  {sectionComplete && !nextUnlocked ? 'Saving…' : 'Next'}{' '}
+                  <Icon name="chevronRight" size={16} />
                 </button>
               ) : (
                 <button className="btn btn--primary" onClick={() => goTo('review')}>
@@ -412,8 +477,9 @@ export default function Exam() {
                 </div>
               )}
               <p className="muted small">
-                Once submitted your answers are final and cannot be changed. Your answers are saved
-                as you go, so you can also leave this page and come back before submitting.
+                Once submitted your answers are final: you will not be able to change them or see
+                the questions again. Your answers are saved as you go, so you can also leave this
+                page and come back before submitting.
               </p>
               <div className="section-nav">
                 <button className="btn btn--ghost" onClick={() => goTo(sections.length - 1)}>
@@ -424,8 +490,8 @@ export default function Exam() {
                   disabled={submitting}
                   onClick={() => {
                     const msg = unanswered.length
-                      ? `${unanswered.length} question${unanswered.length === 1 ? ' is' : 's are'} unanswered. Submit anyway? Your answers cannot be changed afterwards.`
-                      : 'Submit your exam? Your answers cannot be changed afterwards.';
+                      ? `${unanswered.length} question${unanswered.length === 1 ? ' is' : 's are'} unanswered. Submit anyway? You won't be able to change or review your answers afterwards.`
+                      : "Submit your exam? You won't be able to change or review your answers afterwards.";
                     if (window.confirm(msg)) handleSubmit();
                   }}
                 >

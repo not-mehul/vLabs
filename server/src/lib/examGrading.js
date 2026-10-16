@@ -1,6 +1,12 @@
 import db from '../db/index.js';
 import { nowIso, secondsBetween } from './time.js';
 import {
+  activeSecondsBetween,
+  sectionSecondsView,
+  timeStatus,
+  allocatedSeconds,
+} from './sectionTiming.js';
+import {
   listQuestions,
   gradeResponse,
   describeResponse,
@@ -94,13 +100,20 @@ export function gradeParticipant(p, content) {
 }
 
 /** Score summary for one participant. */
-export function examParticipantView(p, content) {
+export function examParticipantView(p, content, breaks = []) {
   const now = nowIso();
   const graded = gradeParticipant(p, content);
   const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
   const score = graded.reduce((n, g) => n + g.points_awarded, 0);
   const maxScore = totalPoints(content);
   const submitted = Boolean(p.submitted_at);
+  // Section progress and timing, as for labs: placed at the furthest section
+  // opened; a section is done once moved past (or the exam is submitted).
+  const count = content.length;
+  const furthest = Math.min(p.max_section || 0, Math.max(count - 1, 0));
+  const sectionSeconds = sectionSecondsView(p, count, { now, breaks, frozen: submitted });
+  const onFurthest = submitted ? 0 : sectionSeconds[furthest] || 0;
+  const allocated = allocatedSeconds(content[furthest]);
   return {
     id: p.id,
     seat_number: p.seat_number,
@@ -119,7 +132,15 @@ export function examParticipantView(p, content) {
     submitted,
     submitted_at: p.submitted_at,
     status: submitted ? 'submitted' : secondsSinceSeen < 90 ? 'active' : 'idle',
-    total_seconds: secondsBetween(p.joined_at, p.submitted_at || now),
+    complete: submitted,
+    furthest_section: furthest,
+    current_section: p.current_section,
+    sections_done: content.map((_, i) => submitted || i < furthest),
+    section_seconds: sectionSeconds,
+    seconds_on_furthest_section: onFurthest,
+    allocated_seconds: allocated,
+    time_status: submitted ? 'ok' : timeStatus(onFurthest, allocated),
+    total_seconds: activeSecondsBetween(p.joined_at, p.submitted_at || now, breaks),
     joined_at: p.joined_at,
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsSinceSeen,
@@ -131,13 +152,21 @@ export function examParticipantView(p, content) {
  * prompt, options, expected answer, the response, the automatic verdict, any
  * manual mark, and the history of changes to that answer.
  */
-export function examParticipantDetail(p, content) {
-  const view = examParticipantView(p, content);
+export function examParticipantDetail(p, content, breaks = []) {
+  const view = examParticipantView(p, content, breaks);
   const history = answerHistory(p.id);
   const questions = listQuestions(content);
   const graded = gradeParticipant(p, content);
   return {
     ...view,
+    section_times: content.map((sec, i) => ({
+      index: i,
+      title: sec.title || `Section ${i + 1}`,
+      seconds: view.section_seconds[i] || 0,
+      minutes: sec.minutes || null,
+      current: !view.submitted && p.current_section === i,
+      done: view.sections_done[i],
+    })),
     questions: graded.map((g, i) => {
       const q = questions[i].q;
       return {

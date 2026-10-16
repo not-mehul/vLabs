@@ -161,10 +161,12 @@ const verdictText = (r) =>
  * EXAM sessions: one row per participant. Fixed columns, then for every
  * question `q<N>_response`, `q<N>_result` (correct / incorrect / needs marking
  * / unanswered), `q<N>_points` and `q<N>_marked_by` (set when an instructor
- * marked it by hand).
+ * marked it by hand). A `time_s<N>_<title>` column per section (seconds, breaks
+ * excluded) sits between the fixed and per-question columns.
  */
 export function examResultsToCsv(doc) {
   const questions = doc?.questions || [];
+  const sections = doc?.sections || [];
   const fixed = [
     'number',
     'name',
@@ -180,11 +182,13 @@ export function examResultsToCsv(doc) {
     'pending_count',
     'fully_graded',
     'total_seconds',
+    'furthest_section',
     'joined_at',
     'last_seen_at',
   ];
   const header = [
     ...fixed,
+    ...sections.map((sec) => `time_s${sec.number}_${colSlug(sec.title)}`),
     ...questions.flatMap((q) => [
       `q${q.number}_response`,
       `q${q.number}_result`,
@@ -196,6 +200,7 @@ export function examResultsToCsv(doc) {
     const byKey = new Map((p.responses || []).map((r) => [r.key, r]));
     return [
       ...fixed.map((c) => (typeof p[c] === 'boolean' ? (p[c] ? 'yes' : 'no') : p[c])),
+      ...sections.map((_, i) => p.section_seconds?.[i] ?? 0),
       ...questions.flatMap((q) => {
         const r = byKey.get(q.key);
         if (!r) return ['', '', '', ''];

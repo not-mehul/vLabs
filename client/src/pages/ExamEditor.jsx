@@ -9,6 +9,7 @@ import Icon from '../components/Icon.jsx';
 import ExamQuestion from '../components/ExamQuestion.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
+import MinutesField from '../components/editor/MinutesField.jsx';
 import {
   EXAM_LIMITS,
   QUESTION_TYPES,
@@ -537,6 +538,11 @@ export default function ExamEditor({ id, initial }) {
                   maxLength={EXAM_LIMITS.sectionTitle}
                   aria-label={`Section ${si + 1} title`}
                   onChange={(e) => setSection(si, { ...sec, title: e.target.value })}
+                />
+                <MinutesField
+                  label="Minutes"
+                  value={sec.minutes}
+                  onChange={(v) => setSection(si, { ...sec, minutes: v })}
                 />
                 <span className="qedit__tools">
                   <button

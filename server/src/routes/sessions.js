@@ -13,6 +13,16 @@ import {
 import { imageUrlMap } from '../lib/images.js';
 import { labProgress } from '../lib/labProgress.js';
 import {
+  breaksOf,
+  currentBreak,
+  totalBreakSeconds,
+  activeSecondsBetween,
+  sectionSecondsView,
+  sectionAverages,
+  timeStatus,
+  allocatedSeconds,
+} from '../lib/sectionTiming.js';
+import {
   examParticipantView,
   examParticipantDetail,
   examQuestionStats,
@@ -62,14 +72,17 @@ const q = {
   extend: db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?'),
   remove: db.prepare('DELETE FROM sessions WHERE id = ?'),
   setGrades: db.prepare('UPDATE participants SET grades = ? WHERE id = ?'),
+  setBreaks: db.prepare('UPDATE sessions SET breaks = ? WHERE id = ?'),
   removeParticipant: db.prepare('DELETE FROM participants WHERE id = ? AND session_id = ?'),
   // Unbinds the exam seat from its device and signs that device out; the next
   // join with the same name (on any device) takes the seat over.
   releaseSeat: db.prepare(
     'UPDATE participants SET resume_hash = NULL, token_version = token_version + 1 WHERE id = ?',
   ),
+  // Reopening restarts the section clock now (time while submitted doesn't count).
   reopenExam: db.prepare(
-    'UPDATE participants SET submitted_at = NULL, completed_at = NULL, finished_at = NULL WHERE id = ?',
+    `UPDATE participants SET submitted_at = NULL, completed_at = NULL, finished_at = NULL,
+            section_entered_at = ? WHERE id = ?`,
   ),
 };
 
@@ -144,15 +157,35 @@ function captureNamesOf(sections) {
   return out;
 }
 
-/** Seconds per section index, including the open visit (unless complete). */
-function sectionTimesView(p, sectionCount, now) {
-  const stored = safeObject(p.section_times);
-  const out = [];
-  for (let i = 0; i < sectionCount; i += 1) out.push(Number(stored[String(i)]) || 0);
-  if (!p.completed_at && p.current_section < sectionCount) {
-    out[p.current_section] += secondsBetween(p.section_entered_at, now);
-  }
-  return out;
+/**
+ * Per-section flow for the monitor (labs and exams): seats whose furthest
+ * section this is, seats that have completed it, the time allocated, and the
+ * average time spent by those who completed it (`final` once everyone has).
+ */
+function sectionFlow(sections, views, extra = () => ({})) {
+  const averages = sectionAverages(sections, views);
+  return sections.map((sec, i) => ({
+    index: i,
+    title: sec.title || `Section ${i + 1}`,
+    minutes: sec.minutes || null,
+    // Seats whose furthest section is this one (finished seats are counted under `complete`).
+    seats_here: views.filter((v) => !v.complete && v.furthest_section === i).length,
+    // Seats that have completed this section (moved past it, or finished).
+    seats_past: views.filter((v) => v.complete || v.sections_done[i]).length,
+    ...averages[i],
+    ...extra(sec, i),
+  }));
+}
+
+/** Break state of a session for API responses. */
+function breakView(row) {
+  const breaks = breaksOf(row);
+  const running = currentBreak(breaks);
+  return {
+    on_break: Boolean(running),
+    break_started_at: running ? running.start : null,
+    break_total_seconds: totalBreakSeconds(breaks),
+  };
 }
 
 /**
@@ -165,7 +198,7 @@ function sectionTimesView(p, sectionCount, now) {
  * the participant drawer shows it. Optional / wrap-up sections are flagged and
  * excluded from progress (see lib/labProgress.js).
  */
-function participantView(p, sections) {
+function participantView(p, sections, breaks = []) {
   const now = nowIso();
   const completed = new Set(JSON.parse(p.completed_checkpoints));
   const sectionCount = sections.length;
@@ -179,7 +212,14 @@ function participantView(p, sections) {
   const finished = Boolean(p.finished_at);
   const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
   const clockEnd = completedAt || (complete ? now : null);
-  const sectionSeconds = sectionTimesView(p, sectionCount, now);
+  // Time on sections excludes class breaks; once complete the clock is frozen.
+  const sectionSeconds = sectionSecondsView(p, sectionCount, {
+    now,
+    breaks,
+    frozen: Boolean(p.completed_at),
+  });
+  const onFurthest = complete ? 0 : sectionSeconds[progress.furthest] || 0;
+  const allocated = allocatedSeconds(sections[progress.furthest]);
   return {
     id: p.id,
     seat_number: p.seat_number,
@@ -205,10 +245,15 @@ function participantView(p, sections) {
     finished,
     finished_at: p.finished_at,
     status: complete ? 'finished' : secondsSinceSeen < 90 ? 'active' : 'idle',
-    seconds_on_current_section: complete ? 0 : secondsBetween(p.section_entered_at, now),
+    seconds_on_current_section: complete
+      ? 0
+      : activeSecondsBetween(p.section_entered_at, now, breaks),
     // Accumulated time on the furthest section (all visits, incl. the open one).
-    seconds_on_furthest_section: complete ? 0 : sectionSeconds[progress.furthest] || 0,
-    total_seconds: secondsBetween(p.joined_at, clockEnd || now),
+    seconds_on_furthest_section: onFurthest,
+    // Judged against the section's allocated minutes (fallback thresholds when unset).
+    allocated_seconds: allocated,
+    time_status: complete ? 'ok' : timeStatus(onFurthest, allocated),
+    total_seconds: activeSecondsBetween(p.joined_at, clockEnd || now, breaks),
     section_seconds: sectionSeconds,
     progress_pct: progress.progressPct,
     joined_at: p.joined_at,
@@ -233,8 +278,8 @@ function safeArray(json) {
  * expected answers are NOT included (they are per-seat secrets and the
  * instructor can open the template).
  */
-function participantDetail(p, sections) {
-  const view = participantView(p, sections);
+function participantDetail(p, sections, breaks = []) {
+  const view = participantView(p, sections, breaks);
   const stepTitle = (si, sti) => {
     const sec = sections[si];
     const step = sec?.steps?.[sti];
@@ -291,6 +336,7 @@ function participantDetail(p, sections) {
     index: i,
     title: sec.title || `Section ${i + 1}`,
     seconds: view.section_seconds[i] || 0,
+    minutes: sec.minutes || null,
     // Exact location: the section on screen right now (even when reviewing).
     current: !view.complete && p.current_section === i,
     furthest: i === view.furthest_section,
@@ -389,8 +435,8 @@ router.get('/:id/participants/:pid', (req, res) => {
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
   const content = JSON.parse(row.content);
-  if (!isExam(row)) return res.json(participantDetail(p, content));
-  const detail = examParticipantDetail(p, content);
+  if (!isExam(row)) return res.json(participantDetail(p, content, breaksOf(row)));
+  const detail = examParticipantDetail(p, content, breaksOf(row));
   res.json({ ...detail, questions: detail.questions.map(withImages) });
 });
 
@@ -475,7 +521,7 @@ router.post('/:id/participants/:pid/reopen', (req, res) => {
   if (!isExam(row)) throw httpError(409, 'Only exam submissions can be reopened');
   if (sessionStatus(row) !== 'active') throw httpError(409, 'The session is no longer active');
   const p = participantOr404(req, row);
-  q.reopenExam.run(p.id);
+  q.reopenExam.run(nowIso(), p.id);
   log.info('exam.reopened', { session: row.id, participant: p.id, instructor: req.instructor.id });
   res.json({ ok: true });
 });
@@ -497,12 +543,17 @@ router.get('/:id/questions/:key', (req, res) => {
 function examSessionDetail(row) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
-  const participants = rows.map((p) => examParticipantView(p, content));
+  const participants = rows.map((p) => examParticipantView(p, content, breaksOf(row)));
   return {
     ...summarise(row),
+    ...breakView(row),
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
     section_count: content.length,
+    section_distribution: sectionFlow(content, participants, (sec) => ({
+      question_count: (sec.questions || []).length,
+    })),
+    complete_count: participants.filter((p) => p.submitted).length,
     question_count: listQuestions(content).length,
     total_points: totalPoints(content),
     submitted_count: participants.filter((p) => p.submitted).length,
@@ -518,26 +569,22 @@ router.get('/:id', (req, res) => {
   if (isExam(row)) return res.json(examSessionDetail(row));
   const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
-  const participants = q.participants.all(row.id).map((p) => participantView(p, sections));
+  const breaks = breaksOf(row);
+  const participants = q.participants.all(row.id).map((p) => participantView(p, sections, breaks));
 
   // Aggregate: how many seats have got to each section. Seats are placed by
   // their FURTHEST section, so reviewing an earlier one doesn't move them back.
-  const sectionDistribution = sections.map((s, i) => ({
-    index: i,
-    title: s.title || `Section ${i + 1}`,
+  const sectionDistribution = sectionFlow(sections, participants, (s) => ({
     optional: isOptionalSection(s),
     step_count: (s.steps && s.steps.length) || 0,
     checkpoint_count: (s.steps || []).filter((step) => stepHasCheckpoint(step)).length,
     has_checkpoint: (s.steps || []).some((step) => stepHasCheckpoint(step)),
-    // Seats whose furthest section is this one (complete seats are counted under `complete`).
-    seats_here: participants.filter((p) => !p.complete && p.furthest_section === i).length,
-    // Seats that have completed this section (moved past it, or finished the lab).
-    seats_past: participants.filter((p) => p.complete || p.sections_done[i]).length,
   }));
   const completeCount = participants.filter((p) => p.complete).length;
 
   res.json({
     ...summarise(row),
+    ...breakView(row),
     capture_names: captureNamesOf(sections),
     complete_count: completeCount,
     template_exists: row.latest_template_version != null,
@@ -546,6 +593,32 @@ router.get('/:id', (req, res) => {
     section_distribution: sectionDistribution,
     participants,
   });
+});
+
+/**
+ * POST /api/sessions/:id/break — body { on: true | false }. Starts or ends a
+ * class-wide break. Time inside a break is excluded from every participant's
+ * section time and total time; when it ends the counters resume for everyone.
+ * The session's expiry is NOT extended (use +30 min if needed).
+ */
+router.post('/:id/break', (req, res) => {
+  const row = ownedOr404(req);
+  if (sessionStatus(row) !== 'active') throw httpError(409, 'The session is not active');
+  const on = req.body?.on;
+  if (on !== true && on !== false) throw httpError(400, 'on must be true or false');
+  const breaks = breaksOf(row);
+  const running = currentBreak(breaks);
+  const now = nowIso();
+  if (on && !running) breaks.push({ start: now, end: null });
+  if (!on && running) running.end = now;
+  if (Boolean(on) !== Boolean(running)) {
+    q.setBreaks.run(JSON.stringify(breaks.slice(-200)), row.id);
+    log.info(on ? 'session.break.start' : 'session.break.end', {
+      session: row.id,
+      instructor: req.instructor.id,
+    });
+  }
+  res.json({ id: row.id, ...breakView({ breaks: JSON.stringify(breaks) }) });
 });
 
 /**
@@ -558,7 +631,15 @@ router.post('/:id/terminate', (req, res) => {
   if (!row.is_active) {
     return res.json({ id: row.id, status: 'ended', already: true });
   }
-  q.terminate.run(nowIso(), row.id);
+  const now = nowIso();
+  // A break still running when the class ends is closed at the end time.
+  const breaks = breaksOf(row);
+  const running = currentBreak(breaks);
+  if (running) {
+    running.end = now;
+    q.setBreaks.run(JSON.stringify(breaks), row.id);
+  }
+  q.terminate.run(now, row.id);
   log.info('session.terminated', { session: row.id, instructor: req.instructor.id });
   res.json({ id: row.id, status: 'ended' });
 });
@@ -626,6 +707,11 @@ router.get('/:id/export', (req, res) => {
   // Self-describing index of the manual so consumers (and the CSV builder)
   // can lay out uniform per-section / per-checkpoint columns without parsing
   // the template themselves.
+  const breaks = breaksOf(row);
+  const averages = sectionAverages(
+    sections,
+    q.participants.all(row.id).map((p) => participantView(p, sections, breaks)),
+  );
   const sectionIndex = sections.map((sec, i) => ({
     index: i,
     number: i + 1,
@@ -633,6 +719,12 @@ router.get('/:id/export', (req, res) => {
     step_count: (sec.steps || []).length,
     // Optional / wrap-up sections are excluded from sections_completed and progress_pct.
     optional: isOptionalSection(sec),
+    // Time allocated (minutes) and the average time of those who completed it
+    // (seconds, breaks excluded); `final` once every participant has moved on.
+    minutes: sec.minutes || null,
+    avg_seconds: averages[i].avg_seconds,
+    completed_count: averages[i].completed_count,
+    avg_final: averages[i].final,
   }));
   const checkpointIndex = [];
   sections.forEach((sec, si) => {
@@ -652,7 +744,7 @@ router.get('/:id/export', (req, res) => {
   });
 
   const participants = q.participants.all(row.id).map((p) => {
-    const d = participantDetail(p, sections);
+    const d = participantDetail(p, sections, breaksOf(row));
     return {
       number: d.seat_number,
       first_name: p.first_name,
@@ -763,6 +855,7 @@ router.get('/:id/export', (req, res) => {
       template_title: row.template_title,
       template_version: row.template_version,
       status: sessionStatus(row),
+      break_total_seconds: totalBreakSeconds(breaksOf(row)),
       section_count: sections.length,
       capture_names: captureNames,
       created_at: row.created_at,
@@ -785,6 +878,19 @@ router.get('/:id/export', (req, res) => {
 function examExport(row) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
+  const breaks = breaksOf(row);
+  const views = rows.map((p) => examParticipantView(p, content, breaks));
+  const averages = sectionAverages(content, views);
+  const sectionIndex = content.map((sec, i) => ({
+    index: i,
+    number: i + 1,
+    title: sec.title || `Section ${i + 1}`,
+    question_count: (sec.questions || []).length,
+    minutes: sec.minutes || null,
+    avg_seconds: averages[i].avg_seconds,
+    completed_count: averages[i].completed_count,
+    avg_final: averages[i].final,
+  }));
   const questions = listQuestions(content).map(({ key, si, qi, number, q: qq }) => ({
     key,
     number,
@@ -797,8 +903,8 @@ function examExport(row) {
     points: qq.points,
     expected: describeExpected(qq),
   }));
-  const participants = rows.map((p) => {
-    const v = examParticipantView(p, content);
+  const participants = rows.map((p, pi) => {
+    const v = views[pi];
     return {
       number: v.seat_number,
       first_name: p.first_name,
@@ -814,6 +920,9 @@ function examExport(row) {
       pending_count: v.pending_count,
       fully_graded: v.fully_graded,
       total_seconds: v.total_seconds,
+      furthest_section: v.furthest_section + 1,
+      // Seconds per section in exam order (breaks excluded).
+      section_seconds: v.section_seconds,
       joined_at: p.joined_at,
       last_seen_at: p.last_seen_at,
       responses: gradeParticipant(p, content).map((g) => ({
@@ -842,6 +951,7 @@ function examExport(row) {
       template_title: row.template_title,
       template_version: row.template_version,
       status: sessionStatus(row),
+      break_total_seconds: totalBreakSeconds(breaksOf(row)),
       section_count: content.length,
       question_count: questions.length,
       total_points: totalPoints(content),
@@ -849,6 +959,7 @@ function examExport(row) {
       expires_at: row.expires_at,
       ended_at: row.ended_at,
     },
+    sections: sectionIndex,
     questions,
     participants,
     answer_log: answerLog,

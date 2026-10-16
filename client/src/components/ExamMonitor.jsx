@@ -5,6 +5,7 @@ import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import Markdown from './Markdown.jsx';
 import Icon from './Icon.jsx';
+import SectionFlow, { timeRowClass, timeAgainst } from './SectionFlow.jsx';
 
 const TYPE_LABEL = {
   single: 'Multiple choice',
@@ -292,6 +293,34 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
           </div>
           {actionError && <p className="form__error">{actionError}</p>}
 
+          {d.section_times?.length > 0 && (
+            <section className="drawer__section">
+              <h3>Time per section</h3>
+              <ul className="timebars">
+                {d.section_times.map((t) => (
+                  <li
+                    key={t.index}
+                    className={`timebars__row ${t.current ? 'timebars__row--current' : ''}`}
+                  >
+                    <span className={`dist__index ${t.done ? 'dist__index--done' : ''}`}>
+                      {t.done ? <Icon name="check" size={12} /> : t.index + 1}
+                    </span>
+                    <span className="timebars__title" title={t.title}>
+                      {t.title}
+                      {t.current && <span className="muted small"> · viewing now</span>}
+                    </span>
+                    <span
+                      className={`timebars__val ${t.minutes && t.seconds > t.minutes * 60 ? 'text-warn' : ''}`}
+                    >
+                      {t.seconds ? fmtDuration(t.seconds) : '—'}
+                      {t.minutes ? <span className="muted"> / {t.minutes}m</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <div className="segmented" role="group" aria-label="Filter questions">
             {[
               ['all', 'All'],
@@ -473,6 +502,12 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
 
   return (
     <>
+      <SectionFlow
+        data={data}
+        doneLabel="Submitted"
+        meta={(s) => `${s.question_count} question${s.question_count === 1 ? '' : 's'}`}
+      />
+
       <div className="panel">
         <div className="panel__head">
           <h2 className="panel__title">Questions</h2>
@@ -559,7 +594,10 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                   <th>Answered</th>
                   <th>Score</th>
                   <th>To mark</th>
-                  <th className="col--md">Time</th>
+                  <th title="Furthest section opened">Section</th>
+                  <th title="Time on that section / time allocated (breaks excluded)">
+                    Time on section
+                  </th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -568,7 +606,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                   <tr
                     key={p.id}
                     tabIndex={0}
-                    className={`${p.submitted ? 'row--done' : ''} ${participant === p.id ? 'row--selected' : ''}`}
+                    className={`${p.submitted ? 'row--done' : timeRowClass(p.time_status)} ${participant === p.id ? 'row--selected' : ''}`}
                     onClick={() => setParticipant(p.id)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -609,7 +647,21 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                     <td className={p.pending_count ? 'text-warn' : 'muted'}>
                       {p.pending_count || '—'}
                     </td>
-                    <td className="col--md muted">{fmtDuration(p.total_seconds)}</td>
+                    <td>
+                      {p.submitted ? (
+                        <span className="muted">Done</span>
+                      ) : (
+                        <span className="section-cell__num">
+                          {p.furthest_section + 1}
+                          <span className="muted"> / {data.section_count}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className={!p.submitted && p.time_status === 'over' ? 'text-warn' : ''}>
+                      {p.submitted
+                        ? fmtDuration(p.total_seconds)
+                        : timeAgainst(p.seconds_on_furthest_section, p.allocated_seconds)}
+                    </td>
                     <td>
                       {p.submitted ? (
                         <span className="pill pill--active">

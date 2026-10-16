@@ -18,6 +18,7 @@
  *   ---
  *
  *   # Section 1 · Getting Started
+ *   > minutes: 15
  *
  *   ## [desk] Prepare your bench
  *   Body markdown for the step. Use {{ VARIABLE }} placeholders.
@@ -47,6 +48,8 @@
  *   ## [info] Background
  *   Context only — no hints, solution or checkpoint.
  *
+ *   `> minutes: N` directly under a `# ` heading allocates N minutes to that
+ *   section (optional; drives the monitor's "over time" highlighting).
  *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]/[info]
  *   prefix sets the type, default desk). `> hint:` and `> checkpoint:` lines use
  *   `::` to separate the two parts; write `\::` for a literal `::`. Checkpoint
@@ -141,6 +144,7 @@ export function templateToMarkdown(input) {
 
   for (const section of tpl.content) {
     lines.push(`# ${section.title || 'Section'}`);
+    if (section.minutes) lines.push(`> minutes: ${section.minutes}`);
     lines.push('');
     for (const step of section.steps) {
       lines.push(`## [${step.type}] ${step.title}`.trimEnd());
@@ -283,6 +287,12 @@ export function parseMarkdownTemplate(text) {
       }
       step = { type, title: heading.trim(), body: '', hints: [], solution: '', checkpoint: null };
       section.steps.push(step);
+    } else if (/^>\s*minutes:/i.test(line) && section && !step) {
+      // Time allocated to the section. Only between `# ` and the first `## `,
+      // where text has always been discarded — inside a step the line is
+      // parsed exactly as before.
+      section.minutes = line.replace(/^>\s*minutes:/i, '').trim();
+      afterDirective = true;
     } else if (/^>\s*hint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*hint:/i, '').trim();
       const [label, textPart] = splitOnceUnescaped(rest);

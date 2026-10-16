@@ -9,6 +9,11 @@ import {
   publicQuestion,
   isManualQuestion,
 } from '../../shared/exam-schema.js';
+import {
+  parseExamMarkdown,
+  examToMarkdown,
+  SAMPLE_EXAM_MARKDOWN,
+} from '../../shared/exam-format.js';
 
 const doc = {
   questions: [
@@ -131,4 +136,33 @@ test('exam schema: normalising, validation, grading and the public view', () => 
   const pub = publicQuestion(single);
   assert.equal('correct' in pub, false);
   assert.deepEqual(pub.options, ['a', 'b']);
+});
+
+test('exam sections carry a time allocation through markdown', () => {
+  const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
+  assert.deepEqual(
+    exam.content.map((s) => s.minutes),
+    [5, 10],
+  );
+  assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
+  const untimed = parseExamMarkdown('# A\n\n## [tf] Sky is blue\n> answer: true\n');
+  assert.equal(untimed.content[0].minutes, null);
+  assert.ok(!examToMarkdown(untimed).includes('minutes'));
+});
+
+test('examResultsToCsv: one time column per section when the export lists sections', () => {
+  const timed = {
+    ...doc,
+    sections: [
+      { number: 1, title: 'Part 1' },
+      { number: 2, title: 'Part 2' },
+    ],
+    participants: doc.participants.map((p) => ({ ...p, section_seconds: [61, 122] })),
+  };
+  const [header, row] = examResultsToCsv(timed).trim().split('\n');
+  assert.match(
+    header,
+    /,furthest_section,joined_at,last_seen_at,time_s1_part_1,time_s2_part_2,q1_response/,
+  );
+  assert.match(row, /,61,122,/);
 });
