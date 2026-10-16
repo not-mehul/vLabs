@@ -363,6 +363,22 @@ export default function SessionMonitor() {
     return () => clearInterval(timer);
   }, [refresh]);
 
+  // Join addresses: they change when the Pi is moved to another network.
+  const [joinUrls, setJoinUrls] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      call((t) => api.serverAddresses(t))
+        .then((r) => !cancelled && setJoinUrls(r.urls || []))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [call]);
+
   async function act(fn, { confirmText, okMessage } = {}) {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true);
@@ -492,6 +508,17 @@ export default function SessionMonitor() {
         <div className="monitor-head__code">
           <span className="editor-label">Room code — click to copy</span>
           <CopyCode code={data.room_code} />
+          {joinUrls.length > 0 && (
+            <span className="join-urls muted small" title="Where participants open vLabs">
+              Join at{' '}
+              {joinUrls.map((u, i) => (
+                <span key={u}>
+                  {i > 0 && ' · '}
+                  <code>{u.replace(/^https:\/\//, '')}</code>
+                </span>
+              ))}
+            </span>
+          )}
           <span className={`pill pill--${data.status}`}>{data.status}</span>
         </div>
       </div>

@@ -215,6 +215,8 @@ export const api = {
   /** Monitor: one section's timings, seats and per-step / per-question detail. */
   getSection: (token, sessionId, index) =>
     request(`/sessions/${sessionId}/sections/${index}`, { token }),
+  /** Where participants can reach this vLabs right now (follows the Pi across networks). */
+  serverAddresses: (token) => request('/server/addresses', { token }),
   /** Start (on: true) or end (on: false) a class-wide break. */
   setBreak: (token, id, on) =>
     request(`/sessions/${id}/break`, { method: 'POST', body: { on }, token }),

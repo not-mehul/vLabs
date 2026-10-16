@@ -17,6 +17,7 @@ import sessionRoutes from './routes/sessions.js';
 import participantRoutes from './routes/participant.js';
 import examRoutes from './routes/exam.js';
 import imageRoutes from './routes/images.js';
+import serverRoutes from './routes/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const healthCheck = db.prepare('SELECT 1 AS ok');
@@ -104,6 +105,7 @@ export function createApp() {
   app.use('/api/participant/exam', examRoutes);
   app.use('/api/participant', participantRoutes);
   app.use('/api/images', imageRoutes);
+  app.use('/api/server', serverRoutes);
 
   // In production, serve the built SPA and fall back to index.html for client
   // routing. In development the Vite dev server handles the frontend instead.

@@ -58,6 +58,8 @@ sed -i "s|/opt/vlabs|$REPO_DIR|g" /etc/systemd/system/vlabs.service /etc/systemd
   /etc/systemd/system/vlabs-caddy-refresh.service
 systemctl daemon-reload
 systemctl enable vlabs-caddy-refresh.service >/dev/null 2>&1 || true
+# Long-running since 1.8.0 (follows network changes); restart picks up a new version.
+systemctl restart vlabs-caddy-refresh.service 2>/dev/null || true
 
 bold "5/5  Restart + health check"
 systemctl restart vlabs

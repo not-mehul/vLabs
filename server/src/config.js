@@ -112,6 +112,11 @@ const config = {
     password: process.env.SEED_INSTRUCTOR_PASSWORD || DEV_SEED_PASSWORD,
   },
 
+  // Where the Pi publishes its current join addresses (written by
+  // deploy/pi/render-caddy.sh whenever the network changes). Missing file → the
+  // portal simply shows no addresses (dev machines, other hosts).
+  addressesFile: process.env.VLABS_ADDRESSES_FILE || '/run/vlabs-net/addresses.json',
+
   // Instructor password policy (applies to the change-password endpoint).
   minPasswordLength: parseInt(process.env.MIN_PASSWORD_LENGTH || '10', 10),
 

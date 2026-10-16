@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.7.0). The first section is the original code
+Newest entry at the bottom (1.8.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -583,3 +583,33 @@ want allocation-based alerts.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.8.0 — the Pi follows you to any network
+
+- **Plug the Pi into a new network and vLabs adapts on its own**, with no
+  reboot and no command. `vlabs-caddy-refresh` used to run once at boot; it
+  is now a small watcher (`deploy/pi/watch-network.sh`). Whenever the Pi's
+  IPv4 addresses change (new network, Wi-Fi switch, new DHCP lease, cable
+  pulled) it re-renders the Caddy site list a few seconds later. New addresses
+  get certificates from the internal CA, so trusted devices need nothing, and
+  stale addresses are dropped. Caddy reloads only when something changed.
+- The session monitor shows **where to join** under the room code, e.g.
+  _Join at vlabs.local · 10.0.0.23_. It updates when the Pi moves.
+  `render-caddy.sh` writes `/run/vlabs-net/addresses.json`, and the new
+  instructor endpoint `GET /api/server/addresses` serves it.
+- The name Avahi actually publishes is included. If the name is taken on the
+  new network, Avahi renames the Pi (`vlabs-2.local`); that name works, and
+  the monitor shows it.
+- `render-caddy.sh` serialises concurrent runs (`flock`) and only prints
+  Caddy's validation log when validation fails.
+- Verified with the real Caddy (2.10) and the vLabs server: an address added
+  to the interface was served over HTTPS (verified against Caddy's root
+  certificate) a few seconds later, with no restart. Removing it dropped it
+  from Caddy and from the portal.
+
+### Upgrading
+
+`deploy/pi/update.sh` installs and restarts the watcher. No migration. Wi-Fi
+networks still need their password once (`nmcli device wifi connect …`).
+NetworkManager then rejoins any remembered network on its own (DEPLOYMENT.md
+§1.2a).

@@ -121,7 +121,7 @@ rm -rf "$PUBLIC_DIR"
 
 # ---------------------------------------------------------------------------
 bold "4/6  Config, data, user"
-rm -rf /etc/vlabs "$DATA_DIR"
+rm -rf /etc/vlabs "$DATA_DIR" /run/vlabs-net
 if id -u "$SERVICE_USER" >/dev/null 2>&1; then
   userdel "$SERVICE_USER" 2>/dev/null || true
   echo "  user $SERVICE_USER removed"

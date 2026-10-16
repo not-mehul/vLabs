@@ -1488,3 +1488,12 @@ input.field__input--sm[type='number'] {
 .editor-section__head .field--minutes .field__input {
   width: 5.5rem;
 }
+
+/* Join addresses under the room code (follow the Pi across networks) */
+.join-urls {
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+.join-urls code {
+  font-size: 0.78rem;
+}
