@@ -8,12 +8,7 @@ import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
 import { seatExam } from '../lib/examSeat.js';
 import { injectImages } from '../lib/templating.js';
-import {
-  breaksOf,
-  currentBreak,
-  activeSecondsBetween,
-  closeOpenVisit,
-} from '../lib/sectionTiming.js';
+import { breaksOf, currentBreak, closeOpenVisit } from '../lib/sectionTiming.js';
 import {
   QUESTION_TYPES,
   listQuestions,

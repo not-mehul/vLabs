@@ -879,8 +879,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 8: exam seats from a lab)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 8);
+test('database schema version is recorded (migration 9: exams handed in at session end)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
   const sessionCols = db
     .prepare('PRAGMA table_info(sessions)')
     .all()
@@ -890,7 +890,13 @@ test('database schema version is recorded (migration 8: exam seats from a lab)',
     .prepare('PRAGMA table_info(participants)')
     .all()
     .map((c) => c.name);
-  for (const c of ['captured_values', 'checkpoint_log', 'section_times', 'completed_at']) {
+  for (const c of [
+    'captured_values',
+    'checkpoint_log',
+    'section_times',
+    'completed_at',
+    'auto_submitted',
+  ]) {
     assert.ok(cols.includes(c), c);
   }
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());
