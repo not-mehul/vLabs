@@ -20,6 +20,7 @@
  *     title: string,
  *     minutes: number | null,               // time allocated to the section
  *                                           //   (whole minutes, 1–600); null = none
+ *     optional: boolean,                    // left out of progress / completion
  *     steps: [{
  *       type: 'desk' | 'computer' | 'info',
  *       title: string,
@@ -126,6 +127,78 @@ export function normaliseMinutes(v) {
   return Number.isInteger(n) && n >= 1 && n <= LIMITS.sectionMinutes ? n : null;
 }
 
+/**
+ * A section's "optional" flag: true or false, or null when the value given is
+ * neither (true/false, or "true"/"false"/"yes"/"no" from Markdown). Missing
+ * means false. An optional section is left out of progress and is not needed
+ * to complete the lab or exam (shared/lab-progress.js).
+ */
+export function optionalFlag(v) {
+  if (v === undefined || v === null || v === '') return false;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (s === 'true' || s === 'yes') return true;
+  if (s === 'false' || s === 'no') return false;
+  return null;
+}
+
+/**
+ * Stable ids. Every section and every step (lab) or item (exam) carries an
+ * `id` once saved, unique within its template. Progress and answers are keyed
+ * by position, so when a template is pushed into a running session the ids
+ * say which old position became which new one (lib/contentRemap.js), and
+ * reordering, inserting or removing never misfiles anyone's work. Editors
+ * keep ids as they are; the server gives new things one when saving.
+ */
+export const ITEM_ID_RE = /^[a-z0-9]{4,32}$/i;
+
+/** A valid id, or undefined. */
+export const cleanItemId = (v) => (typeof v === 'string' && ITEM_ID_RE.test(v) ? v : undefined);
+
+/** A fresh random id: 10 base-36 characters. */
+export function newItemId() {
+  const bytes = new Uint8Array(10);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+}
+
+/** `obj` with `id` first when `id` is valid (normalisers keep ids). */
+export const withItemId = (obj, id) => {
+  const clean = cleanItemId(id);
+  return clean ? { id: clean, ...obj } : obj;
+};
+
+/**
+ * Give every section and item of stored content an id, unique within the
+ * template: missing ones get a new id, and a repeated one (a copied item)
+ * gets a new id on every copy after the first. Mutates and returns `content`.
+ */
+export function assignItemIds(content, itemsOf) {
+  const seen = new Set();
+  const fix = (obj) => {
+    let id = cleanItemId(obj.id);
+    while (!id || seen.has(id)) id = newItemId();
+    seen.add(id);
+    return id;
+  };
+  for (const sec of content) {
+    const id = fix(sec);
+    // Keep `id` the first key, as the normalisers write it.
+    const rest = { ...sec };
+    delete rest.id;
+    for (const k of Object.keys(sec)) delete sec[k];
+    Object.assign(sec, { id }, rest);
+    const items = itemsOf(sec) || [];
+    items.forEach((it, i) => {
+      const iid = fix(it);
+      const r = { ...it };
+      delete r.id;
+      items[i] = { id: iid, ...r };
+    });
+  }
+  return content;
+}
+
 /** A fresh, empty step in canonical shape. */
 export function blankStep() {
   return { type: 'desk', title: '', body: '', hints: [], solution: '', checkpoint: null };
@@ -176,26 +249,32 @@ export function normaliseStep(st) {
   const type = STEP_TYPES.includes(s.type) ? s.type : 'desk';
   if (type === 'info') {
     // Context-only: nothing to do, so nothing to hint at, solve or check.
-    return {
+    return withItemId(
+      {
+        type,
+        title: str(s.title, LIMITS.stepTitle),
+        body: str(s.body, LIMITS.body),
+        hints: [],
+        solution: '',
+        checkpoint: null,
+      },
+      s.id,
+    );
+  }
+  return withItemId(
+    {
       type,
       title: str(s.title, LIMITS.stepTitle),
       body: str(s.body, LIMITS.body),
-      hints: [],
-      solution: '',
-      checkpoint: null,
-    };
-  }
-  return {
-    type,
-    title: str(s.title, LIMITS.stepTitle),
-    body: str(s.body, LIMITS.body),
-    hints: (Array.isArray(s.hints) ? s.hints : []).slice(0, LIMITS.hintsPerStep).map((h) => ({
-      label: str(h && h.label, LIMITS.hintLabel),
-      text: str(h && h.text, LIMITS.hintText),
-    })),
-    solution: str(s.solution, LIMITS.solution),
-    checkpoint: normaliseCheckpoint(s.checkpoint),
-  };
+      hints: (Array.isArray(s.hints) ? s.hints : []).slice(0, LIMITS.hintsPerStep).map((h) => ({
+        label: str(h && h.label, LIMITS.hintLabel),
+        text: str(h && h.text, LIMITS.hintText),
+      })),
+      solution: str(s.solution, LIMITS.solution),
+      checkpoint: normaliseCheckpoint(s.checkpoint),
+    },
+    s.id,
+  );
 }
 
 /**
@@ -217,13 +296,17 @@ export function normaliseTemplate(obj) {
       .map((v) => ({ name: str(v.name).trim(), expression: str(v.expression).trim() })),
     content: content.slice(0, LIMITS.sections).map((sec) => {
       const s = sec && typeof sec === 'object' ? sec : {};
-      return {
-        title: str(s.title, LIMITS.sectionTitle),
-        minutes: normaliseMinutes(s.minutes),
-        steps: (Array.isArray(s.steps) ? s.steps : [])
-          .slice(0, LIMITS.stepsPerSection)
-          .map(normaliseStep),
-      };
+      return withItemId(
+        {
+          title: str(s.title, LIMITS.sectionTitle),
+          minutes: normaliseMinutes(s.minutes),
+          optional: optionalFlag(s.optional) === true,
+          steps: (Array.isArray(s.steps) ? s.steps : [])
+            .slice(0, LIMITS.stepsPerSection)
+            .map(normaliseStep),
+        },
+        s.id,
+      );
     }),
   };
 }

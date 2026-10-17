@@ -45,7 +45,21 @@ function Verdict({ r }) {
  * to it; plus a marker's comment, never shown to the participant.
  * `onMark(body)` sends { correct } / { points } / { comment }.
  */
-function MarkControls({ r, onMark, busy }) {
+function MarkControls({ r, onMark, busy, readOnly }) {
+  if (readOnly) {
+    // A colleague's session: who marked it and their comment, no buttons.
+    return r.marked_by || r.comment ? (
+      <p className="muted small">
+        {r.marked_by &&
+          `Marked by ${r.marked_by}${r.marked_at ? ` · ${formatDateTime(r.marked_at)}` : ''}`}
+        {r.comment && <span className="mark__note"> “{r.comment}”</span>}
+      </p>
+    ) : null;
+  }
+  return <MarkEditor r={r} onMark={onMark} busy={busy} />;
+}
+
+function MarkEditor({ r, onMark, busy }) {
   const marked = r.override !== null || r.marked_points !== null;
   const [points, setPoints] = useState('');
   const [comment, setComment] = useState(r.comment || '');
@@ -228,7 +242,7 @@ function usePolled(loader) {
 }
 
 /** One participant's whole exam: every question, their response, verdicts, marks. */
-function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onChanged }) {
+function ParticipantExamDrawer({ sessionId, participantId, active, readOnly, onClose, onChanged }) {
   const { call } = useInstructorApi();
   const loader = useCallback(
     () => call((t) => api.getParticipant(t, sessionId, participantId)),
@@ -342,37 +356,42 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
             </div>
           </div>
 
-          <div className="drawer__actions">
-            <SeatChange
-              name={d.name}
-              seatNumber={d.seat_number}
-              what="Their exam and marking"
-              onSave={async (seat) => {
-                setActionError('');
-                await call((t) => api.changeSeat(t, sessionId, participantId, seat));
-                await reload();
-                onChanged();
-              }}
-              onError={setActionError}
-            />
-            {active && d.submitted && (
-              <button className="btn btn--sm btn--ghost" onClick={() => seatAction('reopen')}>
-                <Icon name="undo" size={14} /> Reopen exam
-              </button>
-            )}
-            {active && (
+          {!readOnly && (
+            <div className="drawer__actions">
+              <SeatChange
+                name={d.name}
+                seatNumber={d.seat_number}
+                what="Their exam and marking"
+                onSave={async (seat) => {
+                  setActionError('');
+                  await call((t) => api.changeSeat(t, sessionId, participantId, seat));
+                  await reload();
+                  onChanged();
+                }}
+                onError={setActionError}
+              />
+              {active && d.submitted && (
+                <button className="btn btn--sm btn--ghost" onClick={() => seatAction('reopen')}>
+                  <Icon name="undo" size={14} /> Reopen exam
+                </button>
+              )}
+              {active && (
+                <button
+                  className="btn btn--sm btn--ghost"
+                  onClick={() => seatAction('release')}
+                  title="Their device died or they need to switch devices: lets them rejoin elsewhere"
+                >
+                  <Icon name="refresh" size={14} /> Move to another device
+                </button>
+              )}
               <button
-                className="btn btn--sm btn--ghost"
-                onClick={() => seatAction('release')}
-                title="Their device died or they need to switch devices: lets them rejoin elsewhere"
+                className="btn btn--sm btn--danger-ghost"
+                onClick={() => seatAction('remove')}
               >
-                <Icon name="refresh" size={14} /> Move to another device
+                <Icon name="trash" size={14} /> Remove
               </button>
-            )}
-            <button className="btn btn--sm btn--danger-ghost" onClick={() => seatAction('remove')}>
-              <Icon name="trash" size={14} /> Remove
-            </button>
-          </div>
+            </div>
+          )}
           {actionError && <p className="form__error">{actionError}</p>}
 
           {d.section_times?.length > 0 && (
@@ -456,7 +475,12 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
                   </div>
                 )}
                 {q.answered && (
-                  <MarkControls r={q} busy={busy === q.key} onMark={(v) => mark(q.key, v)} />
+                  <MarkControls
+                    r={q}
+                    busy={busy === q.key}
+                    readOnly={readOnly}
+                    onMark={(v) => mark(q.key, v)}
+                  />
                 )}
                 {q.history.length > 1 && (
                   <details className="qreview__history">
@@ -484,7 +508,7 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
 }
 
 /** Every participant's response to one question — fastest way to hand-mark. */
-function QuestionDrawer({ sessionId, questionKey, onClose, onChanged }) {
+function QuestionDrawer({ sessionId, questionKey, readOnly, onClose, onChanged }) {
   const { call } = useInstructorApi();
   const loader = useCallback(
     () => call((t) => api.questionResponses(t, sessionId, questionKey)),
@@ -558,6 +582,7 @@ function QuestionDrawer({ sessionId, questionKey, onClose, onChanged }) {
                   <MarkControls
                     r={r}
                     busy={busy === r.participant_id}
+                    readOnly={readOnly}
                     onMark={(v) => mark(r.participant_id, v)}
                   />
                 )}
@@ -577,6 +602,8 @@ function QuestionDrawer({ sessionId, questionKey, onClose, onChanged }) {
  * exam). Scores are provisional while hand-marked answers are outstanding.
  */
 export default function ExamMonitor({ data, sessionId, onChanged }) {
+  // A colleague's session opens read-only.
+  const readOnly = data.can_manage === false;
   const [participant, setParticipant] = useState(null);
   const [question, setQuestion] = useState(null);
   const closeP = useCallback(() => setParticipant(null), []);
@@ -836,6 +863,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
           sessionId={sessionId}
           participantId={participant}
           active={data.status === 'active'}
+          readOnly={readOnly}
           onClose={closeP}
           onChanged={onChanged}
         />
@@ -844,6 +872,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
         <QuestionDrawer
           sessionId={sessionId}
           questionKey={question}
+          readOnly={readOnly}
           onClose={closeQ}
           onChanged={onChanged}
         />

@@ -162,6 +162,71 @@ function CreateSession({ templates, sessions, onCreated }) {
   );
 }
 
+/** A table of sessions; `onDelete` adds Delete on ended ones, `showOwner` an Instructor column. */
+function SessionTable({ sessions, navigate, onDelete, showOwner = false }) {
+  return (
+    <div className="table-wrap">
+      <table className="table table--clickable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Label</th>
+            <th className="col--md">Template</th>
+            <th className="col--sm">Seats</th>
+            {showOwner && <th>Instructor</th>}
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((s) => (
+            <tr
+              key={s.id}
+              {...rowLink(navigate, `/instructor/sessions/${s.id}`)}
+              aria-label={`Open monitor for ${s.title}`}
+            >
+              <td className="mono">{s.room_code}</td>
+              <td>
+                {s.title}
+                {s.kind === 'exam' && <span className="tag tag--exam">exam</span>}
+              </td>
+              <td className="muted col--md">
+                {s.template_title}
+                <span className="small"> · v{s.template_version}</span>
+                {s.status === 'active' && s.update_available && (
+                  <span
+                    className="tag tag--update"
+                    title={`Template v${s.latest_template_version} is available to push`}
+                  >
+                    update
+                  </span>
+                )}
+              </td>
+              <td className="col--sm">{s.participant_count}</td>
+              {showOwner && <td className="muted">{s.owner || '—'}</td>}
+              <td>
+                <StatusPill status={s.status} />
+              </td>
+              <td className="table__actions" {...stopRowClick}>
+                {onDelete && s.status !== 'active' && (
+                  <button
+                    className="btn btn--sm btn--icon btn--danger-ghost"
+                    onClick={() => onDelete(s)}
+                    title="Delete session"
+                    aria-label={`Delete ${s.title}`}
+                  >
+                    <Icon name="trash" size={16} />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { call } = useInstructorApi();
   const navigate = useNavigate();
@@ -174,7 +239,7 @@ export default function Dashboard() {
   const refresh = useCallback(async () => {
     try {
       const [s, t] = await Promise.all([
-        call((tok) => api.listSessions(tok)),
+        call((tok) => api.listSessions(tok, { all: true })),
         // Archived templates are excluded so they can't be launched.
         call((tok) => api.listTemplates(tok)),
       ]);
@@ -192,6 +257,9 @@ export default function Dashboard() {
     const id = setInterval(refresh, 10000);
     return () => clearInterval(id);
   }, [refresh]);
+
+  const mine = sessions.filter((s) => s.can_manage !== false);
+  const others = sessions.filter((s) => s.can_manage === false);
 
   const handleDelete = useCallback(
     async (s) => {
@@ -216,7 +284,7 @@ export default function Dashboard() {
 
       <CreateSession
         templates={templates}
-        sessions={sessions}
+        sessions={mine}
         onCreated={(s) => {
           setJustCreated(s);
           refresh();
@@ -242,71 +310,25 @@ export default function Dashboard() {
       )}
 
       <div className="panel">
-        <h2 className="panel__title">All sessions</h2>
+        <h2 className="panel__title">Your sessions</h2>
         {loading ? (
           <p className="muted">Loading…</p>
-        ) : sessions.length === 0 ? (
+        ) : mine.length === 0 ? (
           <p className="muted">No sessions yet.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="table table--clickable">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Label</th>
-                  <th className="col--md">Template</th>
-                  <th className="col--sm">Seats</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr
-                    key={s.id}
-                    {...rowLink(navigate, `/instructor/sessions/${s.id}`)}
-                    aria-label={`Open monitor for ${s.title}`}
-                  >
-                    <td className="mono">{s.room_code}</td>
-                    <td>
-                      {s.title}
-                      {s.kind === 'exam' && <span className="tag tag--exam">exam</span>}
-                    </td>
-                    <td className="muted col--md">
-                      {s.template_title}
-                      <span className="small"> · v{s.template_version}</span>
-                      {s.status === 'active' && s.update_available && (
-                        <span
-                          className="tag tag--update"
-                          title={`Template v${s.latest_template_version} is available to push`}
-                        >
-                          update
-                        </span>
-                      )}
-                    </td>
-                    <td className="col--sm">{s.participant_count}</td>
-                    <td>
-                      <StatusPill status={s.status} />
-                    </td>
-                    <td className="table__actions" {...stopRowClick}>
-                      {s.status !== 'active' && (
-                        <button
-                          className="btn btn--sm btn--icon btn--danger-ghost"
-                          onClick={() => handleDelete(s)}
-                          title="Delete session"
-                          aria-label={`Delete ${s.title}`}
-                        >
-                          <Icon name="trash" size={16} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SessionTable sessions={mine} navigate={navigate} onDelete={handleDelete} />
         )}
       </div>
+
+      {others.length > 0 && (
+        <div className="panel">
+          <h2 className="panel__title">Other instructors' sessions</h2>
+          <p className="muted small">
+            You can open these to watch them; only the instructor who launched one can change it.
+          </p>
+          <SessionTable sessions={others} navigate={navigate} showOwner />
+        </div>
+      )}
     </PortalShell>
   );
 }

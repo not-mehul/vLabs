@@ -176,8 +176,9 @@ Write **{{ SERIAL }}** on the label and attach it.
 | Front matter | `---` … `---` at the very top | Keys: `title`, `description`, `variables`. Optional but strongly recommended (a template without a title cannot be saved). |
 | Title / description | `title: …`, `description: …` | Single line each. The value runs to the end of the line, colons inside are fine. |
 | Variables block | `variables:` then **indented** `NAME = expression` lines | One per line. The block ends at the first non-indented line. |
-| Section | `# Title` | Required before steps; a step before any `#` gets an implicit "Section 1". Text directly under `#` (before the first `##`) is **discarded**, except a `> minutes:` line. |
+| Section | `# Title` | Required before steps; a step before any `#` gets an implicit "Section 1". Text directly under `#` (before the first `##`) is **discarded**, except a `> minutes:` or `> optional:` line. |
 | Time allocated | `> minutes: N` directly under `# Title` | Optional. Whole minutes, 1–600. See §11.1. |
+| Optional section | `> optional: true` directly under `# Title` | Left out of progress and not needed to finish (§11). JSON: `"optional": true`. In the Studio: the **Optional** box on the section. |
 | Step | `## [type] Title` | `[desk]`, `[computer]` or `[info]`; omitted → `desk`. Title is everything after the bracket. |
 | Body | Plain lines under `##` | Everything that is not a directive. Markdown. Fenced code (``` or ~~~) is copied verbatim — `#` and `>` inside a fence are not interpreted. |
 | Hint | `> hint: Label :: Text` | Further `> …` lines continue the text until a blank line or another directive. Label defaults to "Hint" if empty. |
@@ -550,15 +551,14 @@ Understanding delivery helps you place checkpoints well.
   the monitor keeps placing the participant at the furthest section they
   reached, and only their own detail drawer shows the section they are
   looking at right now.
-- **Optional and wrap-up sections don't count.** A section whose title
-  contains *optional*, *bonus*, *extra credit*, *stretch* / *stretch goal*,
-  or *wrap up* / *wrap-up* / *wrapping up* (any case) is left out of
-  "x / y sections", the progress percentage and completion. Participants
-  still see it, can do it, and its checkpoints still gate what comes after
-  it — it just isn't required. Name such sections accordingly, e.g.
-  `# Section 4 · Wrap up` or `# Optional: VLAN tagging`. (This is read from
-  the title at display time; the template format itself has no flag.) An
-  optional section is only shown as completed, for that participant and in
+- **Optional sections don't count.** Tick **Optional** on a section in the
+  Studio (Markdown: `> optional: true` under its `#` heading; JSON:
+  `"optional": true`) and it is left out of "x / y sections", the progress
+  percentage and completion. Participants still see it, can do it, and its
+  checkpoints still gate what comes after it — it just isn't required. The
+  title has no effect: before 1.17.0 words such as *wrap up* or *bonus* in
+  the title made a section optional, and upgrading turned those sections
+  into ticked **Optional** boxes. An optional section is only shown as completed, for that participant and in
   the monitor's Sections panel, once they have opened it and cleared its
   checkpoints: finishing the lab does not complete it.
 - A participant counts as **complete** the moment every counting section is
@@ -840,11 +840,16 @@ error: it is treated as **no checkpoint** and dropped. Watch for this when a
 - Saving a template bumps its **version**. Running sessions keep the version
   they were launched with; the monitor shows "v N available".
 - **Push latest version** copies the new version into the live session.
-  Participants reload within ~15 s. Cleared checkpoints are keyed by
-  position (`section.step`), so they are re-evaluated against the new
-  structure: **inserting or reordering steps before a cleared checkpoint can
-  move participants forwards or backwards**. Text-only fixes are safe to
-  push mid-class; structural changes are better left for the next session.
+  Participants reload within ~15 s. Every section and step has a hidden,
+  stable **id** (given when the template is saved; the Studio keeps it), so
+  a participant's cleared checkpoints, hints, solutions and section times
+  **move with their steps and sections** wherever you put them. Work on a
+  step or section you deleted is dropped, which can move someone back.
+- Ids are kept in `.json` and `.zip` exports, but not in Markdown. A template
+  re-imported from Markdown (or reverted to a version saved before 1.17.0)
+  gets new ids, and the next push matches by position, as before 1.17.0:
+  text fixes are safe then, but inserting or reordering steps can move
+  participants forwards or backwards.
 - Captured values are keyed by name, so renaming a capture orphans the
   stored value (participants would have to re-clear the checkpoint).
 - Archiving a template hides it from the launcher without affecting sessions;
@@ -970,6 +975,7 @@ Then read your own address back and enter it below.
 > placeholder: e.g. 10.0.0.1XX
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 Nice work, {{ FULL_NAME }}. Leave the cable connected to port {{ PORT_NUM }} and raise your hand for a bench check. Your host was **{{ HOST_IP }}** on VLAN {{ VLAN }}.
@@ -1053,6 +1059,7 @@ In the console, open **{{ DEVICE_NAME }}** → Live. Note the firmware version s
 > placeholder: e.g. v12.3.4
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Record
 Done. For the records: bench {{ BENCH }}, serial **{{ SERIAL }}**, MAC **{{ MAC }}**, named **{{ DEVICE_NAME }}**, firmware {{ FIRMWARE }}. Leave the camera powered; the instructor will release it after class.
@@ -1184,6 +1191,7 @@ Attach the label **{{ ASSET }}** and re-enter the tag to confirm.
 > checkpoint: Confirm the asset tag :: {{ ASSET }}
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 What to leave as-is and what to hand in. Your tag was {{ ASSET }}.

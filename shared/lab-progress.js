@@ -1,27 +1,47 @@
 /**
- * Progress classification for LAB templates (dependency-free, shared by the
- * server and the client).
+ * Progress classification for lab and exam templates (dependency-free, shared
+ * by the server and the client).
  *
- * Optional and wrap-up sections do not count towards a participant's progress.
- * The lab template format has no flag for this and its parser is deliberately
- * left untouched, so the classification is made at display/analytics time from
- * the section TITLE: a title containing one of the words below marks the
- * section as not counting, e.g.
+ * A section with `optional: true` (Markdown: `> optional: true` under its
+ * heading) does not count towards a participant's progress. Participants
+ * still see and can complete it; it is left out of "x / y sections" and the
+ * progress percentage, and finishing the lab does not require it.
  *
- *   "Section 4 · Wrap up"            "Optional: VLAN tagging"
- *   "Bonus challenge"                "Stretch goal — QoS"
- *
- * Participants still see and can complete such sections; they are simply left
- * out of "x / y sections" and the progress percentage, and finishing the lab
- * does not require them.
+ * Before 1.17.0 this was guessed from words in the section title; migration
+ * 10 turned those sections into explicit flags using LEGACY_OPTIONAL_TITLE_RE.
  */
 
-export const NON_COUNTING_SECTION_RE =
+/** The title words that marked a section optional before the explicit flag. */
+export const LEGACY_OPTIONAL_TITLE_RE =
   /\b(optional|bonus|extra[\s-]+credit|stretch(?:[\s-]+goals?)?|wrap(?:ping)?[\s-]*up)\b/i;
 
-/** True when a section's title marks it as optional / wrap-up. */
+/**
+ * Migration 10: a section list (JSON text) with `optional: true` added to
+ * every section whose title marked it optional and that has no flag yet.
+ * Returns the new JSON, or null when nothing changed or it can't be read.
+ */
+export function flagLegacyOptionalSections(json) {
+  let sections;
+  try {
+    sections = JSON.parse(json || '[]');
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(sections)) return null;
+  let changed = false;
+  for (const sec of sections) {
+    if (!sec || typeof sec !== 'object' || sec.type === 'submit' || 'optional' in sec) continue;
+    if (LEGACY_OPTIONAL_TITLE_RE.test(String(sec.title ?? ''))) {
+      sec.optional = true;
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(sections) : null;
+}
+
+/** True when a section is marked optional. */
 export function isOptionalSection(section) {
-  return NON_COUNTING_SECTION_RE.test(String(section?.title ?? ''));
+  return section?.optional === true;
 }
 
 /**

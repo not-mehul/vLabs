@@ -3,6 +3,7 @@ import db from './index.js';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
 import { parseExamMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
+import { assignItemIds } from '../../../shared/template-schema.js';
 
 /**
  * Sample master template. Demonstrates every content feature:
@@ -143,6 +144,7 @@ const SAMPLE_CONTENT = [
   },
   {
     title: 'Section 3 · Wrap Up',
+    optional: true,
     steps: [
       {
         type: 'desk',
@@ -230,6 +232,8 @@ export function ensureSeed() {
        VALUES (?, ?, 'created', 1, ?, ?, ?)`,
     );
     for (const t of samples) {
+      // Stable ids, as a save would give them (lib/contentRemap.js).
+      assignItemIds(t.content, (sec) => (t.kind === 'exam' ? sec.items : sec.steps) || []);
       const info = insert.run(
         t.kind,
         t.title,

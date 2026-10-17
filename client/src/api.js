@@ -193,7 +193,9 @@ export const api = {
       token,
     }),
 
-  listSessions: (token) => request('/sessions', { token }),
+  /** This instructor's sessions; { all: true } adds everyone else's (read-only for them). */
+  listSessions: (token, { all = false } = {}) =>
+    request(`/sessions${all ? '?scope=all' : ''}`, { token }),
   getSession: (token, id) => request(`/sessions/${id}`, { token }),
   createSession: (token, payload) => request('/sessions', { method: 'POST', body: payload, token }),
   terminateSession: (token, id) => request(`/sessions/${id}/terminate`, { method: 'POST', token }),

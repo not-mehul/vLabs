@@ -915,8 +915,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 9: exams handed in at session end)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 9);
+test('database schema version is recorded (migration 11: stable ids)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 11);
   const sessionCols = db
     .prepare('PRAGMA table_info(sessions)')
     .all()

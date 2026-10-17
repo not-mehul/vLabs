@@ -62,7 +62,7 @@ function StatusPill({ p }) {
 }
 
 /** Slide-over with one participant's answers, attempts, hints and timings. Live-refreshes. */
-function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved, onChanged }) {
+function ParticipantDrawer({ sessionId, participantId, readOnly, onClose, onRemoved, onChanged }) {
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
@@ -198,22 +198,24 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved, onCha
               </div>
             </div>
 
-            <div className="drawer__actions">
-              <SeatChange
-                name={d.name}
-                seatNumber={d.seat_number}
-                what="Their manual and checkpoints"
-                onSave={async (seat) => {
-                  await call((t) => api.changeSeat(t, sessionId, participantId, seat));
-                  setReload((n) => n + 1);
-                  onChanged();
-                }}
-                onError={setError}
-              />
-              <button className="btn btn--sm btn--danger-ghost" onClick={remove}>
-                <Icon name="trash" size={14} /> Remove participant
-              </button>
-            </div>
+            {!readOnly && (
+              <div className="drawer__actions">
+                <SeatChange
+                  name={d.name}
+                  seatNumber={d.seat_number}
+                  what="Their manual and checkpoints"
+                  onSave={async (seat) => {
+                    await call((t) => api.changeSeat(t, sessionId, participantId, seat));
+                    setReload((n) => n + 1);
+                    onChanged();
+                  }}
+                  onError={setError}
+                />
+                <button className="btn btn--sm btn--danger-ghost" onClick={remove}>
+                  <Icon name="trash" size={14} /> Remove participant
+                </button>
+              </div>
+            )}
 
             {!d.complete && (
               <p className="drawer__where" role="status">
@@ -307,7 +309,7 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved, onCha
                           )}
                         </p>
                       )}
-                      {c.can_unlock && !d.complete && (
+                      {c.can_unlock && !d.complete && !readOnly && (
                         <button
                           type="button"
                           className="btn btn--xs btn--ghost"
@@ -465,12 +467,11 @@ export default function SessionMonitor() {
       confirmText:
         `Push template v${data.latest_template_version} to this live session?\n\n` +
         (data.kind === 'exam'
-          ? 'Participants will see the updated exam within a few seconds. Saved answers are ' +
-            'kept by question position, so only push corrections that do not add, remove or ' +
-            'reorder questions.'
-          : 'Participants will see the updated manual within a few seconds. Progress is kept, ' +
-            'but if sections or checkpoints were added, removed or reordered, some participants ' +
-            'may move forwards or backwards to match the new structure.'),
+          ? 'Participants will see the updated exam within a few seconds. Answers and marks move ' +
+            'with their questions, wherever they now are; answers to removed questions are dropped.'
+          : 'Participants will see the updated manual within a few seconds. Progress moves with ' +
+            'its sections and checkpoints, wherever they now are; progress on removed ones is ' +
+            'dropped, so some participants may move back.'),
       okMessage: `Session updated to template v${data.latest_template_version}.`,
     });
 
@@ -553,6 +554,8 @@ export default function SessionMonitor() {
 
   const active = data.status === 'active';
   const isExam = data.kind === 'exam';
+  // A colleague's session opens read-only (every instructor can watch any session).
+  const manage = data.can_manage !== false;
   const activeSeats = data.participants.filter((p) => p.seconds_since_seen < 90).length;
   const avg = (field) =>
     data.participants.length
@@ -612,7 +615,17 @@ export default function SessionMonitor() {
         </div>
       </div>
 
-      {active && data.update_available && (
+      {!manage && (
+        <div className="banner banner--info" role="status">
+          <span>
+            <Icon name="eye" size={15} /> <strong>Read-only.</strong> This session belongs to{' '}
+            {data.owner || 'another instructor'}; only they can end it, extend it, push updates or
+            change participants{isExam ? ' and marks' : ''}.
+          </span>
+        </div>
+      )}
+
+      {manage && active && data.update_available && (
         <div className="banner banner--info" role="status">
           <span>
             <strong>Template v{data.latest_template_version} is available.</strong> This session is
@@ -678,25 +691,29 @@ export default function SessionMonitor() {
                   {remaining || '—'}
                 </strong>
               </span>
-              <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
-                <Icon name="plus" size={15} /> 30 min
-              </button>
+              {manage && (
+                <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
+                  <Icon name="plus" size={15} /> 30 min
+                </button>
+              )}
             </div>
-            <div className="monitor-bar__group">
-              <button
-                className={`btn btn--sm ${data.on_break ? 'btn--primary' : 'btn--ghost'}`}
-                onClick={toggleBreak}
-                disabled={busy}
-                title="Pause every participant's section timer (e.g. lunch); press again to resume"
-              >
-                {data.on_break ? 'End break' : 'Start break'}
-              </button>
-            </div>
+            {manage && (
+              <div className="monitor-bar__group">
+                <button
+                  className={`btn btn--sm ${data.on_break ? 'btn--primary' : 'btn--ghost'}`}
+                  onClick={toggleBreak}
+                  disabled={busy}
+                  title="Pause every participant's section timer (e.g. lunch); press again to resume"
+                >
+                  {data.on_break ? 'End break' : 'Start break'}
+                </button>
+              </div>
+            )}
           </>
         )}
         <div className="monitor-bar__group monitor-bar__end">
           <Menu label="Download" icon="download" disabled={busy} items={downloads} />
-          {active ? (
+          {!manage ? null : active ? (
             <button className="btn btn--danger btn--sm" onClick={terminate} disabled={busy}>
               <Icon name="power" size={15} /> End session
             </button>
@@ -725,9 +742,11 @@ export default function SessionMonitor() {
             are paused for everyone and resume when the break ends. The session countdown keeps
             running (+30 min if you need it).
           </span>
-          <button className="btn btn--sm btn--primary" onClick={toggleBreak} disabled={busy}>
-            End break
-          </button>
+          {manage && (
+            <button className="btn btn--sm btn--primary" onClick={toggleBreak} disabled={busy}>
+              End break
+            </button>
+          )}
         </div>
       )}
 
@@ -869,6 +888,7 @@ export default function SessionMonitor() {
             <ParticipantDrawer
               sessionId={id}
               participantId={selected}
+              readOnly={!manage}
               onClose={() => setSelected(null)}
               onRemoved={refresh}
               onChanged={refresh}

@@ -143,6 +143,7 @@ export function templateToMarkdown(input) {
   for (const section of tpl.content) {
     lines.push(`# ${section.title || 'Section'}`);
     if (section.minutes) lines.push(`> minutes: ${section.minutes}`);
+    if (section.optional) lines.push('> optional: true');
     lines.push('');
     for (const step of section.steps) {
       lines.push(`## [${step.type}] ${step.title}`.trimEnd());
@@ -290,6 +291,10 @@ export function parseMarkdownTemplate(text) {
       // where text has always been discarded — inside a step the line is
       // parsed exactly as before.
       section.minutes = line.replace(/^>\s*minutes:/i, '').trim();
+      afterDirective = true;
+    } else if (/^>\s*optional:/i.test(line) && section && !step) {
+      // An optional section (same place as `> minutes:`).
+      section.optional = line.replace(/^>\s*optional:/i, '').trim();
       afterDirective = true;
     } else if (/^>\s*hint:/i.test(line) && step) {
       const rest = line.replace(/^>\s*hint:/i, '').trim();

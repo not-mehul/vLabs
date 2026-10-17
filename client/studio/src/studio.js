@@ -906,6 +906,11 @@ document.addEventListener('change', (e) => {
 
   if (action && action.startsWith('exam-')) {
     examHandleChange(action, target, sIdx);
+  } else if (action === 'update-sec-optional') {
+    templateData.content[sIdx].optional = target.checked;
+    pushHistorySnapshot(true);
+    runFullValidation(false);
+    scheduleAutoSave();
   } else if (action === 'change-step-type') {
     templateData.content[sIdx].steps[stepIdx].type = target.value;
     pushHistorySnapshot(true);
@@ -1032,6 +1037,9 @@ function duplicateSection(sIdx) {
   if (isExamMode() && examIsSubmit(templateData.content[sIdx])) return;
   const clone = JSON.parse(JSON.stringify(templateData.content[sIdx]));
   clone.title += " (Copy)";
+  // A copy is new: it gets its own ids when saved (vLabs matches by id on push).
+  delete clone.id;
+  (clone.steps || clone.items || []).forEach(it => { delete it.id; });
   templateData.content.splice(sIdx + 1, 0, clone);
   pushHistorySnapshot(true);
   renderBuilder();
@@ -1040,6 +1048,7 @@ function duplicateSection(sIdx) {
 function duplicateStep(sIdx, stepIdx) {
   const clone = JSON.parse(JSON.stringify(templateData.content[sIdx].steps[stepIdx]));
   clone.title += " (Copy)";
+  delete clone.id; // a copy gets its own id when saved
   templateData.content[sIdx].steps.splice(stepIdx + 1, 0, clone);
   pushHistorySnapshot(true);
   renderBuilder();
@@ -2471,7 +2480,8 @@ function formatSectionTime(minutes) {
 }
 
 /** The minutes box for a section's time allocation (session lengths are set
-    in hours and minutes when a session starts, not in the template). */
+    in hours and minutes when a session starts, not in the template), and the
+    section's Optional checkbox. */
 function sectionTimeInputsHtml(section, sIdx, noun) {
   return `
     <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this ${noun}, in minutes (empty = none). Time on the ${noun} is judged against it.">
@@ -2480,6 +2490,11 @@ function sectionTimeInputsHtml(section, sIdx, noun) {
         class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
         data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to ${noun} ${sIdx + 1}">
       <span class="ml-1 hidden sm:inline">min</span>
+    </label>
+    <label class="flex items-center shrink-0 gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 cursor-pointer" title="Optional ${noun}: participants can still do it, but it is left out of progress and is not needed to finish.">
+      <input type="checkbox" ${section.optional ? 'checked' : ''} class="accent-brand-500"
+        data-action="update-sec-optional" data-sec-idx="${sIdx}" aria-label="${noun[0].toUpperCase()}${noun.slice(1)} ${sIdx + 1} is optional">
+      <span>Optional</span>
     </label>`;
 }
 
@@ -3070,6 +3085,7 @@ Attach the label **{{ ASSET }}** and re-enter the tag to confirm.
 > checkpoint: Confirm the asset tag :: {{ ASSET }}
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 What to leave as-is and what to hand in. Your tag was {{ ASSET }}.`,
@@ -3154,6 +3170,7 @@ Then read your own address back and enter it below.
 > placeholder: e.g. 10.0.0.1XX
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 Nice work, {{ FULL_NAME }}. Leave the cable connected to port {{ PORT_NUM }} and raise your hand for a bench check. Your host was **{{ HOST_IP }}** on VLAN {{ VLAN }}.`,
@@ -3230,6 +3247,7 @@ In the console, open **{{ DEVICE_NAME }}** → Live. Note the firmware version s
 > placeholder: e.g. v12.3.4
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Record
 Done. For the records: bench {{ BENCH }}, serial **{{ SERIAL }}**, MAC **{{ MAC }}**, named **{{ DEVICE_NAME }}**, firmware {{ FIRMWARE }}. Leave the camera powered; the instructor will release it after class.`,

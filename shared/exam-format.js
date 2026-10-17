@@ -271,10 +271,13 @@ export function parseExamMarkdown(text) {
       continue;
     }
     // Section settings, anywhere but inside a question (where they are text).
-    const setting = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
+    const setting = /^>\s*(minutes|review|optional)\s*:\s*(.*)$/i.exec(line);
     if (!inFence && setting && section && (!item || item.type === 'step')) {
-      if (setting[1].toLowerCase() === 'minutes') section.minutes = setting[2].trim();
-      else if (section.type === 'submit') section.review = setting[2].trim();
+      const key = setting[1].toLowerCase();
+      if (key === 'minutes') section.minutes = setting[2].trim();
+      else if (key === 'optional') {
+        if (section.type !== 'submit') section.optional = setting[2].trim();
+      } else if (section.type === 'submit') section.review = setting[2].trim();
       continue;
     }
     if (!inFence && /^##\s+/.test(line)) {
@@ -373,6 +376,7 @@ export function examToMarkdown(input) {
     }
     out.push(`# ${sec.title}`);
     if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+    if (sec.optional) out.push('> optional: true');
     out.push('');
     for (const it of sec.items) {
       if (it.type === 'info' || it.type === 'checklist') {

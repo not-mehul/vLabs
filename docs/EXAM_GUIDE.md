@@ -251,6 +251,8 @@ Check every part before you hand in. You cannot change your answers after.
 - `> minutes: N` under a `#` section heading (before its first question)
   allocates N minutes to that section: whole minutes, 1–600, optional
   (§4.1).
+- `> optional: true` under a `#` section heading makes it an **optional**
+  section (§5): JSON `"optional": true`, the **Optional** box in the Studio.
 - `# [submit] Title` is the submit section (alias `[review]`). Its text is
   shown above the button; `> review: false` leaves out the review. It cannot
   hold questions or steps. Exports always write it.
@@ -388,8 +390,8 @@ The exam monitor shows:
   have **completed**: opened, with every question answered and every
   checklist item ticked. It is the same measure as a lab's, and the header
   shows the class's **Avg progress**. The submit section is not counted,
-  and neither is a section whose title marks it optional (*optional*,
-  *bonus*, *extra credit*, *stretch*, *wrap up*, as in labs). Submitting
+  and neither is a section marked **Optional** (as in labs; its questions
+  still unlock what follows). Submitting
   completes only the submit section, so a section left unfinished stays
   unfinished, and clearing an answer makes its section incomplete again
   (it does not lock anything). Click a row for their time per section and their
@@ -414,6 +416,16 @@ shows *Partial · 2.5/5 pts* and the score adds 2.5. **Correct** or
 comment** keeps a marker's note on the response (for you and the results
 export; participants never see it). Marks can be given during or after the
 session and record who marked and when.
+
+**Push latest version** works as for labs (TEMPLATE_GUIDE.md §15): answers,
+marks, comments and answer history move with their questions, wherever you
+put them, because every section and item has a stable id. Answers to a
+question you deleted are dropped. A template re-imported from Markdown gets
+new ids and is matched by position.
+
+**Other instructors** can open your session's monitor from their Sessions
+page (*Other instructors' sessions*) to watch it, read-only: only you can
+mark, change seats, reopen, end or extend it.
 
 **When the session ends** (**End session**, or about an hour after it
 runs out), every exam not yet submitted is handed in as it stands: answers

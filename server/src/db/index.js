@@ -3,6 +3,8 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
+import { flagLegacyOptionalSections } from '../../../shared/lab-progress.js';
+import { assignItemIds } from '../../../shared/template-schema.js';
 
 // Ensure the directory holding the SQLite file exists.
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -413,6 +415,57 @@ const MIGRATIONS = [
     name: 'exams handed in automatically when the session ends',
     up() {
       addColumnIfMissing('participants', 'auto_submitted', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
+  {
+    version: 10,
+    name: 'explicit optional flag on sections (was guessed from the title)',
+    up() {
+      // Sections whose title marked them optional get `optional: true`, in
+      // templates and in session snapshots, so progress stays as it was.
+      db.transaction(() => {
+        for (const table of ['templates', 'sessions']) {
+          const update = db.prepare(`UPDATE ${table} SET content = ? WHERE id = ?`);
+          for (const row of db.prepare(`SELECT id, content FROM ${table}`).all()) {
+            const next = flagLegacyOptionalSections(row.content);
+            if (next) update.run(next, row.id);
+          }
+        }
+      })();
+    },
+  },
+  {
+    version: 11,
+    name: 'stable ids on sections and items',
+    up() {
+      // Every template's sections and items get ids; a session still running
+      // that template's current version (the same content) gets the same ids,
+      // so its next push matches by id. Older sessions match by position.
+      const kindOf = (k) => (k === 'exam' ? 'exam' : 'lab');
+      const itemsOf = { lab: (sec) => sec.steps, exam: (sec) => sec.items };
+      const setTemplate = db.prepare('UPDATE templates SET content = ? WHERE id = ?');
+      const sameSessions = db.prepare(
+        'SELECT id, content FROM sessions WHERE template_id = ? AND template_version = ?',
+      );
+      const setSession = db.prepare('UPDATE sessions SET content = ? WHERE id = ?');
+      db.transaction(() => {
+        for (const t of db.prepare('SELECT id, kind, version, content FROM templates').all()) {
+          let content;
+          try {
+            content = JSON.parse(t.content);
+          } catch {
+            continue;
+          }
+          if (!Array.isArray(content)) continue;
+          const next = JSON.stringify(
+            assignItemIds(content, (sec) => (sec && itemsOf[kindOf(t.kind)](sec)) || []),
+          );
+          setTemplate.run(next, t.id);
+          for (const s of sameSessions.all(t.id, t.version)) {
+            if (s.content === t.content) setSession.run(next, s.id);
+          }
+        }
+      })();
     },
   },
 ];

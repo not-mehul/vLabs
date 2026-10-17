@@ -229,3 +229,63 @@ test('listing, resetting and removing instructors', async () => {
     400,
   );
 });
+
+test('every instructor can open any session read-only; only its owner can change it', async () => {
+  const bobToken = (await login('bob', 'bobs own password')).data.token;
+  const tpl = (await call('/api/templates', { token })).data.find((t) => t.kind !== 'exam');
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.id },
+  });
+  assert.equal(s.status, 201);
+  assert.equal(s.data.can_manage, true);
+  assert.equal(s.data.owner, 'instructor');
+  const sid = s.data.id;
+  const join = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: s.data.room_code, first_name: 'Pat', last_name: 'Shared' },
+  });
+  assert.equal(join.status, 200);
+
+  // Bob's own list leaves it out; the full list shows it with its owner.
+  const mine = await call('/api/sessions', { token: bobToken });
+  assert.equal(
+    mine.data.some((x) => x.id === sid),
+    false,
+  );
+  const all = await call('/api/sessions?scope=all', { token: bobToken });
+  const row = all.data.find((x) => x.id === sid);
+  assert.equal(row.owner, 'instructor');
+  assert.equal(row.can_manage, false);
+  assert.equal(row.participant_count, 1);
+
+  // Reading works…
+  const detail = await call(`/api/sessions/${sid}`, { token: bobToken });
+  assert.equal(detail.status, 200);
+  assert.equal(detail.data.can_manage, false);
+  const pid = detail.data.participants[0].id;
+  assert.equal(
+    (await call(`/api/sessions/${sid}/participants/${pid}`, { token: bobToken })).status,
+    200,
+  );
+  assert.equal((await call(`/api/sessions/${sid}/sections/0`, { token: bobToken })).status, 200);
+  assert.equal((await call(`/api/sessions/${sid}/export`, { token: bobToken })).status, 200);
+
+  // …changing does not.
+  for (const [method, path, body] of [
+    ['POST', `/api/sessions/${sid}/terminate`],
+    ['POST', `/api/sessions/${sid}/extend`, { minutes: 30 }],
+    ['POST', `/api/sessions/${sid}/break`, { on: true }],
+    ['POST', `/api/sessions/${sid}/push-template`],
+    ['PUT', `/api/sessions/${sid}/participants/${pid}/seat`, { seat_number: 5 }],
+    ['DELETE', `/api/sessions/${sid}/participants/${pid}`],
+    ['DELETE', `/api/sessions/${sid}`],
+  ]) {
+    const r = await call(path, { method, token: bobToken, body });
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.data.code, 'NOT_SESSION_OWNER');
+  }
+  assert.equal((await call(`/api/sessions/${sid}`, { token })).data.status, 'active');
+  assert.equal((await call('/api/sessions/999999', { token: bobToken })).status, 404);
+});
