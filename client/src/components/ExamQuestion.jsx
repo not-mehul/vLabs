@@ -1,6 +1,5 @@
 import { useId } from 'react';
 import Markdown from './Markdown.jsx';
-import Icon from './Icon.jsx';
 
 export const QUESTION_LABEL = {
   single: 'Choose one',
@@ -14,13 +13,15 @@ const LETTER = (i) => String.fromCharCode(65 + i);
 
 /**
  * One exam question for the participant. Renders the input for its type and
- * reports changes upward; saving (and debouncing for text) is the page's job.
+ * reports changes upward; saving (and debouncing for text) is the page's job,
+ * and so is showing that answers are saved (once, in the page header: a
+ * "saved" mark beside each question would read as "correct").
  * Nothing here knows the correct answer — the server never sends it.
  *
  * To support a new question type, add a branch below (and the type in
  * shared/exam-schema.js).
  */
-export default function ExamQuestion({ q, value, onChange, disabled, saveState }) {
+export default function ExamQuestion({ q, value, onChange, disabled }) {
   const id = useId();
   const answered =
     value !== undefined &&
@@ -124,15 +125,6 @@ export default function ExamQuestion({ q, value, onChange, disabled, saveState }
         <span className="qcard__type">{QUESTION_LABEL[q.type] || q.type}</span>
         <span className="qcard__pts">
           {q.points} pt{q.points === 1 ? '' : 's'}
-        </span>
-        <span className={`qcard__save qcard__save--${saveState || 'idle'}`} aria-live="polite">
-          {saveState === 'saving' && 'Saving…'}
-          {saveState === 'saved' && (
-            <>
-              <Icon name="check" size={12} /> Saved
-            </>
-          )}
-          {saveState === 'error' && 'Not saved — retrying'}
         </span>
       </header>
       <div className="qcard__prompt" id={`${id}-p`}>

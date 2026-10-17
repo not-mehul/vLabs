@@ -6,18 +6,17 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.7.0**.
+Applies to vLabs **1.9.0**.
 
 > **Where labs are written.** Labs are authored in **vLabs Template Studio**
 > (`docs/vlabs_template_studio.html`, a standalone page — open it in a
 > browser) and imported into the portal under **Templates → Import** as
-> the Studio's `.zip` package (template + images), `.md` or `.json`. The
-> portal's lab page is a minimal editor for fixing typos only: every text
-> field can be corrected, but sections, steps, checkpoints and variables
-> cannot be added, removed or reordered there. Restructure in the Studio and
-> re-import. The format described below is unchanged and is what both read.
-> The one exception is a section's **time allocated** (§11.1), which can be
-> set in the Studio or in the portal's lab editor.
+> the Studio's `.zip` package (template + images), `.md` or `.json`. Import
+> is the main route. The portal can also build a lab from scratch
+> (**Templates → New lab**) and change any lab's structure: add, remove and
+> reorder sections and steps, change step types, and add hints, solutions,
+> checkpoints and variables. The format described below is unchanged and is
+> what both read.
 >
 > **Exams** are a separate template kind with their own format — see
 > [EXAM_GUIDE.md](EXAM_GUIDE.md). The Studio writes those too (**New → New
@@ -62,8 +61,9 @@ Applies to vLabs **1.7.0**.
 2. You write it in **vLabs Template Studio** and import it in the portal
    (**Templates → Import**) as a `.zip` package, `.md` or `.json`. The
    portal shows a live warning for unknown placeholders, has a **Preview**
-   that renders the manual for any seat number, lets you correct typos in
-   any text, and keeps a change history with revert.
+   that renders the manual for any seat number, lets you edit the lab, and
+   keeps a change history with revert. (**Templates → New lab** starts one
+   in the portal instead.)
 3. **Saving validates** the whole template. If any rule in this guide is
    broken the save is refused and every problem is listed with its location
    ("Section 2 · step 3 checkpoint answer"). Nothing partial is stored.
@@ -588,12 +588,12 @@ take. Any of these sets the same value:
 
 - Markdown: a `> minutes: N` line directly under the section's `#` heading.
 - JSON: `"minutes": N` on the section object (§18).
-- Template Studio: the minutes box in the section's header bar.
-- Portal: **Time allocated (minutes)** under each section in the lab editor.
-  This is the one structural setting you can change there without
-  re-importing.
+- Template Studio: the **h** / **m** boxes in the section's header bar.
+- Portal: **Time allocated** (hours and minutes) under each section in the
+  lab editor.
 
-Whole minutes from 1 to 600. Leave it empty for no allocation.
+The editors take hours and minutes and store whole minutes: 1 minute to 10
+hours (600). Leave both boxes empty for no allocation.
 
 **What it decides.** The session monitor compares each participant's time on
 their **furthest** section with that section's allocation:

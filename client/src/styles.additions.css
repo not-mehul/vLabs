@@ -947,20 +947,6 @@ body.has-drawer {
 .qcard__pts {
   font-family: var(--mono);
 }
-.qcard__save {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  font-size: 0.72rem;
-  color: var(--text-3);
-}
-.qcard__save--saved {
-  color: var(--success);
-}
-.qcard__save--error {
-  color: var(--danger);
-}
 .qcard__prompt {
   font-size: 1rem;
   margin-bottom: 0.85rem;
@@ -1002,9 +988,17 @@ body.has-drawer {
   flex: none;
   margin: 0;
 }
-.choice--on {
+/* Selected: a 2px ring, also while hovered (the option just clicked is
+   under the pointer, and the hover border used to hide the selection). */
+.choice--on,
+.choice--on:hover {
   border-color: #6366f1;
+  box-shadow: inset 0 0 0 1px #6366f1;
   background: var(--brand-soft);
+}
+.choice:has(input:focus-visible) {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 .choice--tf {
   flex: 1 1 140px;
@@ -1034,6 +1028,58 @@ body.has-drawer {
 }
 .exam-review p {
   margin-top: 0;
+}
+.exam-review > .md,
+.exam-info > .md {
+  margin-bottom: 1rem;
+}
+.exam-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.exam-checklist__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Autosave state, once for the whole exam (header). Deliberately not green
+   and not a tick: "saved" must not read as "correct". */
+.save-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.save-badge .icon {
+  vertical-align: middle;
+}
+.save-badge--saving {
+  color: var(--text-2);
+}
+.save-badge--error {
+  color: var(--danger);
+}
+@media (max-width: 640px) {
+  .save-badge__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }
 .linklike {
   font: inherit;
@@ -1244,13 +1290,30 @@ input.field__input--sm[type='number'] {
 .typo-step__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+.typo-section__tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.25rem;
 }
 .typo-pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 0.6rem;
+}
+.typo-pair--hint,
+.typo-pair--var {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: start;
+}
+.typo-pair--alt {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.typo-pair > .btn--icon {
+  margin-top: 1.4rem;
 }
 .typo-checkpoint {
   margin-top: 0.4rem;
@@ -1260,8 +1323,9 @@ input.field__input--sm[type='number'] {
   background: var(--brand-soft);
 }
 .typo-checkpoint .editor-label {
-  display: block;
-  margin-bottom: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 .editor-section__title-input {
   flex: 1;
@@ -1348,10 +1412,6 @@ input.field__input--sm[type='number'] {
 @media (max-width: 640px) {
   .typo-pair {
     grid-template-columns: 1fr;
-  }
-  .qcard__save {
-    margin-left: 0;
-    width: 100%;
   }
 }
 
@@ -1475,18 +1535,31 @@ input.field__input--sm[type='number'] {
   margin: 0 0 0.35rem;
 }
 
-/* Time allocated to a section (lab and exam editors) */
-.field--minutes .field__input {
-  width: 7.5rem;
+/* A length of time as hours + minutes (section allocations, session length) */
+.duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
-.editor-section__head .field--minutes {
+.duration__input.field__input {
+  width: 4.25rem;
+}
+.duration__unit {
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+.editor-section__head .field--duration {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
   margin: 0;
 }
-.editor-section__head .field--minutes .field__input {
-  width: 5.5rem;
+.editor-section__head .duration__input.field__input {
+  width: 3.75rem;
+}
+.create-session__row .field--duration {
+  flex: none;
+  margin-bottom: 0;
 }
 
 /* Join addresses under the room code (follow the Pi across networks) */
@@ -1496,4 +1569,40 @@ input.field__input--sm[type='number'] {
 }
 .join-urls code {
   font-size: 0.78rem;
+}
+
+/* ---- Exam section types (editor) ----------------------------------- */
+.tag--section-info {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+.tag--section-submit {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: color-mix(in srgb, #6366f1 30%, transparent);
+}
+.editor-section--submit {
+  border-style: dashed;
+}
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.check input {
+  margin-top: 0.2rem;
+  accent-color: #4f46e5;
+}
+.section-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--border);
 }

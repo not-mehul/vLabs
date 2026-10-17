@@ -9,14 +9,15 @@ import ExamEditor from './ExamEditor.jsx';
 /**
  * /instructor/templates/:id — loads the template and hands it to the editor
  * for its kind:
- *   new       → import a lab from vLabs Template Studio
+ *   new       → import a lab or exam from vLabs Template Studio
+ *   new-lab   → build a new lab here
  *   new-exam  → author a new exam
  *   <id>      → LabEditor (typo fixes only) or ExamEditor
  */
 export default function TemplateEditor() {
   const { id } = useParams();
   const { call } = useInstructorApi();
-  const isNew = id === 'new' || id === 'new-exam';
+  const isNew = id === 'new' || id === 'new-lab' || id === 'new-exam';
   const [tpl, setTpl] = useState(null);
   const [error, setError] = useState('');
 
@@ -33,6 +34,7 @@ export default function TemplateEditor() {
   }, [call, id, isNew]);
 
   if (id === 'new') return <LabEditor key="new" id="new" />;
+  if (id === 'new-lab') return <LabEditor key="new-lab" id="new-lab" />;
   if (id === 'new-exam') return <ExamEditor key="new-exam" id="new-exam" />;
   if (!tpl) {
     return (

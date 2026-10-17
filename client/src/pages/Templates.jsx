@@ -84,8 +84,8 @@ export default function Templates() {
         <div>
           <h1>Templates</h1>
           <p className="muted">
-            Labs and exams, authored in vLabs Template Studio and imported here (exams can also be
-            written here). Shared by all instructors.
+            Labs and exams, usually authored in vLabs Template Studio and imported here. Both can
+            also be written from scratch here. Shared by all instructors.
           </p>
         </div>
         <div className="page-head__actions">
@@ -95,14 +95,23 @@ export default function Templates() {
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
             </button>
           )}
-          <button className="btn btn--ghost" onClick={() => navigate('/instructor/templates/new')}>
-            <Icon name="upload" size={16} /> Import
+          <button
+            className="btn btn--ghost"
+            onClick={() => navigate('/instructor/templates/new-lab')}
+          >
+            <Icon name="plus" size={16} /> New lab
           </button>
           <button
-            className="btn btn--primary"
+            className="btn btn--ghost"
             onClick={() => navigate('/instructor/templates/new-exam')}
           >
             <Icon name="plus" size={16} /> New exam
+          </button>
+          <button
+            className="btn btn--primary"
+            onClick={() => navigate('/instructor/templates/new')}
+          >
+            <Icon name="upload" size={16} /> Import
           </button>
         </div>
       </div>

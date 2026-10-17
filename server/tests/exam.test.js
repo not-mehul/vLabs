@@ -178,7 +178,7 @@ test('sections unlock like a lab: locked sections are neither sent nor answerabl
   const res = await call('/api/participant/exam', { token: ada });
   assert.equal(res.status, 200);
   assert.equal(res.data.question_count, 6);
-  assert.equal(res.data.total_sections, 2);
+  assert.equal(res.data.total_sections, 3, 'two parts plus the submit section');
   assert.equal(res.data.unlocked_section, 0);
   assert.equal(res.data.sections.length, 1, 'only the unlocked section is delivered');
   assert.ok(!JSON.stringify(res.data).includes('Port?'), 'locked questions never sent');
@@ -350,7 +350,11 @@ test('the exam Markdown format round-trips and rejects unknown types', async () 
   const { parseExamMarkdown, examToMarkdown, SAMPLE_EXAM_MARKDOWN } =
     await import('../../shared/exam-format.js');
   const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
-  assert.equal(exam.content.length, 2);
+  assert.deepEqual(
+    exam.content.map((s) => s.type),
+    ['questions', 'questions', 'info', 'submit'],
+  );
+  assert.equal(exam.content[2].tasks.length, 2);
   assert.equal(exam.content[0].questions[1].type, 'multiple');
   assert.deepEqual(exam.content[0].questions[1].correct, [0, 2]);
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
@@ -366,7 +370,7 @@ test('the exam Markdown format round-trips and rejects unknown types', async () 
   assert.throws(() => parseExamMarkdown('# S\n## [poll] x\n'), /Unknown question type/);
   // Code fences are verbatim: a "# heading" inside one is not a new section.
   const fenced = parseExamMarkdown('# S\n## [long] Read:\n```\n# not a section\n```\n');
-  assert.equal(fenced.content.length, 1);
+  assert.equal(fenced.content.length, 2, 'the section and the default submit section');
   assert.match(fenced.content[0].questions[0].prompt, /# not a section/);
 });
 
@@ -463,7 +467,8 @@ test('exam sections are timed like lab sections; submitting stops the clock', as
   await put('0.0', 1);
   await put('0.1', [0]);
   const last = await put('0.2', true);
-  assert.equal(last.data.unlocked_section, 1, 'answering the whole section unlocks the next');
+  // Part 2 is the last questions part, so the submit section opens with it.
+  assert.equal(last.data.unlocked_section, 2, 'answering the whole section unlocks the next');
   assert.equal(last.data.section_complete, true);
   const nav = await call('/api/participant/exam/progress', {
     method: 'POST',
@@ -474,13 +479,15 @@ test('exam sections are timed like lab sections; submitting stops the clock', as
   // Clearing an earlier answer never re-locks a section already opened.
   await put('0.0', null);
   const view = await call('/api/participant/exam', { token: t });
-  assert.equal(view.data.unlocked_section, 1);
-  assert.equal(view.data.sections.length, 2);
+  assert.equal(view.data.unlocked_section, 2);
+  assert.equal(view.data.sections.length, 3);
+  assert.equal(view.data.sections[2].type, 'submit');
+  assert.equal(view.data.sections[2].review, true);
 
   const detail = await call(`/api/sessions/${sessionId}`, { token });
   const tess = detail.data.participants.find((p) => p.name === 'Tess Timer');
   assert.equal(tess.furthest_section, 1);
-  assert.deepEqual(tess.sections_done, [true, false]);
+  assert.deepEqual(tess.sections_done, [true, false, false]);
   assert.equal(detail.data.section_distribution[0].completed_count >= 1, true);
 
   await call('/api/participant/exam/submit', { method: 'POST', token: t });
@@ -504,4 +511,102 @@ test('section drawer for exams: timing plus that section’s question results', 
   assert.equal(d.data.questions[0].expected !== undefined, true);
   const second = await call(`/api/sessions/${sessionId}/sections/1`, { token });
   assert.ok(second.data.questions.every((q) => q.section_index === 1));
+});
+
+test('checklist sections: the participant ticks every item to move on; nobody approves it', async () => {
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Bench exam',
+      content: [
+        { title: 'Theory', questions: [{ type: 'truefalse', prompt: 'True?', correct: true }] },
+        {
+          type: 'info',
+          title: 'Bench check',
+          minutes: 15,
+          body: 'Cable it, then call your instructor.',
+          tasks: ['Cabled', 'Instructor checked it'],
+        },
+        { title: 'After', questions: [{ type: 'short', prompt: 'Port?', accepted: ['443'] }] },
+        { type: 'submit', title: 'Hand in', review: false, body: 'Done?' },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201);
+  assert.deepEqual(
+    tpl.data.content.map((s) => s.type),
+    ['questions', 'info', 'questions', 'submit'],
+  );
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.data.id },
+  });
+  assert.equal(sess.status, 201);
+  const minutes = (Date.parse(sess.data.expires_at) - Date.now()) / 60_000;
+  assert.ok(minutes > 55 && minutes <= 60, 'exams run for an hour by default');
+
+  const join = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Cat', last_name: 'Bench' },
+  });
+  const t = join.data.token;
+  const put = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+
+  assert.equal((await put('1.t0', true)).status, 403, 'a locked checklist cannot be ticked');
+  assert.equal((await put('0.0', true)).data.unlocked_section, 1);
+  let view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.submit_section, 3);
+  const info = view.data.sections[1];
+  assert.equal(info.type, 'info');
+  assert.equal(info.body, 'Cable it, then call your instructor.');
+  assert.deepEqual(
+    info.tasks.map((x) => x.key),
+    ['1.t0', '1.t1'],
+  );
+  assert.equal(view.data.question_count, 2, 'checklist items are not questions');
+
+  assert.equal((await put('1.t9', true)).status, 400, 'unknown item');
+  const one = await put('1.t0', true);
+  assert.equal(one.data.unlocked_section, 1, 'one tick is not enough');
+  assert.equal(one.data.section_complete, false);
+  const both = await put('1.t1', 'yes');
+  assert.equal(both.data.unlocked_section, 1, 'only `true` ticks an item');
+  const done = await put('1.t1', true);
+  assert.equal(done.data.unlocked_section, 3, 'the next part, and the submit section after it');
+  view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.answers['1.t0'], true);
+  assert.equal(view.data.answered_count, 1);
+  assert.equal(view.data.sections[3].review, false);
+  assert.equal(view.data.sections[3].body, 'Done?');
+  await put('1.t0', null);
+  view = await call('/api/participant/exam', { token: t });
+  assert.equal('1.t0' in view.data.answers, false, 'unticking removes it');
+
+  const sub = await call('/api/participant/exam/submit', { method: 'POST', token: t });
+  assert.equal(sub.status, 200);
+  const detail = await call(`/api/sessions/${sess.data.id}`, { token });
+  assert.equal(detail.data.question_count, 2);
+  assert.equal(detail.data.section_count, 4);
+  const log = await call(`/api/sessions/${sess.data.id}/export`, { token });
+  assert.ok(
+    log.data.answer_log.some((e) => e.question === '1.t1' && e.response === 'Ticked'),
+    'ticks are in the answer log',
+  );
+});
+
+test('a lab session runs for 8 hours unless told otherwise', async () => {
+  const list = await call('/api/templates', { token });
+  const lab = list.data.find((x) => x.kind === 'lab');
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: lab.id },
+  });
+  assert.equal(sess.status, 201);
+  const hours = (Date.parse(sess.data.expires_at) - Date.now()) / 3_600_000;
+  assert.ok(hours > 7.9 && hours <= 8, `got ${hours} h`);
 });

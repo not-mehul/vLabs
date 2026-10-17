@@ -8,14 +8,18 @@ import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
 import ExamQuestion from '../components/ExamQuestion.jsx';
+import Markdown from '../components/Markdown.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
-import MinutesField from '../components/editor/MinutesField.jsx';
+import DurationField from '../components/editor/DurationField.jsx';
 import {
   EXAM_LIMITS,
   QUESTION_TYPES,
   QUESTION_TYPE_NAMES,
   blankQuestion,
+  blankSection,
+  sectionType,
+  SECTION_TYPES,
   normaliseExam,
   normaliseQuestion,
   examErrors,
@@ -23,12 +27,9 @@ import {
 } from '../../../shared/exam-schema.js';
 import { examToMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
 
+// The submit section is added by normaliseExam.
 const NEW_EXAM = () =>
-  normaliseExam({
-    title: '',
-    description: '',
-    content: [{ title: 'Section 1', questions: [blankQuestion('single')] }],
-  });
+  normaliseExam({ title: '', description: '', content: [blankSection('questions', 1)] });
 
 const move = (arr, i, d) => {
   const j = i + d;
@@ -100,6 +101,48 @@ function OptionsEditor({ q, onChange }) {
         onClick={() => onChange({ ...q, options: [...q.options, ''] })}
       >
         <Icon name="plus" size={13} /> Add option
+      </button>
+    </div>
+  );
+}
+
+/** The checklist of an info section: one line per item the participant ticks. */
+function TasksEditor({ tasks, onChange }) {
+  return (
+    <div className="opts-editor">
+      <span className="field__label">
+        Checklist: the participant ticks every item to move on (nobody approves it)
+      </span>
+      {tasks.map((t, i) => (
+        <div className="opts-editor__row" key={i}>
+          <span className="opts-editor__mark" aria-hidden="true">
+            <Icon name="checklist" size={14} />
+          </span>
+          <input
+            className="field__input"
+            value={t}
+            maxLength={EXAM_LIMITS.task}
+            placeholder="e.g. My instructor has checked my cabling"
+            aria-label={`Checklist item ${i + 1}`}
+            onChange={(e) => onChange(tasks.map((x, k) => (k === i ? e.target.value : x)))}
+          />
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--danger-ghost"
+            onClick={() => onChange(tasks.filter((_, k) => k !== i))}
+            aria-label={`Remove checklist item ${i + 1}`}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn btn--xs btn--ghost"
+        disabled={tasks.length >= EXAM_LIMITS.tasks}
+        onClick={() => onChange([...tasks, ''])}
+      >
+        <Icon name="plus" size={13} /> Add item
       </button>
     </div>
   );
@@ -260,9 +303,35 @@ function ExamPreview({ id, draft }) {
       {res?.sections?.map((sec) => (
         <div key={sec.index} className="preview__section">
           <div className="section-head section-head--compact">
-            <span className="section-head__eyebrow">Section {sec.index + 1}</span>
+            <span className="section-head__eyebrow">
+              {sec.type === 'submit' ? 'Final step' : `Section ${sec.index + 1}`}
+            </span>
             <h3 className="section-head__title">{sec.title}</h3>
           </div>
+          {sec.body && (
+            <div className="panel">
+              <Markdown>{sec.body}</Markdown>
+            </div>
+          )}
+          {sec.type === 'info' && sec.tasks.length > 0 && (
+            <div className="exam-checklist">
+              {sec.tasks.map((t, ti) => (
+                <label key={ti} className="choice exam-checklist__item">
+                  <input type="checkbox" disabled />
+                  <span className="choice__text">
+                    <Markdown>{t}</Markdown>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          {sec.type === 'submit' && (
+            <p className="muted small">
+              {sec.review
+                ? 'Shows how many questions are answered and links to anything left, then the Submit button.'
+                : 'Shows the Submit button only.'}
+            </p>
+          )}
           {sec.questions.map((q) => {
             n += 1;
             return (
@@ -542,116 +611,192 @@ export default function ExamEditor({ id, initial }) {
             </label>
           </section>
 
-          {tpl.content.map((sec, si) => (
-            <section className="editor-section" key={si}>
-              <div className="editor-section__head">
-                <span className="dist__index">{si + 1}</span>
-                <input
-                  className="field__input editor-section__title-input"
-                  value={sec.title}
-                  maxLength={EXAM_LIMITS.sectionTitle}
-                  aria-label={`Section ${si + 1} title`}
-                  onChange={(e) => setSection(si, { ...sec, title: e.target.value })}
-                />
-                <MinutesField
-                  label="Minutes"
-                  value={sec.minutes}
-                  onChange={(v) => setSection(si, { ...sec, minutes: v })}
-                />
-                <span className="qedit__tools">
-                  <button
-                    type="button"
-                    className="btn btn--xs btn--icon btn--ghost"
-                    disabled={si === 0}
-                    onClick={() => set({ ...tpl, content: move(tpl.content, si, -1) })}
-                    aria-label="Move section up"
-                  >
-                    <Icon name="arrowUp" size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--xs btn--icon btn--ghost"
-                    disabled={si === tpl.content.length - 1}
-                    onClick={() => set({ ...tpl, content: move(tpl.content, si, 1) })}
-                    aria-label="Move section down"
-                  >
-                    <Icon name="arrowDown" size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--xs btn--icon btn--danger-ghost"
-                    disabled={tpl.content.length <= 1}
-                    onClick={() =>
-                      window.confirm(`Remove section ${si + 1} and its questions?`) &&
-                      set({ ...tpl, content: tpl.content.filter((_, i) => i !== si) })
-                    }
-                    aria-label="Remove section"
-                  >
-                    <Icon name="trash" size={13} />
-                  </button>
-                </span>
-              </div>
-              {sec.questions.map((q, qi) => {
-                counter += 1;
-                return (
-                  <QuestionEditor
-                    key={qi}
-                    q={q}
-                    number={counter}
-                    canUp={qi > 0}
-                    canDown={qi < sec.questions.length - 1}
-                    onChange={(nq) =>
-                      setSection(si, {
-                        ...sec,
-                        questions: sec.questions.map((x, k) => (k === qi ? nq : x)),
-                      })
-                    }
-                    onMove={(d) =>
-                      setSection(si, { ...sec, questions: move(sec.questions, qi, d) })
-                    }
-                    onRemove={() =>
-                      setSection(si, {
-                        ...sec,
-                        questions: sec.questions.filter((_, k) => k !== qi),
-                      })
-                    }
+          {tpl.content.map((sec, si) => {
+            const type = sectionType(sec);
+            const isSubmit = type === 'submit';
+            const last = tpl.content.length - 1; // the submit section
+            return (
+              <section className={`editor-section editor-section--${type}`} key={si}>
+                <div className="editor-section__head">
+                  <span className="dist__index">
+                    {isSubmit ? <Icon name="flag" size={13} /> : si + 1}
+                  </span>
+                  <input
+                    className="field__input editor-section__title-input"
+                    value={sec.title}
+                    maxLength={EXAM_LIMITS.sectionTitle}
+                    placeholder={isSubmit ? 'Review and submit' : ''}
+                    aria-label={`Section ${si + 1} title`}
+                    onChange={(e) => setSection(si, { ...sec, title: e.target.value })}
                   />
-                );
-              })}
-              <div className="qedit__add">
-                {QUESTION_TYPE_NAMES.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className="btn btn--xs btn--ghost"
-                    disabled={sec.questions.length >= EXAM_LIMITS.questionsPerSection}
-                    onClick={() =>
-                      setSection(si, { ...sec, questions: [...sec.questions, blankQuestion(t)] })
-                    }
-                  >
-                    <Icon name="plus" size={12} /> {QUESTION_TYPES[t].label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
+                  <span className={`tag tag--section-${type}`}>{SECTION_TYPES[type]}</span>
+                  {!isSubmit && (
+                    <DurationField
+                      label="Time"
+                      value={sec.minutes}
+                      onChange={(v) => setSection(si, { ...sec, minutes: v })}
+                    />
+                  )}
+                  {!isSubmit && (
+                    <span className="qedit__tools">
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--icon btn--ghost"
+                        disabled={si === 0}
+                        onClick={() => set({ ...tpl, content: move(tpl.content, si, -1) })}
+                        aria-label="Move section up"
+                      >
+                        <Icon name="arrowUp" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--icon btn--ghost"
+                        disabled={si >= last - 1}
+                        onClick={() => set({ ...tpl, content: move(tpl.content, si, 1) })}
+                        aria-label="Move section down"
+                      >
+                        <Icon name="arrowDown" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--icon btn--danger-ghost"
+                        disabled={last <= 1}
+                        onClick={() =>
+                          window.confirm(`Remove section ${si + 1} and everything in it?`) &&
+                          set({ ...tpl, content: tpl.content.filter((_, i) => i !== si) })
+                        }
+                        aria-label="Remove section"
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
 
-          <button
-            type="button"
-            className="btn btn--ghost btn--block"
-            disabled={tpl.content.length >= EXAM_LIMITS.sections}
-            onClick={() =>
-              set({
-                ...tpl,
-                content: [
-                  ...tpl.content,
-                  { title: `Section ${tpl.content.length + 1}`, questions: [blankQuestion()] },
-                ],
-              })
-            }
-          >
-            <Icon name="plus" size={15} /> Add section
-          </button>
+                {type !== 'questions' && (
+                  <label className="field field--compact">
+                    <span className="field__label">
+                      {isSubmit
+                        ? 'Text above the submit button (Markdown, optional)'
+                        : 'Instructions (Markdown; images by library file name)'}
+                    </span>
+                    <textarea
+                      className="field__input"
+                      rows={Math.min(12, Math.max(3, sec.body.split('\n').length + 1))}
+                      maxLength={EXAM_LIMITS.body}
+                      value={sec.body}
+                      placeholder={
+                        isSubmit
+                          ? 'e.g. Check every part before you hand in.'
+                          : 'e.g. Cable the switch to the router, then call your instructor over to check it.'
+                      }
+                      onChange={(e) => setSection(si, { ...sec, body: e.target.value })}
+                    />
+                  </label>
+                )}
+
+                {type === 'info' && (
+                  <TasksEditor
+                    tasks={sec.tasks}
+                    onChange={(tasks) => setSection(si, { ...sec, tasks })}
+                  />
+                )}
+
+                {isSubmit && (
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={sec.review}
+                      onChange={(e) => setSection(si, { ...sec, review: e.target.checked })}
+                    />
+                    <span>
+                      Show a review first: how many questions are answered, with links to any
+                      unanswered question or unfinished checklist. Untick for a plain submit button.
+                    </span>
+                  </label>
+                )}
+
+                {type === 'questions' && (
+                  <>
+                    {sec.questions.map((q, qi) => {
+                      counter += 1;
+                      return (
+                        <QuestionEditor
+                          key={qi}
+                          q={q}
+                          number={counter}
+                          canUp={qi > 0}
+                          canDown={qi < sec.questions.length - 1}
+                          onChange={(nq) =>
+                            setSection(si, {
+                              ...sec,
+                              questions: sec.questions.map((x, k) => (k === qi ? nq : x)),
+                            })
+                          }
+                          onMove={(d) =>
+                            setSection(si, { ...sec, questions: move(sec.questions, qi, d) })
+                          }
+                          onRemove={() =>
+                            setSection(si, {
+                              ...sec,
+                              questions: sec.questions.filter((_, k) => k !== qi),
+                            })
+                          }
+                        />
+                      );
+                    })}
+                    <div className="qedit__add">
+                      {QUESTION_TYPE_NAMES.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className="btn btn--xs btn--ghost"
+                          disabled={sec.questions.length >= EXAM_LIMITS.questionsPerSection}
+                          onClick={() =>
+                            setSection(si, {
+                              ...sec,
+                              questions: [...sec.questions, blankQuestion(t)],
+                            })
+                          }
+                        >
+                          <Icon name="plus" size={12} /> {QUESTION_TYPES[t].label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {si === last - 1 && (
+                  <div className="section-add">
+                    <span className="muted small">Add a section before the submit step:</span>
+                    {[
+                      ['questions', 'Questions'],
+                      ['info', 'Instructions & checklist'],
+                    ].map(([t, label]) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="btn btn--sm btn--ghost"
+                        disabled={tpl.content.length > EXAM_LIMITS.sections}
+                        onClick={() =>
+                          set({
+                            ...tpl,
+                            content: [
+                              ...tpl.content.slice(0, last),
+                              blankSection(t, last + 1),
+                              tpl.content[last],
+                            ],
+                          })
+                        }
+                      >
+                        <Icon name="plus" size={14} /> {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
 
           <details className="typo-section">
             <summary className="typo-section__head">

@@ -16,14 +16,17 @@ import {
   isAnswered,
   examUnlockedSection,
   isExamSectionComplete,
+  listTasks,
+  sectionType,
 } from '../../../shared/exam-schema.js';
 
 /**
  * Participant side of EXAM sessions, mounted at /api/participant/exam.
  *
  * Sections unlock like a lab's: a section opens once every question in the
- * sections before it has an answer, and locked sections are never sent (nor
- * can they be answered). Participants may move freely back through what they
+ * sections before it has an answer and every checklist item (info sections)
+ * is ticked, and locked sections are never sent (nor can they be answered).
+ * Ticks are stored with the answers, under "<section>.t<item>" keys. Participants may move freely back through what they
  * have unlocked. Correct answers and accepted-answer lists never leave the
  * server, and participants are never told whether a response was right.
  * Responses autosave (latest value per question on the seat, every change as a
@@ -139,6 +142,8 @@ router.get(
       template_version: req.session.template_version,
       question_count: questions.length,
       total_sections: content.length,
+      // -1 for sessions launched before exams had a submit section.
+      submit_section: content.findIndex((sec) => sectionType(sec) === 'submit'),
       submitted: Boolean(p.submitted_at),
       submitted_at: p.submitted_at,
     };
@@ -162,12 +167,25 @@ router.get(
     const sections = [];
     content.forEach((sec, si) => {
       const delivered = si <= unlocked;
+      const type = sectionType(sec);
       const block = {
         index: si,
+        type,
         title: sec.title,
         complete: isExamSectionComplete(content, si, all),
         questions: [],
       };
+      if (delivered && type !== 'questions') {
+        block.body = injectImages(sec.body || '', images);
+        if (type === 'info') {
+          block.tasks = (sec.tasks || []).map((text, ti) => ({
+            key: `${si}.t${ti}`,
+            text: injectImages(text, images),
+          }));
+        } else {
+          block.review = sec.review !== false;
+        }
+      }
       (sec.questions || []).forEach((question, qi) => {
         n += 1;
         if (!delivered) return;
@@ -184,7 +202,9 @@ router.get(
       if (delivered) sections.push(block);
     });
     const answers = {};
-    for (const { key, si } of questions) if (si <= unlocked && key in all) answers[key] = all[key];
+    for (const { key, si } of [...questions, ...listTasks(content)]) {
+      if (si <= unlocked && key in all) answers[key] = all[key];
+    }
 
     res.json({
       ...base,
@@ -201,8 +221,9 @@ router.get(
  * PUT /api/participant/exam/answer
  * Body: { key: "section.question", value } — value null clears the response.
  * Shapes: single → option index, multiple → array of indices, truefalse →
- * boolean, short / long → text. Refused for a locked section and once the
- * exam has been submitted. Returns the (possibly newly) unlocked section.
+ * boolean, short / long → text. A checklist item ("section.tN") takes true
+ * (ticked) or null / false (unticked). Refused for a locked section and once
+ * the exam has been submitted. Returns the (possibly newly) unlocked section.
  */
 router.put(
   '/answer',
@@ -213,15 +234,18 @@ router.put(
     if (p.submitted_at) throw httpError(409, 'This exam has already been submitted', 'SUBMITTED');
     const key = String(req.body?.key ?? '');
     const content = contentOf(req.session);
-    const entry = listQuestions(content).find((x) => x.key === key);
+    const entry =
+      listQuestions(content).find((x) => x.key === key) ||
+      listTasks(content).find((x) => x.key === key);
     if (!entry) throw httpError(400, 'Unknown question');
     if (entry.si > unlockedFor(content, p)) throw httpError(403, 'Section is locked');
 
     const raw = req.body?.value;
-    const value =
-      raw === null || raw === undefined
-        ? null
-        : QUESTION_TYPES[entry.q.type].normaliseResponse(raw, entry.q);
+    let value = null;
+    if (!entry.q) value = raw === true ? true : null;
+    else if (raw !== null && raw !== undefined) {
+      value = QUESTION_TYPES[entry.q.type].normaliseResponse(raw, entry.q);
+    }
 
     const answers = parseObject(p.answers);
     const before = JSON.stringify(answers[key] ?? null);
@@ -234,7 +258,12 @@ router.put(
       touch(p.id, now);
       return res.json({ ok: true, saved_at: now, unlocked_section: unlocked });
     }
-    recordAnswer(p, answers, key, describeResponse(entry.q, value).slice(0, 500), now);
+    const logged = entry.q
+      ? describeResponse(entry.q, value).slice(0, 500)
+      : value
+        ? 'Ticked'
+        : 'Unticked';
+    recordAnswer(p, answers, key, logged, now);
     res.json({
       ok: true,
       saved_at: now,
@@ -286,7 +315,10 @@ router.post('/submit', actionLimiter, (req, res) => {
     : closeOpenVisit(p, now, breaksOf(req.session));
   const { changes } = q.submit.run(now, now, now, JSON.stringify(times), now, p.id);
   if (changes) {
-    const answered = Object.keys(parseObject(p.answers)).length;
+    const all = parseObject(p.answers);
+    const answered = listQuestions(contentOf(req.session)).filter(({ key }) =>
+      isAnswered(all[key]),
+    ).length;
     log.info('exam.submitted', { participant: p.id, session: req.session.id, answered });
   }
   noStore(res);

@@ -8,6 +8,9 @@ import {
   gradeResponse,
   publicQuestion,
   isManualQuestion,
+  examUnlockedSection,
+  isExamSectionComplete,
+  listTasks,
 } from '../../shared/exam-schema.js';
 import {
   parseExamMarkdown,
@@ -142,7 +145,7 @@ test('exam sections carry a time allocation through markdown', () => {
   const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
   assert.deepEqual(
     exam.content.map((s) => s.minutes),
-    [5, 10],
+    [5, 10, 10, null],
   );
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
   const untimed = parseExamMarkdown('# A\n\n## [tf] Sky is blue\n> answer: true\n');
@@ -183,4 +186,109 @@ test('Studio imports: labs and exams are told apart (JSON kind, Markdown types)'
   assert.equal(looksLikeExamMarkdown('# P\n\n## [mcq] Pick one\n- [x] a\n'), true);
   assert.equal(looksLikeExamMarkdown('# S\n\n## [desk] Do it\nBody\n'), false);
   assert.throws(() => parseExamMarkdown('---\nkind: lab\n---\n# S\n'), /is a lab/);
+});
+
+test('info sections: instructions and a checklist the participant ticks off', () => {
+  const md = `---
+title: Bench exam
+---
+# Part 1
+## [tf] Sky is blue
+> answer: true
+
+# [info] Bench check
+> minutes: 15
+Cable the switch, then call your instructor over.
+
+## Wiring
+\`\`\`
+- [ ] not an item (fenced)
+\`\`\`
+- [ ] Switch cabled
+- [x] Instructor checked it
+
+# Part 2
+## [short] Port?
+`;
+  const exam = parseExamMarkdown(md);
+  const info = exam.content[1];
+  assert.equal(info.type, 'info');
+  assert.equal(info.minutes, 15);
+  assert.deepEqual(info.tasks, ['Switch cabled', 'Instructor checked it']);
+  assert.match(info.body, /^Cable the switch/);
+  assert.match(info.body, /## Wiring/);
+  assert.match(info.body, /not an item \(fenced\)/);
+  assert.deepEqual(info.questions, []);
+  assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam, 'round-trips');
+  assert.deepEqual(examErrors(exam), []);
+  assert.deepEqual(
+    listTasks(exam.content).map((t) => t.key),
+    ['1.t0', '1.t1'],
+  );
+
+  // The checklist gates the next section; ticks are `true` under the task keys.
+  const answered = { '0.0': true };
+  assert.equal(examUnlockedSection(exam.content, answered), 1);
+  assert.equal(isExamSectionComplete(exam.content, 1, { ...answered, '1.t0': true }), false);
+  const ticked = { ...answered, '1.t0': true, '1.t1': true };
+  assert.equal(examUnlockedSection(exam.content, ticked), 3, 'part 2, then straight to submit');
+  // …and a checklist right before submit has to be ticked too.
+  const last = parseExamMarkdown(
+    '# A\n## [tf] x\n> answer: true\n\n# [checklist] Check\n- [ ] y\n',
+  );
+  assert.equal(examUnlockedSection(last.content, { '0.0': true }), 1);
+  assert.equal(examUnlockedSection(last.content, { '0.0': true, '1.t0': true }), 2);
+
+  assert.throws(
+    () => parseExamMarkdown('# [info] I\n## [single] Not here\n- [x] a\n'),
+    /cannot go in an? \[info\] section/i,
+  );
+  assert.deepEqual(examErrors(normaliseExam({ title: 'T', content: [{ type: 'info' }] })), [
+    'Section 1 needs a title',
+    'Section 1 needs instructions or a checklist',
+  ]);
+  assert.deepEqual(
+    examErrors(
+      normaliseExam({ title: 'T', content: [{ type: 'info', title: 'I', tasks: ['a'] }] }),
+    ),
+    [],
+    'an exam can be checklists only',
+  );
+});
+
+test('every exam ends with exactly one submit section', () => {
+  const plain = normaliseExam({ title: 'T', content: [{ title: 'A', questions: [] }] });
+  assert.deepEqual(plain.content[1], {
+    type: 'submit',
+    title: 'Review and submit',
+    minutes: null,
+    body: '',
+    review: true,
+    questions: [],
+  });
+  const moved = normaliseExam({
+    content: [
+      { type: 'submit', title: 'Hand in', review: 'false', minutes: 5 },
+      { title: 'A' },
+      { type: 'submit', title: 'Second' },
+    ],
+  });
+  assert.deepEqual(
+    moved.content.map((s) => [s.type, s.title]),
+    [
+      ['questions', 'A'],
+      ['submit', 'Hand in'],
+    ],
+  );
+  assert.equal(moved.content[1].review, false);
+  assert.equal(moved.content[1].minutes, null);
+
+  const md = examToMarkdown(moved);
+  assert.match(md, /# \[submit\] Hand in\n> review: false\n/);
+  assert.deepEqual(parseExamMarkdown(md), moved);
+  assert.deepEqual(
+    examErrors(normaliseExam({ title: 'T', content: [] })),
+    ['At least one section is required'],
+    'the submit section alone is not an exam',
+  );
 });

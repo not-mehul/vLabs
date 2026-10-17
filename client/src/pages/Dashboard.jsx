@@ -6,6 +6,11 @@ import { slug } from '../lib/format.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
+import DurationField from '../components/editor/DurationField.jsx';
+
+/** Default session length by template kind, in minutes (a lab day, an exam hour). */
+const DEFAULT_MINUTES = { lab: 8 * 60, exam: 60 };
+const MAX_MINUTES = 24 * 60;
 
 function StatusPill({ status }) {
   return <span className={`pill pill--${status}`}>{status}</span>;
@@ -15,7 +20,9 @@ function CreateSession({ templates, onCreated }) {
   const { call } = useInstructorApi();
   const [templateId, setTemplateId] = useState('');
   const [title, setTitle] = useState('');
-  const [duration, setDuration] = useState(120);
+  const [duration, setDuration] = useState(DEFAULT_MINUTES.lab);
+  // Until the instructor changes the length, it follows the template's kind.
+  const [durationTouched, setDurationTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -25,6 +32,10 @@ function CreateSession({ templates, onCreated }) {
     e.preventDefault();
     if (!templateId) {
       setError('Choose a template.');
+      return;
+    }
+    if (!(duration >= 5)) {
+      setError('A session must run for at least 5 minutes.');
       return;
     }
     setBusy(true);
@@ -63,7 +74,11 @@ function CreateSession({ templates, onCreated }) {
             <select
               className="field__input"
               value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
+              onChange={(e) => {
+                setTemplateId(e.target.value);
+                const t = templates.find((x) => String(x.id) === e.target.value);
+                if (t && !durationTouched) setDuration(DEFAULT_MINUTES[t.kind || 'lab']);
+              }}
             >
               <option value="">Select…</option>
               {[
@@ -93,25 +108,26 @@ function CreateSession({ templates, onCreated }) {
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>
-          <label className="field field--narrow">
-            <span className="field__label">Minutes</span>
-            <input
-              className="field__input"
-              type="number"
-              min="5"
-              max="1440"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-            />
-          </label>
+          <DurationField
+            label="Runs for"
+            value={duration}
+            max={MAX_MINUTES}
+            allowEmpty={false}
+            compact={false}
+            onChange={(v) => {
+              setDuration(v);
+              setDurationTouched(true);
+            }}
+          />
           <button className="btn btn--primary" disabled={!canSubmit}>
             <Icon name="play" size={15} /> {busy ? 'Launching…' : 'Launch'}
           </button>
         </div>
       )}
       <p className="muted small">
-        The session takes a copy of the template at launch; later edits only reach it when you push
-        them from the monitor.
+        Sessions run for 8 hours (labs) or 1 hour (exams) unless you change it; use +30 min on the
+        monitor to extend. The session takes a copy of the template at launch; later edits only
+        reach it when you push them from the monitor.
       </p>
       {error && (
         <p className="form__error" role="alert">

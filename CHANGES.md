@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.8.0). The first section is the original code
+Newest entry at the bottom (1.9.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -613,3 +613,48 @@ want allocation-based alerts.
 networks still need their password once (`nmcli device wifi connect …`).
 NetworkManager then rejoins any remembered network on its own (DEPLOYMENT.md
 §1.2a).
+
+## 1.9.0 — checklist sections, submit section, lab authoring, session lengths
+
+- **Instructions & checklist sections in exams** (`# [info] Title`, JSON
+  `"type": "info"`). A section of instructions (Markdown, images) and a
+  checklist the participant ticks off before the next section unlocks, for
+  practical work such as "cable the bench, then have your instructor check
+  it". Completion is the participant's own: nothing for the instructor to
+  approve in vLabs (checkoffs stay on your own grading sheet). Ticks are saved
+  like answers under `"<section>.t<item>"` keys, show in the answer log, and
+  are never graded. Supported in the exam editor, Template Studio (builder,
+  outline, preview, validation, export) and the Markdown/JSON formats.
+- **The submit step is part of the exam** (`# [submit] Title`, JSON
+  `"type": "submit"`): always the last section, exactly once. Rename it, add
+  text above the button, and choose **Show a review first** (answered count,
+  links to unanswered questions and unfinished checklists) or a plain
+  **Submit** button (`> review: false`). Exams without one (older templates
+  and imports) get the default _Review and submit_; sessions launched before
+  this release show it as before.
+- **Participant exam UI.** The selected option of a multiple-choice or
+  select-all question keeps its highlighted border while the pointer is
+  over it (the hover style used to hide the option just clicked). The
+  per-question "Saved ✓" is gone (it read as "correct"); one save indicator
+  sits in the header instead, as a cloud: _Saving…_, _Saved_, _Not saved,
+  retrying_. The confirmation after submitting now reads _Exam completed:
+  your exam is complete and your answers have been recorded_ (no answer
+  count, no mention of results).
+- **New lab** in the portal (**Templates → New lab**), alongside New exam
+  and Import (still the main route). The lab editor now changes structure
+  too: add, remove and reorder sections and steps, change step types, add
+  and remove hints, solutions, checkpoints (exact or pattern, accepted
+  answers, capture) and variables. A checkpoint left without an answer is
+  flagged before saving.
+- **Session length defaults to 8 hours for labs and 1 hour for exams**
+  (server default when the launcher sends none, and the launcher follows the
+  chosen template's kind until you change it). Lengths are typed as **hours
+  and minutes**: the launcher's **Runs for**, section time allocations in the
+  lab and exam editors, and Template Studio's section headers. Storage stays
+  in minutes.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration: existing exam templates gain
+the default submit section the next time they are opened and saved, and
+running sessions keep working unchanged.

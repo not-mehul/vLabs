@@ -11,15 +11,73 @@ import Icon from '../components/Icon.jsx';
 import LabPreview from '../components/editor/LabPreview.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
-import MinutesField from '../components/editor/MinutesField.jsx';
+import DurationField from '../components/editor/DurationField.jsx';
 import {
   normaliseTemplate,
   findUnknownPlaceholders,
   findMissingImages,
+  blankStep,
+  blankSection,
   LIMITS,
 } from '../../../shared/template-schema.js';
 
 const TYPE_LABEL = { desk: 'Hands-on', computer: 'Workstation', info: 'Read' };
+
+const BLANK_LAB = () =>
+  normaliseTemplate({ title: '', description: '', variables: [], content: [blankSection(1)] });
+
+const BLANK_CHECKPOINT = () => ({
+  prompt: '',
+  placeholder: '',
+  mode: 'exact',
+  answer: '',
+  answers: [],
+  pattern: '',
+  capture: '',
+});
+
+const move = (arr, i, d) => {
+  const j = i + d;
+  if (j < 0 || j >= arr.length) return arr;
+  const next = [...arr];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+};
+
+/** Move up / move down / remove buttons for a section or step. */
+function Tools({ what, canUp, canDown, canRemove, onMove, onRemove }) {
+  return (
+    <span className="qedit__tools">
+      <button
+        type="button"
+        className="btn btn--xs btn--icon btn--ghost"
+        disabled={!canUp}
+        onClick={() => onMove(-1)}
+        aria-label={`Move ${what} up`}
+      >
+        <Icon name="arrowUp" size={13} />
+      </button>
+      <button
+        type="button"
+        className="btn btn--xs btn--icon btn--ghost"
+        disabled={!canDown}
+        onClick={() => onMove(1)}
+        aria-label={`Move ${what} down`}
+      >
+        <Icon name="arrowDown" size={13} />
+      </button>
+      <button
+        type="button"
+        className="btn btn--xs btn--icon btn--danger-ghost"
+        disabled={!canRemove}
+        onClick={onRemove}
+        aria-label={`Remove ${what}`}
+      >
+        <Icon name="trash" size={13} />
+      </button>
+    </span>
+  );
+}
 
 /** Text input / textarea that grows with its content. */
 function Text({ label, value, onChange, multiline, mono, max }) {
@@ -41,6 +99,209 @@ function Text({ label, value, onChange, multiline, mono, max }) {
   );
 }
 
+/**
+ * One step: type, text, hints, solution and checkpoint. `edit(fn)` mutates a
+ * draft copy of the step (see LabEditor's `update`).
+ */
+function StepEditor({ st, label, canUp, canDown, canRemove, onMove, onRemove, edit }) {
+  const cp = st.checkpoint;
+  const setCp = (fn) => edit((s) => fn(s.checkpoint));
+  return (
+    <div className="typo-step">
+      <div className="typo-step__head">
+        <span className={`card__kind card__kind--${st.type}`}>
+          <Icon name={st.type} size={13} />
+        </span>
+        <select
+          className="field__input field__input--sm"
+          value={st.type}
+          onChange={(e) => edit((s) => (s.type = e.target.value))}
+          aria-label={`${label} type`}
+        >
+          {Object.entries(TYPE_LABEL).map(([t, l]) => (
+            <option key={t} value={t}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <span className="muted small">{label}</span>
+        <Tools
+          what="step"
+          canUp={canUp}
+          canDown={canDown}
+          canRemove={canRemove}
+          onMove={onMove}
+          onRemove={onRemove}
+        />
+      </div>
+      <Text
+        label="Title"
+        value={st.title}
+        max={LIMITS.stepTitle}
+        onChange={(v) => edit((s) => (s.title = v))}
+      />
+      <Text
+        label="Body (Markdown)"
+        value={st.body}
+        multiline
+        max={LIMITS.body}
+        onChange={(v) => edit((s) => (s.body = v))}
+      />
+      {st.type === 'info' ? (
+        <p className="muted small">Read steps have no hints, solution or checkpoint.</p>
+      ) : (
+        <>
+          {st.hints.map((h, hi) => (
+            <div className="typo-pair typo-pair--hint" key={hi}>
+              <Text
+                label={`Hint ${hi + 1} label`}
+                value={h.label}
+                max={LIMITS.hintLabel}
+                onChange={(v) => edit((s) => (s.hints[hi].label = v))}
+              />
+              <Text
+                label={`Hint ${hi + 1} text`}
+                value={h.text}
+                multiline
+                max={LIMITS.hintText}
+                onChange={(v) => edit((s) => (s.hints[hi].text = v))}
+              />
+              <button
+                type="button"
+                className="btn btn--xs btn--icon btn--danger-ghost"
+                onClick={() => edit((s) => s.hints.splice(hi, 1))}
+                aria-label={`Remove hint ${hi + 1}`}
+              >
+                <Icon name="close" size={13} />
+              </button>
+            </div>
+          ))}
+          <Text
+            label="Solution (optional, Markdown)"
+            value={st.solution}
+            multiline
+            max={LIMITS.solution}
+            onChange={(v) => edit((s) => (s.solution = v))}
+          />
+          {cp ? (
+            <div className="typo-checkpoint">
+              <div className="typo-step__head">
+                <span className="editor-label">
+                  <Icon name="lock" size={12} /> Checkpoint
+                </span>
+                <select
+                  className="field__input field__input--sm"
+                  value={cp.mode}
+                  onChange={(e) => setCp((c) => (c.mode = e.target.value))}
+                  aria-label="Checkpoint type"
+                >
+                  <option value="exact">Exact answer</option>
+                  <option value="pattern">Pattern (format only)</option>
+                </select>
+                <button
+                  type="button"
+                  className="btn btn--xs btn--ghost qedit__tools"
+                  onClick={() => edit((s) => (s.checkpoint = null))}
+                >
+                  <Icon name="close" size={12} /> Remove checkpoint
+                </button>
+              </div>
+              <Text
+                label="Prompt"
+                value={cp.prompt}
+                max={LIMITS.prompt}
+                onChange={(v) => setCp((c) => (c.prompt = v))}
+              />
+              <Text
+                label="Input placeholder"
+                value={cp.placeholder}
+                max={LIMITS.placeholder}
+                onChange={(v) => setCp((c) => (c.placeholder = v))}
+              />
+              {cp.mode === 'pattern' ? (
+                <div className="typo-pair">
+                  <Text
+                    label="Pattern (e.g. XXXX.XXXX.XXXX)"
+                    mono
+                    value={cp.pattern}
+                    max={LIMITS.pattern}
+                    onChange={(v) => setCp((c) => (c.pattern = v))}
+                  />
+                  <Text
+                    label="Save as variable (optional)"
+                    mono
+                    value={cp.capture}
+                    max={LIMITS.captureName}
+                    onChange={(v) => setCp((c) => (c.capture = v))}
+                  />
+                </div>
+              ) : (
+                <>
+                  <Text
+                    label="Answer"
+                    mono
+                    value={cp.answer}
+                    max={LIMITS.answer}
+                    onChange={(v) => setCp((c) => (c.answer = v))}
+                  />
+                  {cp.answers.map((a, ai) => (
+                    <div className="typo-pair typo-pair--alt" key={ai}>
+                      <Text
+                        label={`Also accepted ${ai + 1}`}
+                        mono
+                        value={a}
+                        max={LIMITS.answer}
+                        onChange={(v) => setCp((c) => (c.answers[ai] = v))}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--icon btn--danger-ghost"
+                        onClick={() => setCp((c) => c.answers.splice(ai, 1))}
+                        aria-label={`Remove accepted answer ${ai + 1}`}
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          ) : null}
+          <div className="qedit__add">
+            <button
+              type="button"
+              className="btn btn--xs btn--ghost"
+              disabled={st.hints.length >= LIMITS.hintsPerStep}
+              onClick={() => edit((s) => s.hints.push({ label: '', text: '' }))}
+            >
+              <Icon name="plus" size={12} /> Hint
+            </button>
+            {!cp && (
+              <button
+                type="button"
+                className="btn btn--xs btn--ghost"
+                onClick={() => edit((s) => (s.checkpoint = BLANK_CHECKPOINT()))}
+              >
+                <Icon name="plus" size={12} /> Checkpoint
+              </button>
+            )}
+            {cp?.mode === 'exact' && (
+              <button
+                type="button"
+                className="btn btn--xs btn--ghost"
+                disabled={cp.answers.length >= LIMITS.altAnswers}
+                onClick={() => setCp((c) => c.answers.push(''))}
+              >
+                <Icon name="plus" size={12} /> Accepted answer
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Does any text in this step contain the search term? */
 function stepMatches(step, term) {
   if (!term) return true;
@@ -48,24 +309,27 @@ function stepMatches(step, term) {
 }
 
 /**
- * Minimal lab editor. Labs are authored in vLabs Template Studio and imported
- * here (.zip package, .md or .json); this page only corrects TEXT — titles,
- * bodies, hints, solutions, checkpoint prompts/answers, formula expressions.
- * Structure (sections, steps, types, which checkpoints exist, variable names)
- * is read-only: restructure in the Studio and re-import.
+ * Lab editor. Labs are normally authored in vLabs Template Studio and
+ * imported here (.zip package, .md or .json): id "new" is that import page.
+ * The editor can also build a lab from scratch (id "new-lab") and change any
+ * lab's structure: sections, steps and their types, hints, solutions,
+ * checkpoints and variables, as well as all of its text.
  */
 export default function LabEditor({ id, initial }) {
-  const isNew = id === 'new';
+  const isBlank = id === 'new-lab';
+  const isNew = id === 'new' || isBlank;
   const navigate = useNavigate();
   const { call } = useInstructorApi();
   const fileRef = useRef(null);
 
-  const [tpl, setTpl] = useState(initial ? normaliseTemplate(initial) : null);
+  const [tpl, setTpl] = useState(
+    initial ? normaliseTemplate(initial) : isBlank ? BLANK_LAB() : null,
+  );
   const [meta, setMeta] = useState({
     archived_at: initial?.archived_at ?? null,
     version: initial?.version ?? null,
   });
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(isBlank);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [errorDetails, setErrorDetails] = useState([]);
@@ -114,7 +378,11 @@ export default function LabEditor({ id, initial }) {
         );
         return;
       }
-      if (!isNew && tpl && !window.confirm(`Replace this lab's content with "${file.name}"?`)) {
+      if (
+        (!isNew || (isBlank && tpl.title.trim())) &&
+        tpl &&
+        !window.confirm(`Replace this lab's content with "${file.name}"?`)
+      ) {
         return;
       }
       let notes = [];
@@ -199,6 +467,26 @@ export default function LabEditor({ id, initial }) {
         : [],
     [tpl, images],
   );
+  // A checkpoint with nothing to check would be dropped silently on save.
+  const emptyCheckpoints = useMemo(
+    () =>
+      tpl
+        ? tpl.content.flatMap((sec, si) =>
+            sec.steps
+              .map((st, sti) => ({ st, at: `${si + 1}.${sti + 1}` }))
+              .filter(
+                ({ st }) =>
+                  st.type !== 'info' &&
+                  st.checkpoint &&
+                  !String(
+                    st.checkpoint.mode === 'pattern' ? st.checkpoint.pattern : st.checkpoint.answer,
+                  ).trim(),
+              )
+              .map(({ at }) => at),
+          )
+        : [],
+    [tpl],
+  );
   const term = find.trim().toLowerCase();
   const matchCount = useMemo(
     () =>
@@ -227,7 +515,7 @@ export default function LabEditor({ id, initial }) {
             <Icon name="chevronLeft" size={15} /> Templates
           </button>
           <h1>
-            {isNew ? 'Import from Template Studio' : tpl?.title || 'Lab'}
+            {isBlank ? 'New lab' : isNew ? 'Import from Template Studio' : tpl?.title || 'Lab'}
             {meta.version != null && <span className="muted small"> · v{meta.version}</span>}
           </h1>
         </div>
@@ -249,10 +537,10 @@ export default function LabEditor({ id, initial }) {
 
       <div className="banner banner--info" role="note">
         <span>
-          Labs are written in <strong>vLabs Template Studio</strong>. Import its <code>.zip</code>{' '}
-          package (images included), <code>.md</code> or <code>.json</code> here. This page is for
-          fixing small typos only — to add, remove or reorder sections, steps or checkpoints, export
-          the lab, change it in the Studio and import it again.
+          Labs are best written in <strong>vLabs Template Studio</strong> and imported here (its{' '}
+          <code>.zip</code> package includes the images; <code>.md</code> and <code>.json</code>{' '}
+          work too). You can also build or change a lab on this page: sections, steps, hints,
+          solutions, checkpoints and variables.
         </span>
       </div>
 
@@ -317,6 +605,14 @@ export default function LabEditor({ id, initial }) {
               </span>
             </div>
           )}
+          {emptyCheckpoints.length > 0 && (
+            <div className="banner banner--warn" role="status">
+              <span>
+                <strong>Checkpoint without an answer:</strong> step {emptyCheckpoints.join(', ')}.
+                Give it an answer (or a pattern), or it is left out when you save.
+              </span>
+            </div>
+          )}
           {missingImages.length > 0 && (
             <div className="banner banner--warn" role="status">
               <span>
@@ -345,7 +641,8 @@ export default function LabEditor({ id, initial }) {
             </label>
             <div className="toolbar__actions">
               <button className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}>
-                <Icon name="upload" size={15} /> {isNew ? 'Choose another file' : 'Re-import'}
+                <Icon name="upload" size={15} />{' '}
+                {isBlank ? 'Import' : isNew ? 'Choose another file' : 'Re-import'}
               </button>
               <button
                 className="btn btn--sm btn--ghost"
@@ -399,174 +696,122 @@ export default function LabEditor({ id, initial }) {
                   .map((st, sti) => ({ st, sti }))
                   .filter(({ st }) => stepMatches(st, term));
                 if (term && !steps.length && !sec.title.toLowerCase().includes(term)) return null;
+                const setSec = (fn) => update((t) => fn(t.content[si]));
                 return (
                   <details className="typo-section" key={si} open={Boolean(term) || si === 0}>
                     <summary className="typo-section__head">
                       <span className="dist__index">{si + 1}</span>
-                      <span className="typo-section__title">{sec.title}</span>
+                      <span className="typo-section__title">{sec.title || 'Untitled section'}</span>
                       <span className="muted small">
                         {sec.steps.length} step{sec.steps.length === 1 ? '' : 's'}
                       </span>
                     </summary>
+                    <div className="typo-section__tools">
+                      <Tools
+                        what="section"
+                        canUp={si > 0}
+                        canDown={si < tpl.content.length - 1}
+                        canRemove={tpl.content.length > 1}
+                        onMove={(d) => update((t) => (t.content = move(t.content, si, d)))}
+                        onRemove={() =>
+                          window.confirm(`Remove section ${si + 1} and its steps?`) &&
+                          update((t) => t.content.splice(si, 1))
+                        }
+                      />
+                    </div>
                     <Text
                       label="Section title"
                       value={sec.title}
                       max={LIMITS.sectionTitle}
-                      onChange={(v) => update((t) => (t.content[si].title = v))}
+                      onChange={(v) => setSec((s) => (s.title = v))}
                     />
-                    <MinutesField
+                    <DurationField
                       value={sec.minutes}
-                      onChange={(v) => update((t) => (t.content[si].minutes = v))}
+                      onChange={(v) => setSec((s) => (s.minutes = v))}
                     />
                     {steps.map(({ st, sti }) => (
-                      <div className="typo-step" key={sti}>
-                        <div className="typo-step__head">
-                          <span className={`card__kind card__kind--${st.type}`}>
-                            {TYPE_LABEL[st.type]}
-                          </span>
-                          <span className="muted small">
-                            Step {si + 1}.{sti + 1}
-                          </span>
-                        </div>
-                        <Text
-                          label="Title"
-                          value={st.title}
-                          max={LIMITS.stepTitle}
-                          onChange={(v) => update((t) => (t.content[si].steps[sti].title = v))}
-                        />
-                        <Text
-                          label="Body (Markdown)"
-                          value={st.body}
-                          multiline
-                          max={LIMITS.body}
-                          onChange={(v) => update((t) => (t.content[si].steps[sti].body = v))}
-                        />
-                        {st.hints.map((h, hi) => (
-                          <div className="typo-pair" key={hi}>
-                            <Text
-                              label={`Hint ${hi + 1} label`}
-                              value={h.label}
-                              max={LIMITS.hintLabel}
-                              onChange={(v) =>
-                                update((t) => (t.content[si].steps[sti].hints[hi].label = v))
-                              }
-                            />
-                            <Text
-                              label={`Hint ${hi + 1} text`}
-                              value={h.text}
-                              multiline
-                              max={LIMITS.hintText}
-                              onChange={(v) =>
-                                update((t) => (t.content[si].steps[sti].hints[hi].text = v))
-                              }
-                            />
-                          </div>
-                        ))}
-                        {st.solution && (
-                          <Text
-                            label="Solution"
-                            value={st.solution}
-                            multiline
-                            max={LIMITS.solution}
-                            onChange={(v) => update((t) => (t.content[si].steps[sti].solution = v))}
-                          />
-                        )}
-                        {st.checkpoint && (
-                          <div className="typo-checkpoint">
-                            <span className="editor-label">
-                              <Icon name="lock" size={12} />{' '}
-                              {st.checkpoint.mode === 'pattern' ? 'Pattern' : 'Exact'} checkpoint
-                              {st.checkpoint.capture && (
-                                <>
-                                  {' '}
-                                  · captures <code>{st.checkpoint.capture}</code>
-                                </>
-                              )}
-                            </span>
-                            <Text
-                              label="Prompt"
-                              value={st.checkpoint.prompt}
-                              max={LIMITS.prompt}
-                              onChange={(v) =>
-                                update((t) => (t.content[si].steps[sti].checkpoint.prompt = v))
-                              }
-                            />
-                            <Text
-                              label="Input placeholder"
-                              value={st.checkpoint.placeholder}
-                              max={LIMITS.placeholder}
-                              onChange={(v) =>
-                                update((t) => (t.content[si].steps[sti].checkpoint.placeholder = v))
-                              }
-                            />
-                            {st.checkpoint.mode === 'pattern' ? (
-                              <Text
-                                label="Pattern"
-                                mono
-                                value={st.checkpoint.pattern}
-                                max={LIMITS.pattern}
-                                onChange={(v) =>
-                                  update((t) => (t.content[si].steps[sti].checkpoint.pattern = v))
-                                }
-                              />
-                            ) : (
-                              <>
-                                <Text
-                                  label="Answer"
-                                  mono
-                                  value={st.checkpoint.answer}
-                                  max={LIMITS.answer}
-                                  onChange={(v) =>
-                                    update((t) => (t.content[si].steps[sti].checkpoint.answer = v))
-                                  }
-                                />
-                                {st.checkpoint.answers.map((a, ai) => (
-                                  <Text
-                                    key={ai}
-                                    label={`Also accepted ${ai + 1}`}
-                                    mono
-                                    value={a}
-                                    max={LIMITS.answer}
-                                    onChange={(v) =>
-                                      update(
-                                        (t) =>
-                                          (t.content[si].steps[sti].checkpoint.answers[ai] = v),
-                                      )
-                                    }
-                                  />
-                                ))}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <StepEditor
+                        key={sti}
+                        st={st}
+                        label={`Step ${si + 1}.${sti + 1}`}
+                        canUp={sti > 0}
+                        canDown={sti < sec.steps.length - 1}
+                        canRemove={sec.steps.length > 1}
+                        onMove={(d) => setSec((s) => (s.steps = move(s.steps, sti, d)))}
+                        onRemove={() => setSec((s) => s.steps.splice(sti, 1))}
+                        edit={(fn) => setSec((s) => fn(s.steps[sti]))}
+                      />
                     ))}
+                    {!term && (
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--ghost"
+                        disabled={sec.steps.length >= LIMITS.stepsPerSection}
+                        onClick={() => setSec((s) => s.steps.push(blankStep()))}
+                      >
+                        <Icon name="plus" size={14} /> Add step
+                      </button>
+                    )}
                   </details>
                 );
               })}
 
-              {!term && tpl.variables.length > 0 && (
-                <details className="typo-section">
+              {!term && (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--block"
+                  disabled={tpl.content.length >= LIMITS.sections}
+                  onClick={() => update((t) => t.content.push(blankSection(t.content.length + 1)))}
+                >
+                  <Icon name="plus" size={15} /> Add section
+                </button>
+              )}
+
+              {!term && (
+                <details className="typo-section" open={isBlank && tpl.variables.length > 0}>
                   <summary className="typo-section__head">
                     <Icon name="settings" size={15} />
                     <span className="typo-section__title">Variables</span>
                     <span className="muted small">{tpl.variables.length} formulas</span>
                   </summary>
                   <p className="muted small">
-                    Names are fixed; only the formula text can be corrected here.
+                    Per-seat values used as <code>{'{{ NAME }}'}</code> in any text. See the
+                    template guide for formulas.
                   </p>
                   {tpl.variables.map((v, vi) => (
-                    <Text
-                      key={vi}
-                      label={v.name}
-                      mono
-                      value={v.expression}
-                      onChange={(val) => update((t) => (t.variables[vi].expression = val))}
-                    />
+                    <div className="typo-pair typo-pair--var" key={vi}>
+                      <Text
+                        label="Name"
+                        mono
+                        value={v.name}
+                        onChange={(val) => update((t) => (t.variables[vi].name = val))}
+                      />
+                      <Text
+                        label="Formula"
+                        mono
+                        value={v.expression}
+                        onChange={(val) => update((t) => (t.variables[vi].expression = val))}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--icon btn--danger-ghost"
+                        onClick={() => update((t) => t.variables.splice(vi, 1))}
+                        aria-label={`Remove variable ${v.name || vi + 1}`}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
                   ))}
+                  <button
+                    type="button"
+                    className="btn btn--xs btn--ghost"
+                    disabled={tpl.variables.length >= LIMITS.variables}
+                    onClick={() => update((t) => t.variables.push({ name: '', expression: '' }))}
+                  >
+                    <Icon name="plus" size={13} /> Add variable
+                  </button>
                 </details>
               )}
-
               {!term && (
                 <details className="typo-section" open={missingImages.length > 0}>
                   <summary className="typo-section__head">
