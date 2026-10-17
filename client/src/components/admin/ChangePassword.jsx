@@ -51,7 +51,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <section className="panel account-panel" id="password" aria-labelledby="password-title">
+    <section className="panel admin-grid__password" id="password" aria-labelledby="password-title">
       <h2 className="panel__title" id="password-title">
         <Icon name="key" size={16} /> Your password
       </h2>

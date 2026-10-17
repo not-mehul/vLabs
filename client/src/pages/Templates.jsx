@@ -190,7 +190,7 @@ export default function Templates() {
                         )}
                       </td>
                       <td className="muted col--lg">{formatDateTime(t.updated_at)}</td>
-                      <td className="muted col--lg">{t.updated_by || '—'}</td>
+                      <td className="muted col--lg cell--nowrap">{t.updated_by || '—'}</td>
                       <td className="table__actions" {...stopRowClick}>
                         {archived ? (
                           <>
