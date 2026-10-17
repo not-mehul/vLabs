@@ -1018,3 +1018,31 @@ current version) run on start.
 
 `deploy/pi/update.sh` as usual. Migration 12 (old exam sections rewritten)
 runs on start.
+
+## 1.18.1 — production clean-up
+
+No change to what instructors or participants do; this release removes
+what the earlier releases left behind.
+
+- **Dead code removed.** The styles of the portal's old lab, exam and image
+  editors (replaced by the Studio in 1.15.0) are gone, and the extra
+  stylesheet is folded into `client/src/styles.css`, about 660 lines
+  lighter. Unused helpers went too: a file reader, a rate-limiter alias,
+  two icons, the old rows form of the participants CSV export and five
+  unused names in the Studio.
+- **Docs match the app.** The README's data model (schema 12), content
+  shape, test list, upgrade notes and project layout are current; the
+  guides name the Studio's views (**Image Library**, **Variables &
+  Formulas**, **Validation Audit**) instead of the old editor's;
+  [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) is rewritten
+  for this release; DEPLOYMENT §2.5 drops the work already done (admin
+  account, password resets in the portal). The command-line tool and
+  `.env.example` point at **Admin**, not the old Account page.
+- **Screenshots** of the current portal, Studio and participant views
+  replace the 1.5.0 ones; three that no page used are removed.
+- **Change log:** the two 1.15.0 entries from parallel change sets are one
+  entry.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.
