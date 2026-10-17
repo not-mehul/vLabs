@@ -56,6 +56,13 @@ export default function Templates() {
     run((tok) => api.deleteTemplate(tok, t.id), `Archived "${t.title}".`);
   }
 
+  function handleDuplicate(t) {
+    run(
+      (tok) => api.duplicateTemplate(tok, t.id),
+      `Duplicated "${t.title}" as "${t.title} (copy)".`,
+    );
+  }
+
   function handleRestore(t) {
     run((tok) => api.restoreTemplate(tok, t.id), `Restored "${t.title}".`);
   }
@@ -192,6 +199,14 @@ export default function Templates() {
                       <td className="muted col--lg">{formatDateTime(t.updated_at)}</td>
                       <td className="muted col--lg cell--nowrap">{t.updated_by || '—'}</td>
                       <td className="table__actions" {...stopRowClick}>
+                        <button
+                          className="btn btn--sm btn--icon btn--ghost"
+                          onClick={() => handleDuplicate(t)}
+                          title="Duplicate template"
+                          aria-label={`Duplicate ${t.title}`}
+                        >
+                          <Icon name="copy" size={16} />
+                        </button>
                         {archived ? (
                           <>
                             <button

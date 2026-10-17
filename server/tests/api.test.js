@@ -689,6 +689,42 @@ test('archived templates can be restored', async () => {
   );
 });
 
+test('a template can be duplicated: same kind and content, new title, its own history', async () => {
+  const src = await call(`/api/templates/${archivedTemplateId}`, { token: instructorToken });
+  const dup = await call(`/api/templates/${archivedTemplateId}/duplicate`, {
+    method: 'POST',
+    token: instructorToken,
+  });
+  assert.equal(dup.status, 201);
+  assert.notEqual(dup.data.id, archivedTemplateId);
+  assert.equal(dup.data.title, `${src.data.title} (copy)`);
+  assert.equal(dup.data.kind, src.data.kind);
+  assert.equal(dup.data.version, 1);
+  assert.deepEqual(dup.data.content, src.data.content);
+  assert.deepEqual(dup.data.variables, src.data.variables);
+  const audit = await call(`/api/templates/${dup.data.id}/audit`, { token: instructorToken });
+  assert.deepEqual(
+    audit.data.map((a) => a.action),
+    ['created'],
+  );
+
+  const named = await call(`/api/templates/${archivedTemplateId}/duplicate`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { title: '  Next term  ' },
+  });
+  assert.equal(named.data.title, 'Next term');
+  assert.equal(
+    (await call('/api/templates/999999/duplicate', { method: 'POST', token: instructorToken }))
+      .status,
+    404,
+  );
+  for (const id of [dup.data.id, named.data.id]) {
+    await call(`/api/templates/${id}`, { method: 'DELETE', token: instructorToken });
+    await call(`/api/templates/${id}?permanent=1`, { method: 'DELETE', token: instructorToken });
+  }
+});
+
 test('permanent deletion is refused with active sessions and otherwise detaches sessions intact', async () => {
   const launch = await call('/api/sessions', {
     method: 'POST',
