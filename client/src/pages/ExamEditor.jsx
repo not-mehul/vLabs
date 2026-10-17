@@ -27,6 +27,7 @@ import {
   isManualQuestion,
 } from '../../../shared/exam-schema.js';
 import { examToMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
+import { LIMITS } from '../../../shared/template-schema.js';
 
 // The submit section is added by normaliseExam.
 const NEW_EXAM = () =>
@@ -146,6 +147,72 @@ function TasksEditor({ tasks, onChange }) {
         <Icon name="plus" size={13} /> Add item
       </button>
     </div>
+  );
+}
+
+/**
+ * Per-seat variables, as in labs: `NAME = formula`, used as {{ NAME }} in any
+ * text of the exam (with the built-ins SEAT_ID, FIRST_NAME, LAST_NAME and
+ * FULL_NAME).
+ */
+function VariablesEditor({ variables, onChange }) {
+  const setVar = (i, v) => onChange(variables.map((x, k) => (k === i ? v : x)));
+  return (
+    <details className="typo-section" open={variables.length > 0}>
+      <summary className="typo-section__head">
+        <Icon name="settings" size={15} />
+        <span className="typo-section__title">Variables</span>
+        <span className="muted small">{variables.length} formulas</span>
+      </summary>
+      <p className="muted small">
+        Per-seat values, exactly as in labs: write <code>{'{{ NAME }}'}</code> in any prompt,
+        option, accepted answer, instructions or checklist item. Always available:{' '}
+        <code>{'{{ SEAT_ID }}'}</code>, <code>{'{{ FIRST_NAME }}'}</code>,{' '}
+        <code>{'{{ LAST_NAME }}'}</code>, <code>{'{{ FULL_NAME }}'}</code>. Formulas use{' '}
+        <code>seat</code>, e.g. <code>{"'Store ' + (100 + seat)"}</code>. A short-answer question
+        can also save the participant&apos;s answer as a variable for the sections after it.
+      </p>
+      {variables.map((v, i) => (
+        <div className="typo-pair typo-pair--var" key={i}>
+          <label className="field field--compact">
+            <span className="field__label">Name</span>
+            <input
+              className="field__input mono"
+              value={v.name}
+              spellCheck={false}
+              placeholder="STORE"
+              onChange={(e) => setVar(i, { ...v, name: e.target.value })}
+            />
+          </label>
+          <label className="field field--compact">
+            <span className="field__label">Formula</span>
+            <input
+              className="field__input mono"
+              value={v.expression}
+              spellCheck={false}
+              placeholder="100 + seat"
+              onChange={(e) => setVar(i, { ...v, expression: e.target.value })}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--danger-ghost"
+            onClick={() => onChange(variables.filter((_, k) => k !== i))}
+            aria-label={`Remove variable ${v.name || i + 1}`}
+          >
+            <Icon name="trash" size={13} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn btn--xs btn--ghost"
+        disabled={variables.length >= LIMITS.variables}
+        onClick={() => onChange([...variables, { name: '', expression: '' }])}
+      >
+        <Icon name="plus" size={13} /> Add variable
+      </button>
+    </details>
   );
 }
 
@@ -346,6 +413,25 @@ function QuestionEditor({ q, number, onChange, onMove, onRemove, canUp, canDown 
           />
         </label>
       )}
+      {(q.type === 'short' || q.capture) && (
+        <label className="field field--compact">
+          <span className="field__label">
+            Save the answer as a variable (optional) — later sections can show it as{' '}
+            <code>{`{{ ${q.capture || 'NAME'} }}`}</code>, and accept it as an answer
+          </span>
+          <input
+            className="field__input mono"
+            value={q.capture || ''}
+            placeholder="e.g. ROUTER_IP"
+            maxLength={LIMITS.captureName}
+            onChange={(e) => {
+              const { capture: _old, ...rest } = q;
+              const name = e.target.value.trim();
+              onChange(name ? { ...rest, capture: name } : rest);
+            }}
+          />
+        </label>
+      )}
       {q.type === 'long' && <p className="muted small">Long answers are always marked by hand.</p>}
     </div>
   );
@@ -354,6 +440,7 @@ function QuestionEditor({ q, number, onChange, onMove, onRemove, canUp, canDown 
 /** Participant-view preview rendered by the server (library images resolved). */
 function ExamPreview({ id, draft }) {
   const { call } = useInstructorApi();
+  const [seat, setSeat] = useState(7);
   const [res, setRes] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -361,21 +448,50 @@ function ExamPreview({ id, draft }) {
     setBusy(true);
     setError('');
     try {
-      setRes(await call((t) => api.previewTemplate(t, id === 'new-exam' ? 0 : id, 1, draft)));
+      setRes(
+        await call((t) =>
+          api.previewTemplate(t, id === 'new-exam' ? 0 : id, Number(seat) || 1, draft),
+        ),
+      );
     } catch (err) {
       setError(err.details ? err.details.join('\n') : err.message);
       setRes(null);
     } finally {
       setBusy(false);
     }
-  }, [call, id, draft]);
+  }, [call, id, seat, draft]);
   let n = 0;
   return (
     <div className="preview">
-      <button type="button" className="btn btn--sm btn--primary" onClick={run} disabled={busy}>
-        <Icon name="eye" size={15} /> {busy ? 'Rendering…' : 'Render preview'}
-      </button>
+      <div className="preview__controls">
+        <label className="field field--narrow">
+          <span className="field__label">Preview seat #</span>
+          <input
+            className="field__input"
+            type="number"
+            min="1"
+            max="9999"
+            value={seat}
+            onChange={(e) => setSeat(e.target.value)}
+          />
+        </label>
+        <button type="button" className="btn btn--sm btn--primary" onClick={run} disabled={busy}>
+          <Icon name="eye" size={15} /> {busy ? 'Rendering…' : 'Render preview'}
+        </button>
+      </div>
       {error && <pre className="form__error preview__error">{error}</pre>}
+      {res?.context && (
+        <div className="preview__context">
+          <span className="editor-label">Resolved variables for seat #{res.seat_id}</span>
+          <div className="preview__vars">
+            {Object.entries(res.context).map(([k, v]) => (
+              <span className="tag" key={k}>
+                <code>{k}</code> = <code>{String(v)}</code>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {res?.sections?.map((sec) => (
         <div key={sec.index} className="preview__section">
           <div className="section-head section-head--compact">
@@ -702,6 +818,11 @@ export default function ExamEditor({ id, initial }) {
               />
             </label>
           </section>
+
+          <VariablesEditor
+            variables={tpl.variables}
+            onChange={(variables) => set({ ...tpl, variables })}
+          />
 
           {tpl.content.map((sec, si) => {
             const type = sectionType(sec);

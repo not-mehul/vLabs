@@ -6,6 +6,7 @@ import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
+import { seatExam } from '../lib/examSeat.js';
 import { injectImages } from '../lib/templating.js';
 import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
 import {
@@ -117,6 +118,14 @@ function noStore(res) {
 }
 
 const contentOf = (session) => JSON.parse(session.content || '[]');
+const variablesOf = (session) => {
+  try {
+    const v = JSON.parse(session.variables || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+};
 const unlockedFor = (content, p) =>
   examUnlockedSection(content, parseObject(p.answers), p.max_section);
 
@@ -130,7 +139,8 @@ router.get(
   contentLimiter,
   asyncHandler(async (req, res) => {
     const p = req.participant;
-    const content = contentOf(req.session);
+    // This seat's exam: {{ PLACEHOLDERS }} resolved as in a lab manual.
+    const content = seatExam(contentOf(req.session), variablesOf(req.session), p);
     const questions = listQuestions(content);
     const now = nowIso();
     touch(p.id, now);

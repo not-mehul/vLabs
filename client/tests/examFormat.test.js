@@ -346,3 +346,37 @@ test('every exam ends with exactly one submit section', () => {
     'the submit section alone is not an exam',
   );
 });
+
+test('exam variables: front matter round-trips and unknown placeholders are flagged', () => {
+  const md = `---
+kind: exam
+title: Seats
+variables:
+  STORE = 100 + seat
+  SUBNET = "10." + seat + ".0.0"
+---
+
+# [info] Bench for {{ FULL_NAME }}
+## Store {{ STORE }}
+Use {{ SUBNET }} on seat {{ SEAT_ID }}.
+- [ ] Ping {{ SUBNET }}
+
+# Questions
+## [text] Which store number is yours?
+> accept: {{ STORE }}
+`;
+  const exam = parseExamMarkdown(md);
+  assert.deepEqual(exam.variables, [
+    { name: 'STORE', expression: '100 + seat' },
+    { name: 'SUBNET', expression: '"10." + seat + ".0.0"' },
+  ]);
+  assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
+  assert.deepEqual(normaliseExam(exam).variables, exam.variables);
+  assert.deepEqual(examErrors(exam), []);
+
+  const typo = parseExamMarkdown(md.replace('accept: {{ STORE }}', 'accept: {{ STOER }}'));
+  assert.deepEqual(examErrors(typo), [
+    'Unknown placeholder {{ STOER }} in Section 2 · question 1 accepted answers',
+  ]);
+  assert.deepEqual(normaliseExam({ content: [] }).variables, []);
+});

@@ -53,12 +53,16 @@ const sectionDone = (s, answers) =>
       ? false
       : s.questions.every((q) => isAnswered(answers[q.key]));
 
-/** The step to open in an informational section: the first one not ticked off. */
-const firstOpenStep = (s, answers) => {
-  const steps = s?.steps || [];
-  const i = steps.findIndex((st) => !stepDone(st, answers));
-  return i >= 0 ? i : Math.max(steps.length - 1, 0);
-};
+/**
+ * The first step of an informational section with an item still to tick (for
+ * links from the review), else the first step. A step without a checklist has
+ * nothing to tick, so it never counts as the place to resume.
+ */
+const firstUntickedStep = (s, answers) =>
+  Math.max(
+    (s?.steps || []).findIndex((st) => st.tasks?.length && !stepDone(st, answers)),
+    0,
+  );
 
 /** Header badge for the autosave state of every answer together. */
 const SAVE_BADGE = {
@@ -99,6 +103,7 @@ export default function Exam() {
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
   const unlockedRef = useRef(0);
+  const captureKeys = useRef(new Set()); // questions whose answer later sections show
   const timers = useRef({});
   const pending = useRef({}); // key → latest unsaved value
   const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
@@ -135,6 +140,9 @@ export default function Exam() {
       setOnBreak(Boolean(res.on_break));
       setSubmitted(res.submitted);
       unlockedRef.current = res.unlocked_section ?? 0;
+      captureKeys.current = new Set(
+        res.sections.flatMap((s) => (s.questions || []).filter((q) => q.capture).map((q) => q.key)),
+      );
       if (!res.submitted) {
         const last = res.unlocked_section ?? 0;
         if (!initialisedRef.current) {
@@ -190,9 +198,12 @@ export default function Exam() {
         setSaveState((s) => ({ ...s, [key]: 'saved' }));
         // Answering the last open question of a section unlocks the next one
         // (fetch it: the server only sends unlocked sections); unticking a
-        // checklist item locks what follows again.
+        // checklist item locks what follows again. An answer saved as a
+        // variable changes the text of the sections after it.
         if (res && res.unlocked_section !== unlockedRef.current) {
           unlockedRef.current = res.unlocked_section;
+          load();
+        } else if (captureKeys.current.has(key)) {
           load();
         }
       } catch (err) {
@@ -344,7 +355,8 @@ export default function Exam() {
   const nextUnlocked = view < unlocked;
   // Informational sections show their steps one at a time, like a lab.
   const steps = section?.type === 'info' ? section.steps || [] : [];
-  const stepIndex = Math.min(stepOf[view] ?? firstOpenStep(section, answers), steps.length - 1);
+  // A section always opens on its first step (going back opens the last one).
+  const stepIndex = Math.min(stepOf[view] ?? 0, steps.length - 1);
   const step = steps[stepIndex];
   const multiStep = steps.length > 1;
   const onLastStep = !multiStep || stepIndex === steps.length - 1;
@@ -367,7 +379,7 @@ export default function Exam() {
         : null;
 
   function jumpTo(si, anchor) {
-    setStepOf((m) => ({ ...m, [si]: undefined }));
+    setStepOf((m) => ({ ...m, [si]: firstUntickedStep(sections[si], answers) }));
     goTo(si);
     if (!anchor) return;
     setTimeout(
@@ -375,6 +387,13 @@ export default function Exam() {
         document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
       120,
     );
+  }
+
+  /** Back to the previous section, on its last step. */
+  function goBack() {
+    const prev = sections[view - 1];
+    setStepOf((m) => ({ ...m, [view - 1]: Math.max((prev?.steps?.length || 1) - 1, 0) }));
+    goTo(view - 1);
   }
 
   function confirmSubmit() {
@@ -572,9 +591,7 @@ export default function Exam() {
               <button
                 className="btn btn--ghost"
                 disabled={view === 0 && stepIndex <= 0}
-                onClick={() =>
-                  multiStep && stepIndex > 0 ? showStep(stepIndex - 1) : goTo(view - 1)
-                }
+                onClick={() => (multiStep && stepIndex > 0 ? showStep(stepIndex - 1) : goBack())}
               >
                 <Icon name="chevronLeft" size={16} />{' '}
                 {multiStep && stepIndex > 0 ? 'Previous step' : 'Previous'}
@@ -677,11 +694,7 @@ export default function Exam() {
                 </>
               )}
               <div className="section-nav">
-                <button
-                  className="btn btn--ghost"
-                  disabled={view === 0}
-                  onClick={() => goTo(view - 1)}
-                >
+                <button className="btn btn--ghost" disabled={view === 0} onClick={goBack}>
                   <Icon name="chevronLeft" size={16} /> Previous
                 </button>
                 <button className="btn btn--primary" disabled={submitting} onClick={confirmSubmit}>

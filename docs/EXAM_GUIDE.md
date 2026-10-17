@@ -90,6 +90,37 @@ unfinished checklist; unticked, they see only the text and the **Submit**
 button. Nothing else is added: the page shows only what the template says. An exam imported without a submit section gets the default one, and
 one placed anywhere else is moved to the end.
 
+## 2b. Per-seat variables and saved answers
+
+Exams use the same **tokens** as labs ([TEMPLATE_GUIDE.md](TEMPLATE_GUIDE.md)
+§4): write `{{ NAME }}` in any section title, step title, instructions,
+checklist item, question prompt, option or accepted answer, and each
+participant sees their own value.
+
+- **Built-ins**, always available: `{{ SEAT_ID }}`, `{{ FIRST_NAME }}`,
+  `{{ LAST_NAME }}`, `{{ FULL_NAME }}`.
+- **Variables**: per-seat formulas declared once for the exam, exactly as in
+  a lab (`STORE = 100 + seat`, `SUBNET = '10.' + seat + '.0.0'`, with the
+  same helper functions). Add them under **Variables** in the exam editor or
+  the Template Studio, or in the Markdown front matter.
+- **Saved answers**: a short-answer question can save the participant's
+  answer as a variable (**Save the answer as a variable**, or
+  `> capture: NAME` in Markdown). Every **later** section can then show it
+  (`Ping {{ ROUTER_IP }} from your laptop`) or accept it as an answer
+  (`> accept: {{ ROUTER_IP }}`), like a lab checkpoint's captured value.
+  It can't be used in its own section or any section before it, since the
+  participant has not answered it yet there. If they go back and change the
+  answer, later sections show the new one. Captured text is trimmed, and an
+  answer cleared after moving on resolves to nothing.
+
+Accepted answers are resolved per seat before grading, so
+`> accept: {{ STORE }}` accepts *104* from seat 4 and *107* from seat 7, and
+the monitor shows each participant the expected answer they were given.
+Unknown names are rejected when the exam is saved (*Unknown placeholder
+{{ XYZ }} in Section 1 · step 1*), as is a saved answer used too early. The
+exam editor's preview resolves any seat you choose, and the Studio's
+participant preview takes a seat and name.
+
 ## 3. Markdown format
 
 ```markdown
@@ -97,6 +128,8 @@ one placed anywhere else is moved to the end.
 kind: exam
 title: Network Fundamentals — Unit Test
 description: 20 minutes, closed book
+variables:
+  SUBNET = '10.' + seat + '.0.0/24'
 ---
 
 # Part 1 · Addressing
@@ -148,7 +181,11 @@ Check every part before you hand in. You cannot change your answers after.
   `essay` `long-answer` → long.
 - `- [ ]` / `- [x]` lines are options for single/multiple (`x` = correct).
 - `> points: N`, `> answer: true|false`, `> accept: a | b` (write `\|` for a
-  literal pipe).
+  literal pipe), `> capture: NAME` (short answers: save the answer as
+  `{{ NAME }}` for later sections, §2b).
+- `variables:` in the front matter, then one indented `NAME = formula` line
+  per variable (§2b). In JSON: `"variables": [{ "name", "expression" }]` at
+  the top level and `"capture": "NAME"` on a short question.
 - `> minutes: N` directly under a `#` section heading allocates N minutes to
   that section: whole minutes, 1–600, optional (§4.1). In JSON it is
   `"minutes": N` on the section.
@@ -193,7 +230,9 @@ Check every part before you hand in. You cannot change your answers after.
   retrying*). There is no mark beside each question, so "saved" is never
   mistaken for "correct". Leaving and rejoining with the same name resumes.
 - **Informational** sections show one step at a time (*Step 1 of 3*), with
-  its instructions and checklist; ticking an item saves it at once.
+  its instructions and checklist; ticking an item saves it at once. A
+  section always opens on its first step (also from the stepper); **Previous**
+  from the section after it returns to its last step.
   **Next step** opens once every item of the step is ticked, and on the
   last step **Next** opens the following section.
 - Each exam seat is **bound to the device that joined it**. Rejoining with

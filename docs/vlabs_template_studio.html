@@ -543,7 +543,7 @@
               <input type="text" id="previewLastName" value="O'Neil" class="w-24 text-xs px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md focus:outline-none focus:border-brand-500" oninput="renderParticipantPreview()">
             </div>
 
-            <div class="flex items-center space-x-2 ml-auto">
+            <div id="previewGateControls" class="flex items-center space-x-2 ml-auto">
               <label class="inline-flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none bg-slate-50 dark:bg-surface-850 px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.07]">
                 <input type="checkbox" id="previewProgressiveGateToggle" onchange="togglePreviewGateMode(this.checked)" class="rounded text-brand-600 focus:ring-0">
                 <span>Progressive Gating</span>
@@ -735,7 +735,7 @@
           <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="declaredTokensList"></div>
         </div>
         <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-          <span class="text-[10px] font-bold uppercase text-slate-400">Captured Checkpoint Values</span>
+          <span id="captureTokensHead" class="text-[10px] font-bold uppercase text-slate-400">Captured Checkpoint Values</span>
           <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="captureTokensList"></div>
         </div>
       </div>
@@ -868,8 +868,15 @@
     const EXAM_LIMITS = Object.freeze({
       sections: 50, questionsPerSection: 200, options: 12, accepted: 20, title: 200,
       description: 1000, sectionTitle: 200, prompt: 10000, option: 500, acceptedAnswer: 200,
-      maxPoints: 100, sectionMinutes: 600, body: 20000, steps: 20, stepTitle: 200, tasks: 30, task: 300
+      maxPoints: 100, sectionMinutes: 600, body: 20000, steps: 20, stepTitle: 200, tasks: 30, task: 300,
+      variables: 100, captureName: 40
     });
+
+    /** Per-seat placeholders, exactly as in labs: the exam's variables plus these. */
+    const EXAM_BUILTIN_PLACEHOLDERS = Object.freeze(['SEAT_ID', 'FIRST_NAME', 'LAST_NAME', 'FULL_NAME']);
+    const EXAM_PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+    const EXAM_BUILTIN_IDENTIFIERS = Object.freeze(['seat', 'first_name', 'last_name']);
+    const EXAM_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
     /** Section types: questions (default), info ("Informational": steps of
         instructions, each with a checklist the participant ticks off) and
@@ -954,6 +961,8 @@
           .filter((a, i, arr) => arr.indexOf(a) === i)
           .slice(0, EXAM_LIMITS.accepted);
       }
+      const capture = examStr(q.capture, EXAM_LIMITS.captureName).trim();
+      if (capture) out.capture = capture;
       return out;
     }
 
@@ -1024,8 +1033,91 @@
         kind: 'exam',
         title: examStr(o.title, EXAM_LIMITS.title),
         description: examStr(o.description, EXAM_LIMITS.description),
+        variables: (Array.isArray(o.variables) ? o.variables : [])
+          .filter((v) => v && typeof v === 'object')
+          .slice(0, EXAM_LIMITS.variables)
+          .map((v) => ({ name: examStr(v.name).trim(), expression: examStr(v.expression).trim() })),
         content: [...sections.filter((sec) => sec.type !== 'submit'), submit]
       };
+    }
+
+    /** Every text of an exam that may hold {{ PLACEHOLDERS }}, with its section and location. */
+    function examTextFields(exam) {
+      const out = [];
+      (exam?.content || []).forEach((sec, si) => {
+        const at = `Section ${si + 1}`;
+        const push = (where, text) => out.push({ si, where, text });
+        push(`${at} title`, sec.title);
+        const type = examSectionType(sec);
+        if (type === 'info') {
+          examInfoSteps(sec).forEach((st, sti) => {
+            const where = `${at} · step ${sti + 1}`;
+            push(`${where} title`, st.title);
+            push(where, st.body);
+            (st.tasks || []).forEach((t, ti) => push(`${where} checklist item ${ti + 1}`, t));
+          });
+        } else if (type === 'submit') {
+          push(at, sec.body);
+        }
+        (sec.questions || []).forEach((q, qi) => {
+          const where = `${at} · question ${qi + 1}`;
+          push(where, q.prompt);
+          (q.options || []).forEach((o, oi) => push(`${where} option ${oi + 1}`, o));
+          (q.accepted || []).forEach((a) => push(`${where} accepted answers`, a));
+        });
+      });
+      return out;
+    }
+
+    /** Questions that save their answer as a variable, in reading order. */
+    function examCaptures(exam) {
+      const out = [];
+      (exam?.content || []).forEach((sec, si) =>
+        (sec.questions || []).forEach((q, qi) => {
+          if (q.capture) out.push({ name: q.capture, si, qi, where: `Section ${si + 1} · question ${qi + 1}` });
+        }));
+      return out;
+    }
+
+    /** Placeholders naming no variable, built-in or answer saved in an EARLIER section. */
+    function examUnknownPlaceholders(exam) {
+      const known = new Set([...EXAM_BUILTIN_PLACEHOLDERS, ...(exam?.variables || []).map((v) => v.name)]);
+      const savedIn = new Map();
+      for (const c of examCaptures(exam)) if (!savedIn.has(c.name)) savedIn.set(c.name, c.si);
+      const out = [];
+      const seen = new Set();
+      for (const { si, where, text } of examTextFields(exam)) {
+        for (const m of String(text ?? '').matchAll(EXAM_PLACEHOLDER_RE)) {
+          const name = m[1];
+          const key = `${name}@${where}`;
+          if (known.has(name) || savedIn.get(name) < si || seen.has(key)) continue;
+          seen.add(key);
+          out.push({ name, where, early: savedIn.has(name) });
+        }
+      }
+      return out;
+    }
+
+    /** Problems with the names questions save their answers under. */
+    function examCaptureErrors(exam, errors) {
+      const reserved = new Set([...EXAM_BUILTIN_PLACEHOLDERS, ...EXAM_BUILTIN_IDENTIFIERS]);
+      const variables = new Set((exam?.variables || []).map((v) => v.name));
+      const saved = new Map();
+      for (const { name, si, qi, where } of examCaptures(exam)) {
+        if (exam.content[si].questions[qi].type !== 'short') {
+          errors.push(`${where}: only a short answer can be saved as a variable`);
+        } else if (!EXAM_IDENT_RE.test(name)) {
+          errors.push(`${where}: "${name}" is not a valid variable name`);
+        } else if (reserved.has(name)) {
+          errors.push(`${where}: "${name}" is a reserved name`);
+        } else if (variables.has(name)) {
+          errors.push(`${where}: "${name}" is already a variable`);
+        } else if (saved.has(name)) {
+          errors.push(`${where}: "${name}" is already saved by ${saved.get(name)}`);
+        } else {
+          saved.set(name, where);
+        }
+      }
     }
 
     function examBlankQuestion(type = 'single') {
@@ -1092,6 +1184,12 @@
       if (parts.length && !count && !parts.some((sec) => examSectionType(sec) === 'info')) {
         errors.push('The exam has no questions');
       }
+      examCaptureErrors(exam, errors);
+      for (const { name, where, early } of examUnknownPlaceholders(exam)) {
+        errors.push(early
+          ? `{{ ${name} }} is used in ${where} before the question that saves it (saved answers are available from the following section onward)`
+          : `Unknown placeholder {{ ${name} }} in ${where}`);
+      }
       return errors;
     }
 
@@ -1114,7 +1212,7 @@
 
     // ---- Markdown (same format as vLabs' shared/exam-format.js) ----------
     const EXAM_OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
-    const EXAM_DIRECTIVE_RE = /^>\s*(points|answer|accept)\s*:\s*(.*)$/i;
+    const EXAM_DIRECTIVE_RE = /^>\s*(points|answer|accept|capture)\s*:\s*(.*)$/i;
     const EXAM_FENCE_RE = /^\s*(```|~~~)/;
     const EXAM_LAB_STEP_TYPES = new Set(['desk', 'computer', 'info']);
 
@@ -1148,11 +1246,21 @@
 
     function examParseMarkdown(text) {
       const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
-      const exam = { kind: 'exam', title: '', description: '', content: [] };
+      const exam = { kind: 'exam', title: '', description: '', variables: [], content: [] };
       let i = 0;
       if (lines[0]?.trim() === '---') {
         i = 1;
+        let inVars = false;
         while (i < lines.length && lines[i].trim() !== '---') {
+          if (inVars && /^\s+\S/.test(lines[i])) {
+            const line = lines[i].trim();
+            const eq = line.indexOf('=');
+            const name = (eq < 0 ? line : line.slice(0, eq)).trim();
+            if (name) exam.variables.push({ name, expression: eq < 0 ? '' : line.slice(eq + 1).trim() });
+            i += 1;
+            continue;
+          }
+          inVars = false;
           const m = /^([A-Za-z_]+)\s*:\s*(.*)$/.exec(lines[i]);
           if (m) {
             const key = m[1].toLowerCase();
@@ -1161,6 +1269,7 @@
             }
             if (key === 'title') exam.title = m[2].trim();
             else if (key === 'description') exam.description = m[2].trim();
+            else if (key === 'variables') inVars = true;
           }
           i += 1;
         }
@@ -1271,6 +1380,7 @@
             if (key === 'points') q.points = Number(d[2]);
             else if (key === 'answer') q.correct = d[2].trim();
             else if (key === 'accept') q.accepted.push(...examSplitPipes(d[2]));
+            else if (key === 'capture') q.capture = d[2].trim();
             continue;
           }
         }
@@ -1285,6 +1395,8 @@
       const exam = examNormalise(input);
       const out = ['---', 'kind: exam', `title: ${exam.title}`];
       if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
+      const vars = exam.variables.filter((v) => v.name);
+      if (vars.length) out.push('variables:', ...vars.map((v) => `  ${v.name} = ${v.expression}`));
       out.push('---', '');
       for (const sec of exam.content) {
         out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
@@ -1322,6 +1434,7 @@
           if (q.type === 'short' && q.accepted.length) {
             out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
           }
+          if (q.capture) out.push(`> capture: ${q.capture}`);
           if (q.points !== 1) out.push(`> points: ${q.points}`);
           out.push('');
         }
@@ -2494,7 +2607,7 @@
             <i class="ph ph-image text-xs"></i>
             <span>Image</span>
           </button>
-          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="${isExamMode() ? 'hidden ' : ''}px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white rounded text-[11px] font-medium flex items-center gap-1 text-brand-600 dark:text-brand-400 transition">
+          <button type="button" onclick="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white rounded text-[11px] font-medium flex items-center gap-1 text-brand-600 dark:text-brand-400 transition">
             <i class="ph ph-brackets-curly text-xs"></i>
             <span>Token</span>
           </button>
@@ -3873,26 +3986,8 @@
       container.innerHTML = html;
     }
 
-    function runFullValidation(showToasts = true) {
-      const issues = []; // { severity: 'error' | 'warning', loc: string, msg: string, sIdx?: number, stIdx?: number, view?: string }
-
-      const addError = (loc, msg, nav = {}) => issues.push({ severity: 'error', loc, msg, ...nav });
-      const addWarning = (loc, msg, nav = {}) => issues.push({ severity: 'warning', loc, msg, ...nav });
-
-      if (isExamMode()) return renderValidationIssues(issues, showToasts, collectExamIssues(addError, addWarning));
-
-      // 1. Front Matter & Structural Limits (§13, §14)
-      const title = (templateData.title || '').trim();
-      const desc = (templateData.description || '');
-      if (!title) {
-        addError("Front Matter", "Title is required", { view: 'builder' });
-      } else if (title.length > 200) {
-        addError("Front Matter", `Title exceeds 200 characters (${title.length} / 200)`, { view: 'builder' });
-      }
-      if (desc.length > 1000) {
-        addError("Front Matter", `Description exceeds 1000 characters (${desc.length} / 1000)`, { view: 'builder' });
-      }
-
+    /** Variable names, reserved words and formulas (labs and exams); returns the declared names. */
+    function collectVariableIssues(addError) {
       const vars = templateData.variables || [];
       if (vars.length > 100) {
         addError("Variables", `Too many variables (${vars.length} / 100 max)`, { view: 'variables' });
@@ -3945,6 +4040,30 @@
         }
         declaredVarNames.add(name);
       });
+      return declaredVarNames;
+    }
+
+    function runFullValidation(showToasts = true) {
+      const issues = []; // { severity: 'error' | 'warning', loc: string, msg: string, sIdx?: number, stIdx?: number, view?: string }
+
+      const addError = (loc, msg, nav = {}) => issues.push({ severity: 'error', loc, msg, ...nav });
+      const addWarning = (loc, msg, nav = {}) => issues.push({ severity: 'warning', loc, msg, ...nav });
+
+      if (isExamMode()) return renderValidationIssues(issues, showToasts, collectExamIssues(addError, addWarning));
+
+      // 1. Front Matter & Structural Limits (§13, §14)
+      const title = (templateData.title || '').trim();
+      const desc = (templateData.description || '');
+      if (!title) {
+        addError("Front Matter", "Title is required", { view: 'builder' });
+      } else if (title.length > 200) {
+        addError("Front Matter", `Title exceeds 200 characters (${title.length} / 200)`, { view: 'builder' });
+      }
+      if (desc.length > 1000) {
+        addError("Front Matter", `Description exceeds 1000 characters (${desc.length} / 1000)`, { view: 'builder' });
+      }
+
+      const declaredVarNames = collectVariableIssues(addError);
 
       // Pre-collect all captures and their first definition step
       const allCaptureLocations = new Map(); // captureName -> { sIdx, stIdx }
@@ -5519,17 +5638,22 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       `).join('') : '<span class="text-slate-400 italic col-span-2">No variables declared</span>';
 
       const captures = [];
-      templateData.content.forEach((s, sIdx) => s.steps.forEach((st, stIdx) => {
+      if (isExamMode()) {
+        // Answers saved by short questions, usable from the following section on.
+        examCaptures(templateData).forEach(c => {
+          captures.push({ name: c.name, sIdx: c.si, stIdx: c.qi, isReachable: maxSIdx === null || c.si < maxSIdx });
+        });
+      } else templateData.content.forEach((s, sIdx) => (s.steps || []).forEach((st, stIdx) => {
         if (st.type !== 'info' && st.checkpoint && st.checkpoint.capture) {
           const isReachable = maxSIdx === null || (sIdx < maxSIdx) || (sIdx === maxSIdx && stIdx < maxStepIdx);
           captures.push({ name: st.checkpoint.capture, sIdx, stIdx, isReachable });
         }
       }));
       captureList.innerHTML = captures.length ? captures.map(c => `
-        <button onclick="handleTokenSelect('${escapeHtml(c.name)}')" class="p-2 rounded-lg ${c.isReachable ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/50 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-surface-850 border-slate-200 dark:border-slate-800 text-slate-400'} border font-mono text-left font-semibold truncate" title="${c.isReachable ? `Captured at S${c.sIdx + 1}·St${c.stIdx + 1}` : `Captured at S${c.sIdx + 1}·St${c.stIdx + 1} (Not yet available at this step)`}">
+        <button onclick="handleTokenSelect('${escapeHtml(c.name)}')" class="p-2 rounded-lg ${c.isReachable ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/50 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-surface-850 border-slate-200 dark:border-slate-800 text-slate-400'} border font-mono text-left font-semibold truncate" title="${isExamMode() ? `Saved by S${c.sIdx + 1}·Q${c.stIdx + 1}${c.isReachable ? '' : ' (only available in later sections)'}` : c.isReachable ? `Captured at S${c.sIdx + 1}·St${c.stIdx + 1}` : `Captured at S${c.sIdx + 1}·St${c.stIdx + 1} (Not yet available at this step)`}">
           {{ ${escapeHtml(c.name)} }} ${!c.isReachable ? '⚠️' : ''}
         </button>
-      `).join('') : '<span class="text-slate-400 italic col-span-2">No captures defined</span>';
+      `).join('') : `<span class="text-slate-400 italic col-span-2">${isExamMode() ? 'No short answers are saved as variables' : 'No captures defined'}</span>`;
 
       modal.classList.remove('hidden');
     }
@@ -6031,7 +6155,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         kind: 'exam',
         title: e.title,
         description: e.description,
-        variables: [],
+        variables: e.variables,
         content: e.content.map(sec => ({
           ...sec,
           collapsed: false,
@@ -6066,9 +6190,15 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     /** Show / hide the lab-only parts of the chrome for the current kind. */
     function applyKindChrome() {
       const exam = isExamMode();
-      ['nav-variables', 'nav-dependencies', 'tokensBtn', 'toggleAllPreviewsBtn', 'previewLabControls', 'previewVariablesBar'].forEach(id => {
-        document.getElementById(id)?.classList.toggle('hidden', exam && id !== 'previewVariablesBar');
+      // Exams saved by the Studio before they had variables.
+      if (exam && !Array.isArray(templateData.variables)) templateData.variables = [];
+      // Exams have variables, tokens and per-seat previews like labs, but no
+      // dependency graph, step previews or checkpoint gating.
+      ['nav-dependencies', 'toggleAllPreviewsBtn', 'previewGateControls'].forEach(id => {
+        document.getElementById(id)?.classList.toggle('hidden', exam);
       });
+      const capturesHead = document.getElementById('captureTokensHead');
+      if (capturesHead) capturesHead.textContent = exam ? 'Saved Answers (later sections only)' : 'Captured Checkpoint Values';
       const label = document.getElementById('specKindLabel');
       if (label) label.textContent = exam ? 'Exam Specification' : 'Lab Specification';
       const badge = document.getElementById('kindBadge');
@@ -6086,7 +6216,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if (outlineFilter) outlineFilter.placeholder = exam ? 'Jump to question...' : 'Jump to step...';
       const title = document.getElementById('templateTitle');
       if (title) title.placeholder = exam ? 'e.g. Network Fundamentals — Unit Test' : 'e.g. Switch & Host Addressing — Bench Lab';
-      if (exam && (currentView === 'variables' || currentView === 'dependencies')) switchView('builder');
+      if (exam && currentView === 'dependencies') switchView('builder');
     }
 
     const EXAM_SECTION_BADGE = {
@@ -6181,6 +6311,8 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
             <label class="block text-[10px] font-medium text-slate-400 mb-1">Accepted answers (separate with <code class="font-mono">|</code>, write <code class="font-mono">\\|</code> for a literal pipe)</label>
             <input type="text" value="${escapeHtml(examAcceptedText(q))}" placeholder="e.g. 443 | tcp/443" ${at} data-action="exam-q-accepted" class="${inputCls} font-mono">
             <p id="q-accepted-note-${sIdx}-${qIdx}" class="mt-1 text-[10px] text-slate-400">${examAcceptedNote(q)}</p>
+            <label class="block text-[10px] font-medium text-slate-400 mt-2 mb-1">Save the answer as a variable (optional): later sections can show it, and accept it, as <code class="font-mono">{{ NAME }}</code></label>
+            <input type="text" value="${escapeHtml(q.capture || '')}" placeholder="e.g. ROUTER_IP" maxlength="${EXAM_LIMITS.captureName}" ${at} data-action="exam-q-capture" class="${inputCls} font-mono sm:w-60">
           </div>`;
       }
       return `<p class="text-[11px] text-slate-400"><i class="ph ph-pencil-simple-line"></i> Long answers are always marked by hand in the session monitor.</p>`;
@@ -6435,6 +6567,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         else next.correct = Array.isArray(q.correct) ? [...q.correct] : (q.correct === null ? [] : [q.correct]);
       }
       if (type === 'short' && q.type === 'short') next.accepted = [...q.accepted];
+      if (type === 'short' && q.capture) next.capture = q.capture;
       return next;
     }
 
@@ -6552,6 +6685,12 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         if (badge) badge.innerHTML = examGradingBadge(q);
         examCommit(false);
       }
+      else if (action === 'exam-q-capture') {
+        const name = target.value.trim();
+        if (name) q.capture = name;
+        else delete q.capture;
+        examCommit(false);
+      }
       else if (action === 'exam-q-points') {
         const n = Number(target.value);
         q.points = Number.isFinite(n) ? Math.min(Math.max(n, 0), EXAM_LIMITS.maxPoints) : 1;
@@ -6587,11 +6726,26 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if (rerender) renderExamPreview();
     }
 
+    /** The preview seat's {{ PLACEHOLDER }} values, with answers saved so far. */
+    function examPreviewContext() {
+      const seat = parseInt(document.getElementById('previewSeat')?.value || '7', 10) || 1;
+      const firstName = document.getElementById('previewFirstName')?.value || 'Mary-Jane';
+      const lastName = document.getElementById('previewLastName')?.value || "O'Neil";
+      const saved = {};
+      examCaptures(templateData).forEach(c => {
+        if (c.name in saved) return;
+        const a = examPreviewState.answers[`${c.si}.${c.qi}`];
+        saved[c.name] = typeof a === 'string' && a.trim() ? a.trim() : `[answer to ${c.where}]`;
+      });
+      return { seat, firstName, lastName, ctx: buildEvaluatedContext(seat, firstName, lastName, saved) };
+    }
+
     function renderExamPreview() {
       const container = document.getElementById('previewManualContainer');
       const bar = document.getElementById('previewVariablesBar');
       if (!container) return;
       const st = examPreviewState;
+      const { seat, firstName, lastName, ctx } = examPreviewContext();
       let number = 0;
       let score = 0;
       let auto = 0;
@@ -6604,7 +6758,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const sectionsHtml = templateData.content.map((sec, sIdx) => {
         const qsHtml = (sec.questions || []).map((raw, qIdx) => {
           number += 1;
+          // As this seat sees it: accepted answers may use {{ PLACEHOLDERS }}.
           const q = examNormaliseQuestion(raw);
+          q.accepted = q.accepted.map(x => substitutePlaceholders(x, ctx)).filter(x => x.trim());
           const key = `${sIdx}.${qIdx}`;
           const a = st.answers[key];
           const answered = !(a === undefined || a === null || a === '' || (Array.isArray(a) && !a.length));
@@ -6623,7 +6779,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                 <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border ${st.showKey && isKey ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200">
                   <input type="${q.type === 'multiple' ? 'checkbox' : 'radio'}" name="pv-${key}" ${chosen ? 'checked' : ''} onchange="${next}">
                   <span class="font-mono text-[11px] text-slate-400">${examLetter(oi)}</span>
-                  <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(o, {}))}</span>
+                  <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(o, ctx))}</span>
                 </label>`;
             }).join('');
           } else if (q.type === 'truefalse') {
@@ -6632,7 +6788,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                 <input type="radio" name="pv-${key}" ${a === v ? 'checked' : ''} onchange="examPreviewSet('${key}', ${v}, ${st.checked})"> ${v ? 'True' : 'False'}
               </label>`).join('');
           } else if (q.type === 'short') {
-            input = `<input type="text" value="${escapeHtml(a || '')}" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
+            input = `<input type="text" value="${escapeHtml(a || '')}" oninput="examPreviewSet('${key}', this.value, false)" ${q.capture ? 'onchange="renderExamPreview()"' : ''} placeholder="Your answer"
               class="w-full sm:w-80 text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">`;
           } else {
             input = `<textarea rows="3" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
@@ -6649,7 +6805,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                 <span class="text-[11px] font-mono font-semibold text-slate-500">Question ${number} · ${q.points} pt${q.points === 1 ? '' : 's'}</span>
                 ${st.checked ? (answered ? verdictHtml(g) : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">Unanswered</span>') : ''}
               </div>
-              <div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(q.prompt || '', {}))}</div>
+              <div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(q.prompt || '', ctx))}</div>
               <div class="${q.type === 'single' || q.type === 'multiple' ? 'space-y-1.5' : ''}">${input}</div>
               ${keyNote ? `<p class="text-[11px] text-emerald-700 dark:text-emerald-400">${escapeHtml(keyNote)}</p>` : ''}
             </div>`;
@@ -6658,7 +6814,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         let inner = qsHtml || '<p class="text-xs text-slate-400">No questions yet.</p>';
         if (type !== 'questions') {
           const bodyHtml = (sec.body || '').trim()
-            ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(sec.body, {}))}</div>`
+            ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(sec.body, ctx))}</div>`
             : '';
           if (type === 'info') {
             // Checklist items are numbered across the steps, as in vLabs.
@@ -6667,11 +6823,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
             inner = steps.map((step, stIdx) => {
               const tasks = (step.tasks || []).filter(t => String(t).trim());
               const stepBody = (step.body || '').trim()
-                ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(step.body, {}))}</div>`
+                ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(step.body, ctx))}</div>`
                 : '';
               return `
               <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
-                ${steps.length > 1 || step.title ? `<p class="text-[11px] font-mono font-semibold text-slate-500">Step ${stIdx + 1} of ${steps.length}${step.title ? ` · ${escapeHtml(step.title)}` : ''}</p>` : ''}
+                ${steps.length > 1 || step.title ? `<p class="text-[11px] font-mono font-semibold text-slate-500">Step ${stIdx + 1} of ${steps.length}${step.title ? ` · ${escapeHtml(substitutePlaceholders(step.title, ctx))}` : ''}</p>` : ''}
                 ${stepBody}
                 ${tasks.length ? `<p class="text-[11px] font-semibold text-slate-500">Tick each item once it is done</p>` : ''}
                 ${tasks.map(t => {
@@ -6679,7 +6835,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                   return `
                     <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer text-xs text-slate-700 dark:text-slate-200">
                       <input type="checkbox" ${st.answers[key] ? 'checked' : ''} onchange="examPreviewSet('${key}', this.checked, false)">
-                      <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(t, {}))}</span>
+                      <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(t, ctx))}</span>
                     </label>`;
                 }).join('')}
                 ${!stepBody && !tasks.length ? '<p class="text-xs text-slate-400">No instructions or checklist yet.</p>' : ''}
@@ -6698,7 +6854,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           <div class="space-y-3">
             <div class="flex items-center gap-2">
               <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${type === 'submit' ? '<i class="ph ph-flag"></i>' : sIdx + 1}</span>
-              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">${escapeHtml(sec.title || `Part ${sIdx + 1}`)}</h3>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">${escapeHtml(substitutePlaceholders(sec.title || `Part ${sIdx + 1}`, ctx))}</h3>
               ${sec.minutes && type !== 'submit' ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${formatSectionTime(sec.minutes)}</span>` : ''}
             </div>
             ${inner}
@@ -6707,7 +6863,17 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
 
       if (bar) {
         bar.classList.remove('hidden');
+        const pills = [['SEAT_ID', seat], ['FULL_NAME', `${firstName} ${lastName}`.trim()],
+          ...(templateData.variables || []).filter(v => v.name).map(v => [v.name, ctx[v.name]]),
+          ...examCaptures(templateData).map(c => [c.name, ctx[c.name], true])];
         bar.innerHTML = `
+          <span class="w-full flex flex-wrap items-center gap-1.5 pb-1.5">
+            <span class="text-[10px] font-bold uppercase text-slate-400 mr-1">Resolved for this seat:</span>
+            ${pills.map(([k, v, saved]) => `
+              <span class="px-2 py-0.5 rounded-md ${saved ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 dark:bg-surface-850 border-slate-200 dark:border-slate-700'} border font-mono" title="${saved ? 'Saved from a short answer' : ''}">
+                <span class="${saved ? 'text-emerald-700 dark:text-emerald-300' : 'text-brand-600 dark:text-brand-400'} font-semibold">${escapeHtml(k)}</span>=${escapeHtml(String(v ?? ''))}
+              </span>`).join('')}
+          </span>
           <span class="text-slate-500">${examQuestionCount()} questions · ${examTotalPoints()} points</span>
           <span class="text-slate-400">· participants see one part at a time; the next unlocks once every question is answered (or every checklist item ticked), and nothing is reviewable after submitting.</span>
           <span class="ml-auto flex items-center gap-1.5">
@@ -6756,6 +6922,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if ((templateData.description || '').length > EXAM_LIMITS.description) {
         addError('Front Matter', `Description exceeds ${EXAM_LIMITS.description} characters`, { view: 'builder' });
       }
+      const declared = collectVariableIssues(addError);
       const secs = templateData.content || [];
       const parts = secs.filter(sec => examSectionType(sec) !== 'submit');
       if (!parts.length) addError('Structure', 'At least one section is required', { view: 'builder' });
@@ -6810,7 +6977,15 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           addError(ref.locLabel, `Image "${ref.fileName}" referenced in ${ref.locLabel} is not in the image library — upload it first`, { sIdx: ref.sIdx, stIdx: ref.stIdx });
         }
       });
-      return `Checked ${parts.length} part(s), ${count} question(s): types, correct answers, checklists, points, time allocations and image assets.`;
+      // Placeholders: variables, built-ins and answers saved in earlier sections.
+      const norm = examNormalise(templateData);
+      const saveErrors = [];
+      examCaptureErrors(norm, saveErrors);
+      saveErrors.forEach(msg => addError(msg.split(':')[0], msg, { view: 'builder' }));
+      examUnknownPlaceholders(norm).forEach(({ name, where, early }) => addError(where, early
+        ? `{{ ${name} }} is used in ${where} before the question that saves it (saved answers are available from the following section onward)`
+        : `Unknown placeholder {{ ${name} }} in ${where}`, { view: 'builder' }));
+      return `Checked ${parts.length} part(s), ${count} question(s), ${declared.size} variable(s) and ${examCaptures(norm).length} saved answer(s): types, correct answers, checklists, points, time allocations, placeholders and image assets.`;
     }
 
     function generateExamCanonicalJson() {
@@ -6819,6 +6994,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         kind: 'exam',
         title: (exam.title || 'Untitled').trim(),
         description: exam.description,
+        variables: exam.variables.filter(v => v.name || v.expression),
         content: exam.content.map(({ minutes, ...sec }) => ({
           ...sec,
           title: sec.title.trim(),

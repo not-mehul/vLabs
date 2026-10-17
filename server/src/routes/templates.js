@@ -4,7 +4,13 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
 import { validateExamPayload } from '../lib/validateExam.js';
-import { listQuestions, totalPoints, sectionType, infoSteps } from '../../../shared/exam-schema.js';
+import {
+  listQuestions,
+  totalPoints,
+  sectionType,
+  infoSteps,
+  examCaptures,
+} from '../../../shared/exam-schema.js';
 import {
   renderManual,
   countSteps,
@@ -14,6 +20,7 @@ import {
 } from '../lib/templating.js';
 import { maskExample } from '../../../shared/template-schema.js';
 import { imageNames, imageUrlMap } from '../lib/images.js';
+import { examContext, examForSeat } from '../lib/examSeat.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 
@@ -353,13 +360,35 @@ router.post(
       variables = JSON.parse(row.variables);
     }
 
+    const name = (v, fallback) =>
+      String(v ?? '')
+        .trim()
+        .slice(0, 60) || fallback;
+
     if (kind === 'exam') {
-      // Exams have no per-seat variables: the preview is the authored exam
-      // (answers included — instructor-only route) with library images resolved.
+      // The exam as the chosen seat sees it (answers included — instructor-only
+      // route), placeholders and library images resolved.
       const images = imageUrlMap();
+      // Saved answers stand in as a label until a participant gives them.
+      const captured = {};
+      for (const c of examCaptures({ content })) {
+        if (!(c.name in captured)) captured[c.name] = `[answer to ${c.where}]`;
+      }
+      const context = examContext(
+        variables,
+        {
+          seat_number: seatId,
+          first_name: name(req.body?.first_name, 'Sample'),
+          last_name: name(req.body?.last_name, 'Participant'),
+        },
+        undefined,
+        captured,
+      );
       return res.json({
         kind,
-        sections: content.map((sec, si) => ({
+        seat_id: seatId,
+        context,
+        sections: examForSeat(content, context).map((sec, si) => ({
           ...sec,
           index: si,
           type: sectionType(sec),
@@ -383,10 +412,6 @@ router.post(
       });
     }
 
-    const name = (v, fallback) =>
-      String(v ?? '')
-        .trim()
-        .slice(0, 60) || fallback;
     const who = {
       firstName: name(req.body?.first_name, 'Sample'),
       lastName: name(req.body?.last_name, 'Participant'),

@@ -63,6 +63,45 @@ Multi-line prompt with **Markdown**
 kind: exam
 title: Edge
 description: d
+variables:
+  STORE = 100 + seat
+  NOEQ
+  SUBNET = "10." + seat + ".0.0"
+---
+
+# [info] Seat {{ SEAT_ID }}
+## Step {{ STORE }}
+Hi {{ FULL_NAME }} {{ NOPE }}
+- [ ] Check {{ SUBNET }} {{ ALSO_NOPE }}
+
+# Q {{ MISSING_TITLE }}
+## [text] Store {{ STORE }}?
+> accept: {{ STORE }} | x{{ GONE }}
+## [single] Pick {{ STORE }}
+- [x] {{ OPT }}
+- [ ] b
+## [text] Router?
+> capture: ROUTER
+## [text] Again {{ ROUTER }}?
+> capture: ROUTER
+## [mcq] Saved?
+> capture: bad name
+- [x] a
+- [ ] b
+## [text] Seat?
+> capture: SEAT_ID
+## [text] Store?
+> capture: STORE
+
+# Later {{ ROUTER }}
+## [text] Repeat {{ ROUTER }}
+> accept: {{ ROUTER }}
+> capture: 9X
+`,
+  `---
+kind: exam
+title: Edge
+description: d
 ---
 
 ## [single] Before any section
@@ -125,6 +164,7 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
   const odd = {
     kind: 'exam',
     title: 'T'.repeat(250),
+    variables: [{ name: ' A ', expression: ' 1 + seat ' }, null, 'x', { name: 3 }, {}],
     content: [
       {
         title: 'S',
@@ -133,7 +173,8 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
           { type: 'multiple', options: ['a', 'b', 'c'], correct: [2, '0', 2, -1], points: 500 },
           { type: 'truefalse', correct: 'f' },
           { type: 'weird', options: ['x', 'y'], correct: '1' },
-          { type: 'short', accepted: [' a ', 'a', '', 'b'] },
+          { type: 'short', accepted: [' a ', 'a', '', 'b'], capture: ' SAVED ' },
+          { type: 'long', capture: 7 },
           null,
         ],
       },

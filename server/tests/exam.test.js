@@ -613,6 +613,124 @@ test('informational sections: the participant ticks every item to move on; nobod
   );
 });
 
+test('per-seat variables and saved answers resolve throughout the exam and its grading', async () => {
+  const body = {
+    kind: 'exam',
+    title: 'Seats',
+    variables: [{ name: 'STORE', expression: '100 + seat' }],
+    content: [
+      {
+        type: 'info',
+        title: 'Bench {{ SEAT_ID }}',
+        steps: [
+          {
+            title: 'Hi {{ FIRST_NAME }}',
+            body: 'Store {{ STORE }}',
+            tasks: ['Ping store {{ STORE }}'],
+          },
+        ],
+      },
+      {
+        title: 'Setup',
+        questions: [
+          { type: 'short', prompt: 'Which store is yours?', accepted: ['{{ STORE }}'] },
+          { type: 'short', prompt: 'Your router IP?', capture: 'ROUTER_IP' },
+        ],
+      },
+      {
+        title: 'Check {{ ROUTER_IP }}',
+        questions: [
+          {
+            type: 'single',
+            prompt: 'Is {{ ROUTER_IP }} on store {{ STORE }}?',
+            options: ['Yes, {{ ROUTER_IP }}', 'No'],
+            correct: 0,
+          },
+          { type: 'short', prompt: 'Repeat your router IP', accepted: ['{{ ROUTER_IP }}'] },
+        ],
+      },
+    ],
+  };
+
+  // Placeholders must be declared, and a saved answer only exists after its section.
+  const bad = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      ...body,
+      content: [
+        { ...body.content[1], title: 'Setup {{ ROUTER_IP }} {{ NOPE }}' },
+        { title: 'X', questions: [{ type: 'long', prompt: 'x', capture: 'LONG' }] },
+      ],
+    },
+  });
+  assert.equal(bad.status, 400);
+  const msgs = bad.data.details.join('\n');
+  assert.match(msgs, /Unknown placeholder \{\{ NOPE \}\} in Section 1 title/);
+  assert.match(
+    msgs,
+    /\{\{ ROUTER_IP \}\} is used in Section 1 title before the question that saves it/,
+  );
+  assert.match(msgs, /Section 2 · question 1: only a short answer can be saved as a variable/);
+
+  const tpl = await call('/api/templates', { method: 'POST', token, body });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  assert.deepEqual(tpl.data.variables, body.variables);
+  assert.equal(tpl.data.content[1].questions[1].capture, 'ROUTER_IP');
+
+  // The instructor preview resolves a chosen seat.
+  const pv = await call(`/api/templates/${tpl.data.id}/preview`, {
+    method: 'POST',
+    token,
+    body: { seat_id: 3 },
+  });
+  assert.equal(pv.status, 200);
+  assert.equal(pv.data.context.STORE, 103);
+  assert.equal(pv.data.sections[0].steps[0].body, 'Store 103');
+  assert.match(pv.data.sections[2].title, /^Check \[answer to Section 2 · question 2\]$/);
+
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.data.id },
+  });
+  const join = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Dee', last_name: 'Seat' },
+  });
+  const t = join.data.token;
+  const seat = join.data.seat_number;
+  const store = String(100 + Number(seat));
+  const put = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+
+  let view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.sections[0].title, `Bench ${seat}`);
+  assert.equal(view.data.sections[0].steps[0].title, 'Hi Dee');
+  assert.equal(view.data.sections[0].steps[0].tasks[0].text, `Ping store ${store}`);
+  await put('0.t0', true);
+  view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.sections[1].questions[1].capture, 'ROUTER_IP');
+  await put('1.0', store);
+  await put('1.1', ' 10.0.0.1 ');
+  view = await call('/api/participant/exam', { token: t });
+  const check = view.data.sections[2];
+  assert.equal(check.title, 'Check 10.0.0.1');
+  assert.equal(check.questions[0].prompt, `Is 10.0.0.1 on store ${store}?`);
+  assert.deepEqual(check.questions[0].options, ['Yes, 10.0.0.1', 'No']);
+  // Changing the saved answer changes what later sections show.
+  await put('1.1', '10.0.0.2');
+  view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.sections[2].title, 'Check 10.0.0.2');
+  await put('2.0', 0);
+  await put('2.1', '10.0.0.2');
+
+  const detail = await call(`/api/sessions/${sess.data.id}`, { token });
+  const d = detail.data.participants.find((x) => x.name === 'Dee Seat');
+  assert.equal(d.score, 1 + 1 + 1, 'per-seat and saved answers grade automatically');
+  assert.equal(d.pending_count, 1, 'the saved answer itself is marked by hand');
+});
+
 test('a lab session runs for 8 hours unless told otherwise', async () => {
   const list = await call('/api/templates', { token });
   const lab = list.data.find((x) => x.kind === 'lab');
