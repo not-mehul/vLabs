@@ -784,8 +784,8 @@ sessions are read in either shape.
   everything in it. The server lists the sections each seat has opened
   (`visited_sections`), so this survives a reload.
 - **No confirmation pop-up on Submit.** The submit section already lists
-  unanswered questions and unfinished checklists and says that submitting
-  is final, so the browser pop-up asking to confirm was removed.
+  unanswered questions and unfinished checklists, with the template's own
+  submit text, so the browser pop-up asking to confirm was removed.
 
 ### Upgrading
 
