@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Instructor account administration (CLI, no UI yet).
+ * Instructor account administration from the command line (the portal's
+ * Admin page does the same; this is the fallback when nobody can sign in).
  *
  *   node server/scripts/instructors.js list
  *   node server/scripts/instructors.js create <username> [password]
@@ -8,8 +9,9 @@
  *
  * When no password is given a random one is generated and printed ONCE.
  * Resetting a password bumps token_version, which signs that instructor out
- * of every browser. On the Pi:
- *   sudo -u vlabs /usr/bin/node /opt/vlabs/server/scripts/instructors.js list
+ * of every browser. On the Pi, run it through deploy/pi/vlabs-cli.sh so it
+ * uses the production configuration and database:
+ *   sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors list
  */
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
@@ -83,7 +85,7 @@ try {
       );
       console.log(`Created instructor "${username}".`);
       if (generated) console.log(`Temporary password (shown once): ${password}`);
-      console.log('Ask them to change it from Account → Change password.');
+      console.log('Ask them to change it from Admin → Your password.');
       break;
     }
     case 'reset-password': {

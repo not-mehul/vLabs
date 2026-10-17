@@ -177,14 +177,16 @@ CREATE TABLE IF NOT EXISTS participants (
   hints_taken            TEXT NOT NULL DEFAULT '[]',
   revealed_solutions     TEXT NOT NULL DEFAULT '[]',
   -- Exam sessions only. answers: { "<section>.<question>": value } (latest
-  -- response per question); grades: instructor overrides { key: { correct:
-  -- 0|1, by, at } }; submitted_at: when the participant handed the exam in.
+  -- response per question); grades: instructor marks { key: { correct: 0|1
+  -- or points: N, comment, by, at } }; submitted_at: when the exam was handed
+  -- in, auto_submitted = 1 when the session's end handed it in.
   -- (answer_log is the pre-1.5.1 change log, superseded by
   -- exam_answer_events and no longer written.)
   answers                TEXT NOT NULL DEFAULT '{}',
   answer_log             TEXT NOT NULL DEFAULT '[]',
   grades                 TEXT NOT NULL DEFAULT '{}',
   submitted_at           TEXT,
+  auto_submitted         INTEGER NOT NULL DEFAULT 0,
   -- Set by the server the moment every section is cleared (the clock stops);
   -- finished_at is when the participant pressed Finish (may be later/never).
   completed_at           TEXT,

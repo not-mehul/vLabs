@@ -158,10 +158,6 @@ function autoGrowAllTextareas(parent = document) {
   });
 }
 
-function escapeRegExp(str) {
-  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // --- Custom Confirmation Modal Helper ---
 function openConfirmModal({ title = 'Confirm Action', message = 'Are you sure?', confirmText = 'Confirm', onConfirm = null }) {
   document.getElementById('confirmModalTitle').innerHTML = `<i class="ph-bold ph-warning text-amber-500"></i> ${escapeHtml(title)}`;

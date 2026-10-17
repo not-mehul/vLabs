@@ -134,12 +134,6 @@ const P = {
       <path d="M9.9 14.1a2.8 2.8 0 0 0 4.2-4.2M4 20 20 4" />
     </>
   ),
-  layers: (
-    <>
-      <path d="M12 3 3 8l9 5 9-5-9-5Z" />
-      <path d="M3 13l9 5 9-5" />
-    </>
-  ),
   key: (
     <>
       <circle cx="8" cy="8" r="4.2" />
@@ -150,14 +144,6 @@ const P = {
     <>
       <path d="M4 20h4L18.6 9.4a2 2 0 0 0-2.8-2.8L5.2 17.2 4 20Z" />
       <path d="M14 8l2.8 2.8" />
-    </>
-  ),
-  settings: (
-    <>
-      <path d="M4 7h9M18 7h2M4 12h2M9 12h11M4 17h6M15 17h5" />
-      <circle cx="16" cy="7" r="2" />
-      <circle cx="7" cy="12" r="2" />
-      <circle cx="13" cy="17" r="2" />
     </>
   ),
   history: (

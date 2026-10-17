@@ -1,7 +1,7 @@
 /**
- * Unit tests for the template import/export format. Runs under `node --test`
- * with no browser or bundler: the module only touches DOM APIs inside the
- * download/read helpers, which are never invoked here.
+ * Unit tests for the lab template import/export format
+ * (shared/template-format.js). Runs under `node --test` with no browser or
+ * bundler: the module is dependency-free.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

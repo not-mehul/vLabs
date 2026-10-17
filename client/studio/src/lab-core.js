@@ -60,10 +60,6 @@ function evaluateFormulaTyped(expr, context = {}, allowedVars = null) {
   }
 }
 
-function evaluateFormula(expr, context = {}, allowedVars = null) {
-  return evaluateFormulaTyped(expr, context, allowedVars).display;
-}
-
 // Evaluate all template variables in order for a given participant.
 function buildEvaluatedContext(seat = 1, firstName = 'Mary-Jane', lastName = "O'Neil", extraCaptures = {}) {
   const ctx = {
@@ -110,8 +106,6 @@ function matchPatternMask(rawInput, pattern) {
     ? { matched: false, canonical: '', error: 'Does not match pattern mask' }
     : { matched: true, canonical };
 }
-
-const normalizeExactAnswer = normaliseAnswer;
 
 function verifyCheckpointSubmission(cp, userInput, context) {
   if (!cp) return { matched: true, canonical: '' };

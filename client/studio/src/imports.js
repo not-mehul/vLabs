@@ -49,7 +49,6 @@ import {
   captureErrors,
   questionErrors,
   stepErrors,
-  examErrors,
   gradeResponse,
   examUnlockedSection,
 } from '../../../shared/exam-schema.js';
@@ -57,7 +56,6 @@ import {
   parseExamMarkdown,
   examToMarkdown,
   looksLikeExamMarkdown as sharedLooksLikeExamMarkdown,
-  TYPE_ALIASES,
 } from '../../../shared/exam-format.js';
 import { validateTemplatePayload } from '../../../shared/validate-template.js';
 import { validateExamPayload } from '../../../shared/validate-exam.js';
