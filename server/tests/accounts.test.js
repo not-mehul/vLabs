@@ -173,6 +173,32 @@ test('listing, resetting and removing instructors', async () => {
   );
   assert.equal(self.status, 400, 'own password changes go through Account');
 
+  // Only the admin (the bootstrap "instructor" account) resets or removes
+  // other accounts; anyone else is refused.
+  assert.equal(list.data.find((i) => i.username === 'instructor').is_admin, true);
+  assert.equal(list.data.find((i) => i.username === 'alice').is_admin, false);
+  assert.equal((await call('/api/auth/me', { token: aliceToken })).data.instructor.is_admin, false);
+  const bob = list.data.find((i) => i.username === 'bob');
+  const notAdminReset = await call(`/api/auth/instructors/${bob.id}/reset-password`, {
+    method: 'POST',
+    token: aliceToken,
+  });
+  assert.equal(notAdminReset.status, 403);
+  assert.equal(notAdminReset.data.code, 'ADMIN_ONLY');
+  const adminId = list.data.find((i) => i.username === 'instructor').id;
+  for (const target of [bob.id, adminId]) {
+    const r = await call(`/api/auth/instructors/${target}`, {
+      method: 'DELETE',
+      token: aliceToken,
+    });
+    assert.equal(r.status, 403, 'a non-admin cannot remove accounts');
+  }
+  assert.equal(
+    (await call('/api/auth/instructors', { token })).data.length,
+    3,
+    'nothing was removed',
+  );
+
   const reset = await call(`/api/auth/instructors/${aliceId}/reset-password`, {
     method: 'POST',
     token,

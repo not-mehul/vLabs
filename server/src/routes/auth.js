@@ -40,7 +40,27 @@ const q = {
   ),
   reassignSessions: db.prepare('UPDATE sessions SET instructor_id = ? WHERE instructor_id = ?'),
   remove: db.prepare('DELETE FROM instructors WHERE id = ?'),
+  firstId: db.prepare('SELECT MIN(id) AS id FROM instructors'),
 };
+
+/**
+ * The admin account: the bootstrap instructor (SEED_INSTRUCTOR_USERNAME,
+ * "instructor" by default), or the oldest account if that one no longer
+ * exists. Only the admin can reset or remove other instructors' accounts;
+ * anyone can add one or change their own password.
+ */
+function adminId() {
+  const seed = q.byUsername.get(config.seedInstructor.username);
+  return seed ? seed.id : q.firstId.get().id;
+}
+
+const isAdmin = (id) => id === adminId();
+
+function requireAdmin(req) {
+  if (!isAdmin(req.instructor.id)) {
+    throw httpError(403, 'Only the admin account can do this', 'ADMIN_ONLY');
+  }
+}
 
 // A real bcrypt hash of a random value, computed once at boot, so a login
 // attempt for an unknown username costs the same as one for a known user.
@@ -61,6 +81,7 @@ function publicInstructor(row) {
     username: row.username,
     must_change_password: mustChangePassword(row),
     password_changed_at: row.password_changed_at,
+    is_admin: isAdmin(row.id),
   };
 }
 
@@ -191,6 +212,7 @@ async function actingInstructor(req) {
 
 /** GET /api/auth/instructors — every account with its session counts. */
 router.get('/instructors', requireInstructor, (req, res) => {
+  const admin = adminId();
   res.json(
     q.list.all().map((r) => ({
       id: r.id,
@@ -201,6 +223,7 @@ router.get('/instructors', requireInstructor, (req, res) => {
       session_count: r.session_count,
       active_session_count: r.active_session_count,
       is_me: r.id === req.instructor.id,
+      is_admin: r.id === admin,
     })),
   );
 });
@@ -245,13 +268,14 @@ router.post(
 
 /**
  * POST /api/auth/instructors/:id/reset-password
- * Issues a new temporary password (returned once) and signs that instructor
- * out everywhere. Resetting your own account is refused — use PUT /password.
+ * Admin only. Issues a new temporary password (returned once) and signs that
+ * instructor out everywhere. Resetting your own account is refused — use PUT /password.
  */
 router.post(
   '/instructors/:id/reset-password',
   requireInstructor,
   asyncHandler(async (req, res) => {
+    requireAdmin(req);
     const row = q.byId.get(Number(req.params.id));
     if (!row) throw httpError(404, 'Instructor not found');
     if (row.id === req.instructor.id) {
@@ -267,11 +291,12 @@ router.post(
 
 /**
  * DELETE /api/auth/instructors/:id
- * Removes an account. Its sessions (and their participant data) are handed to
+ * Admin only. Removes an account. Its sessions (and their participant data) are handed to
  * the acting instructor rather than cascade-deleted. You cannot remove
  * yourself, so at least one account always remains.
  */
 router.delete('/instructors/:id', requireInstructor, (req, res) => {
+  requireAdmin(req);
   const row = q.byId.get(Number(req.params.id));
   if (!row) throw httpError(404, 'Instructor not found');
   if (row.id === req.instructor.id) throw httpError(400, 'You cannot remove your own account');

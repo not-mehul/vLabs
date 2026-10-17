@@ -79,7 +79,8 @@ export function NewInstructorFields({ username, setUsername, password, setPasswo
  * Admin page: the instructor accounts (reset a colleague's password, which
  * issues a one-time temporary password and signs them out everywhere, or
  * remove an account, whose sessions move to you) and a form to add one.
- * Every instructor may manage accounts.
+ * Anyone may add an account; only the admin account (the bootstrap
+ * instructor) may reset or remove other instructors.
  */
 export default function InstructorAccounts() {
   const { call } = useInstructorApi();
@@ -89,6 +90,7 @@ export default function InstructorAccounts() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const iAmAdmin = list.some((i) => i.is_me && i.is_admin);
 
   const refresh = useCallback(async () => {
     try {
@@ -183,6 +185,9 @@ export default function InstructorAccounts() {
         </h2>
         <p className="muted small">
           Everyone here can sign in to the portal, run sessions and edit the shared templates.
+          {iAmAdmin
+            ? ' As the admin, you can reset or remove the other accounts.'
+            : ' Only the admin account can reset or remove accounts.'}
         </p>
         <div className="table-wrap">
           <table className="table">
@@ -201,6 +206,7 @@ export default function InstructorAccounts() {
                   <td className="table__primary instructor-name">
                     {i.username}
                     {i.is_me && <span className="tag">you</span>}
+                    {i.is_admin && <span className="tag">admin</span>}
                   </td>
                   <td className="col--md muted">
                     {i.must_change_password ? (
@@ -220,7 +226,7 @@ export default function InstructorAccounts() {
                   </td>
                   <td className="col--lg muted">{formatDateTime(i.created_at)}</td>
                   <td className="table__actions">
-                    {!i.is_me && (
+                    {iAmAdmin && !i.is_me && (
                       <>
                         <button
                           className="btn btn--sm btn--icon btn--ghost"

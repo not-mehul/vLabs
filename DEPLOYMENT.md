@@ -169,12 +169,13 @@ matters to you.
 1. Open the address on your laptop → _Instructor sign in_ → `instructor` +
    the password printed by the installer (also in `/etc/vlabs/vlabs.env`).
 2. **Admin → Your password** (the banner nags until you do).
-3. Extra instructors: **Instructors** in the portal (add, reset a password,
-   remove), or the unlinked page `https://vlabs.local/instructor/add` (also a
-   faint link under the sign-in form), where an existing instructor's
-   credentials authorise the new account. Every instructor can manage
-   accounts — there are no admin roles, so only give accounts to people you
-   would trust with all of them. CLI fallback (e.g. if everyone is locked out):
+3. Extra instructors: **Admin** in the portal, or the unlinked page
+   `https://vlabs.local/instructor/add` (also a faint link under the sign-in
+   form), where an existing instructor's credentials authorise the new
+   account. Anyone can add an account, but only the **admin** account (the
+   bootstrap `instructor`, or the oldest account if that one is gone) can
+   reset another instructor's password or remove an account. CLI fallback
+   (e.g. if everyone is locked out):
    ```bash
    sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors create alice
    sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors reset-password alice
@@ -204,7 +205,10 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
   class (the session countdown keeps running); **End break** resumes them.
   Click a card in **Sections** to see that section's average time against
   its allocation, who is stuck on it, and which checkpoint answers trip
-  people up. Edits to the template don't reach the
+  people up. If someone is stuck on a checkpoint, open their row and press
+  **Unlock for this participant** on it: it is marked cleared by you and
+  their page moves on within ~15 s (participants can never skip one
+  themselves). Edits to the template don't reach the
   class until you press **Push latest version**.
 - **End:** _End session_ revokes every participant token instantly. Export CSV
   or JSON if you want the analytics; sessions stay on the dashboard regardless.

@@ -8,6 +8,12 @@ import {
   isSectionCleared,
   stepHasCheckpoint,
   checkpointMode,
+  checkpointKey,
+  checkpointAnswer,
+  computeUnlockedSection,
+  isStepReachable,
+  matchCheckpoint,
+  resolveVariables,
   injectImages,
 } from '../lib/templating.js';
 import { imageUrlMap } from '../lib/images.js';
@@ -38,6 +44,7 @@ import {
   describeExpected,
   sectionItems,
   isQuestion,
+  isSubmitSection,
 } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
@@ -93,6 +100,14 @@ const q = {
   setBreaks: db.prepare('UPDATE sessions SET breaks = ? WHERE id = ?'),
   removeParticipant: db.prepare('DELETE FROM participants WHERE id = ? AND session_id = ?'),
   setSeat: db.prepare('UPDATE participants SET seat_number = ? WHERE id = ?'),
+  setCheckpoints: db.prepare(
+    `UPDATE participants SET completed_checkpoints = ?, captured_values = ?, checkpoint_log = ?
+      WHERE id = ?`,
+  ),
+  complete: db.prepare(
+    `UPDATE participants SET completed_at = ?, section_times = ?
+      WHERE id = ? AND completed_at IS NULL`,
+  ),
   // Unbinds the exam seat from its device and signs that device out; the next
   // join with the same name (on any device) takes the seat over.
   releaseSeat: db.prepare(
@@ -195,8 +210,10 @@ function sectionFlow(sections, views, extra = () => ({})) {
     minutes: sec.minutes || null,
     // Seats whose furthest section is this one (finished seats are counted under `complete`).
     seats_here: views.filter((v) => !v.complete && v.furthest_section === i).length,
-    // Seats that have completed this section (moved past it, or finished).
-    seats_past: views.filter((v) => v.complete || v.sections_done[i]).length,
+    // Seats that have completed this section. Finishing the lab or submitting
+    // the exam does not complete a section the participant left undone (an
+    // optional one, say).
+    seats_past: views.filter((v) => v.sections_done[i]).length,
     ...averages[i],
     ...extra(sec, i),
   }));
@@ -322,6 +339,7 @@ function participantDetail(p, sections, breaks = []) {
 
   // Checkpoints in manual order with their attempts.
   const log = safeArray(p.checkpoint_log);
+  const completedSet = new Set(view.completed_checkpoints);
   const checkpoints = [];
   sections.forEach((sec, si) => {
     (sec.steps || []).forEach((step, sti) => {
@@ -329,16 +347,21 @@ function participantDetail(p, sections, breaks = []) {
       const key = `${si}.${sti}`;
       const attempts = log
         .filter((e) => e.k === key)
-        .map((e) => ({ answer: e.a, correct: Boolean(e.ok), at: e.at }));
+        .map((e) => ({ answer: e.a, correct: Boolean(e.ok), at: e.at, by: e.by || null }));
       const accepted = attempts.find((a) => a.correct);
+      const cleared = view.completed_checkpoints.includes(key);
       checkpoints.push({
         key,
         ...stepTitle(si, sti),
         prompt: step.checkpoint.prompt || 'Enter the value to continue',
         mode: checkpointMode(step),
         capture: step.checkpoint.capture || null,
-        cleared: view.completed_checkpoints.includes(key),
+        cleared,
         cleared_at: accepted?.at || null,
+        // Set when an instructor unlocked it for the participant.
+        cleared_by: accepted?.by || null,
+        // The checkpoint the participant can see but has not passed yet.
+        can_unlock: !cleared && isStepReachable(sections, si, sti, completedSet),
         accepted_answer:
           accepted?.answer ??
           (step.checkpoint.capture ? (view.captured[step.checkpoint.capture] ?? null) : null),
@@ -518,6 +541,90 @@ router.put('/:id/participants/:pid/seat', (req, res) => {
 });
 
 /**
+ * POST /api/sessions/:id/participants/:pid/checkpoints/:key/unlock — LAB
+ * sessions: clear a checkpoint for a participant who is stuck on it
+ * (instructor only; participants can never skip a checkpoint). Only the
+ * checkpoint the participant can currently see, while the session is live.
+ * Body { value } is needed when the checkpoint saves a pattern answer as a
+ * variable (later steps show it); an exact checkpoint saves the seat's own
+ * expected answer. Logged as an accepted attempt marked with the instructor.
+ */
+router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
+  const row = ownedOr404(req);
+  if (isExam(row)) throw httpError(409, 'Only lab checkpoints can be unlocked');
+  if (sessionStatus(row) !== 'active') throw httpError(409, 'The session is not active');
+  const p = participantOr404(req, row);
+  const sections = JSON.parse(row.content);
+  const [si, sti] = String(req.params.key)
+    .split('.')
+    .map((n) => (/^\d+$/.test(n) ? Number(n) : NaN));
+  const step = sections[si]?.steps?.[sti];
+  if (!step || !stepHasCheckpoint(step)) throw httpError(404, 'Checkpoint not found');
+  const key = checkpointKey(si, sti);
+  const completed = new Set(JSON.parse(p.completed_checkpoints || '[]'));
+  if (completed.has(key)) return res.json({ ok: true, already: true });
+  if (
+    si > computeUnlockedSection(sections, completed) ||
+    !isStepReachable(sections, si, sti, completed)
+  ) {
+    throw httpError(409, 'The participant has not reached this checkpoint yet');
+  }
+
+  const captured = safeObject(p.captured_values);
+  const capture = step.checkpoint.capture || null;
+  let value = null;
+  if (capture) {
+    const context = resolveVariables(variablesOf(row), p.seat_number, {
+      firstName: p.first_name,
+      lastName: p.last_name,
+      captured,
+    });
+    if (checkpointMode(step) === 'pattern') {
+      const typed = typeof req.body?.value === 'string' ? req.body.value : '';
+      const match = matchCheckpoint(step, context, typed);
+      if (!match.ok) {
+        throw httpError(
+          400,
+          `This checkpoint saves the answer as {{ ${capture} }}: enter a value in the expected format`,
+          'VALUE_REQUIRED',
+        );
+      }
+      value = match.value;
+    } else {
+      value = checkpointAnswer(step, context);
+    }
+    if (value !== null) captured[capture] = value;
+  }
+
+  const now = nowIso();
+  const entries = safeArray(p.checkpoint_log);
+  entries.push({ k: key, a: value ?? '', ok: 1, at: now, by: req.instructor.username });
+  completed.add(key);
+  q.setCheckpoints.run(
+    JSON.stringify([...completed]),
+    JSON.stringify(captured),
+    JSON.stringify(entries.slice(-200)),
+    p.id,
+  );
+  // Clearing the last checkpoint completes the lab, as it would for the participant.
+  if (!p.completed_at && labProgress(sections, p, completed).complete) {
+    const times = safeObject(p.section_times);
+    const k = String(p.current_section);
+    times[k] =
+      (Number(times[k]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaksOf(row));
+    q.complete.run(now, JSON.stringify(times), p.id);
+  }
+  log.info('checkpoint.unlocked', {
+    session: row.id,
+    participant: p.id,
+    section: si,
+    step: sti,
+    instructor: req.instructor.id,
+  });
+  res.json({ ok: true });
+});
+
+/**
  * PUT /api/sessions/:id/participants/:pid/marks/:key — EXAM sessions only.
  * Body: { correct: true | false | null }. Marks one response correct or
  * incorrect by hand (overriding the automatic verdict), or clears the mark
@@ -638,6 +745,7 @@ router.get('/:id/sections/:index', (req, res) => {
     return res.json({
       kind: 'exam',
       ...sectionTimeDetail(section, index, views),
+      optional: !isSubmitSection(section) && isOptionalSection(section),
       question_count: sectionItems(section).filter(isQuestion).length,
       questions: examQuestionStats(rows, content, variablesOf(row)).filter(
         (x) => x.section_index === index,
@@ -671,7 +779,10 @@ function examSessionDetail(row) {
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
     section_count: content.length,
+    // Sections before the submit section (what the Section column counts).
+    part_count: content.filter((sec) => !isSubmitSection(sec)).length,
     section_distribution: sectionFlow(content, participants, (sec) => ({
+      optional: !isSubmitSection(sec) && isOptionalSection(sec),
       question_count: sectionItems(sec).filter(isQuestion).length,
     })),
     complete_count: participants.filter((p) => p.submitted).length,

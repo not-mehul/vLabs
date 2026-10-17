@@ -659,6 +659,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                   <th className="col--seat">#</th>
                   <th>Participant</th>
                   <th>Answered</th>
+                  <th className="col--sm">Progress</th>
                   <th>Score</th>
                   <th>To mark</th>
                   <th title="Furthest section opened">Section</th>
@@ -714,6 +715,21 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                         </span>
                       </div>
                     </td>
+                    <td className="col--sm">
+                      <div className="progress-cell">
+                        <div
+                          className="minibar"
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={p.progress_pct}
+                          title={`${p.completed_sections}/${p.counting_sections} sections complete`}
+                        >
+                          <div className="minibar__fill" style={{ width: `${p.progress_pct}%` }} />
+                        </div>
+                        <span className="muted small">{p.progress_pct}%</span>
+                      </div>
+                    </td>
                     <td
                       title={p.fully_graded ? '' : 'Provisional: some answers still need marking'}
                     >
@@ -731,8 +747,14 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                         <span className="muted">Done</span>
                       ) : (
                         <span className="section-cell__num">
-                          {p.furthest_section + 1}
-                          <span className="muted"> / {data.section_count}</span>
+                          {p.furthest_section < data.part_count ? (
+                            <>
+                              {p.furthest_section + 1}
+                              <span className="muted"> / {data.part_count}</span>
+                            </>
+                          ) : (
+                            'Submit'
+                          )}
                         </span>
                       )}
                     </td>
