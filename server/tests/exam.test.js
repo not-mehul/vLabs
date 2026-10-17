@@ -892,3 +892,145 @@ test('a lab session runs for 8 hours unless told otherwise', async () => {
   const hours = (Date.parse(sess.data.expires_at) - Date.now()) / 3_600_000;
   assert.ok(hours > 7.9 && hours <= 8, `got ${hours} h`);
 });
+
+test('an exam linked to a lab gives matching names their lab seat; the monitor can change a seat', async () => {
+  const join = (code, first, last) =>
+    call('/api/participant/join', {
+      method: 'POST',
+      body: { room_code: code, first_name: first, last_name: last },
+    });
+
+  // A lab with four people, seats 1-4 in join order.
+  const templates = await call('/api/templates', { token });
+  const labTpl = templates.data.find((x) => x.kind === 'lab');
+  const lab = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: labTpl.id },
+  });
+  assert.equal(lab.status, 201);
+  for (const [first, last] of [
+    ['Ada', 'Lab'],
+    ['Bob', 'Lab'],
+    ['Cy', 'Clash'],
+    ['Dee', 'Absent'],
+  ]) {
+    assert.equal((await join(lab.data.room_code, first, last)).status, 200);
+  }
+
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Seat source',
+      variables: [{ name: 'STORE', expression: '100 + seat' }],
+      content: [
+        {
+          title: 'Store',
+          questions: [{ type: 'short', prompt: 'Store?', accepted: ['{{ STORE }}'] }],
+        },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+
+  // Only one of the instructor's own LAB sessions can be the seat source.
+  const launch = (source) =>
+    call('/api/sessions', {
+      method: 'POST',
+      token,
+      body: { template_id: tpl.data.id, seat_source_session_id: source },
+    });
+  assert.equal((await launch(999999)).status, 400);
+  assert.equal((await launch(sessionId)).status, 400, 'an exam session is not a seat source');
+  const other = db
+    .prepare("INSERT INTO instructors (username, password_hash) VALUES ('other', 'x')")
+    .run().lastInsertRowid;
+  const foreign = db
+    .prepare(
+      `INSERT INTO sessions (room_code, title, kind, instructor_id, expires_at)
+       VALUES ('000001', 'Not mine', 'lab', ?, '2000-01-01T00:00:00Z')`,
+    )
+    .run(other).lastInsertRowid;
+  assert.equal((await launch(foreign)).status, 400, "another instructor's lab");
+
+  const exam = await launch(lab.data.id);
+  assert.equal(exam.status, 201);
+  const code = exam.data.room_code;
+  const examSid = exam.data.id;
+
+  // Names in the lab get their lab seat whatever the join order; anyone else
+  // goes above the lab's highest seat.
+  const bob = await join(code, 'bob', ' LAB ');
+  assert.equal(bob.data.seat_number, 2);
+  const newbie = await join(code, 'New', 'Person');
+  assert.equal(newbie.data.seat_number, 5);
+  const ada = await join(code, 'Ada', 'Lab');
+  assert.equal(ada.data.seat_number, 1);
+  const typo = await join(code, 'Cyy', 'Clash');
+  assert.equal(typo.data.seat_number, 6);
+
+  // Same seat, same values: Bob's store is 102, as in the lab.
+  const bobExam = await call('/api/participant/exam', { token: bob.data.token });
+  const key = bobExam.data.sections[0].items[0].key;
+  const save = (t, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+  assert.equal((await save(bob.data.token, '102')).status, 200);
+  assert.equal((await save(typo.data.token, '103')).status, 200);
+
+  const monitor = await call(`/api/sessions/${examSid}`, { token });
+  assert.equal(monitor.data.seat_source.id, lab.data.id);
+  const byName = (n) => monitor.data.participants.find((p) => p.name === n);
+  assert.equal(byName('bob LAB').lab_seat, 2);
+  assert.equal(byName('New Person').lab_seat, null);
+  assert.equal(byName('Bob Lab'), undefined);
+  const typoId = byName('Cyy Clash').id;
+  const detail = (pid) => call(`/api/sessions/${examSid}/participants/${pid}`, { token });
+  assert.equal((await detail(byName('bob LAB').id)).data.questions[0].correct, true);
+  assert.equal((await detail(typoId)).data.questions[0].correct, false);
+
+  // Change seat: refused when taken or out of range, exams only.
+  const seat = (sid, pid, n) =>
+    call(`/api/sessions/${sid}/participants/${pid}/seat`, {
+      method: 'PUT',
+      token,
+      body: { seat_number: n },
+    });
+  const taken = await seat(examSid, typoId, 2);
+  assert.equal(taken.status, 409);
+  assert.equal(taken.data.code, 'SEAT_IN_USE');
+  assert.match(taken.data.error, /bob LAB/);
+  assert.equal((await seat(examSid, typoId, 0)).status, 400);
+  assert.equal((await seat(examSid, typoId, 1.5)).status, 400);
+  const labDetail = await call(`/api/sessions/${lab.data.id}`, { token });
+  assert.equal((await seat(lab.data.id, labDetail.data.participants[0].id, 9)).status, 409);
+
+  // Moving the typo to Cy's lab seat switches their values and marking at once.
+  const moved = await seat(examSid, typoId, 3);
+  assert.equal(moved.status, 200);
+  assert.equal(moved.data.seat_number, 3);
+  assert.equal((await detail(typoId)).data.questions[0].correct, true);
+  const st = await call('/api/participant/status', { token: typo.data.token });
+  assert.equal(st.data.seat_number, 3);
+  assert.equal(
+    (await call('/api/participant/exam', { token: typo.data.token })).data.seat_number,
+    3,
+  );
+
+  // The real Cy Clash finds seat 3 taken and gets the next free number above
+  // the lab's (6, given up by the move).
+  const cy = await join(code, 'Cy', 'Clash');
+  assert.equal(cy.data.seat_number, 6);
+
+  // Deleting the lab unlinks it; seats then follow join order.
+  await call(`/api/sessions/${lab.data.id}/terminate`, { method: 'POST', token });
+  assert.equal(
+    (await call(`/api/sessions/${lab.data.id}`, { method: 'DELETE', token })).status,
+    204,
+  );
+  const after = await call(`/api/sessions/${examSid}`, { token });
+  assert.equal(after.data.seat_source, null);
+  assert.equal(after.data.participants[0].lab_seat, undefined);
+  assert.equal((await join(code, 'Dee', 'Absent')).data.seat_number, 7);
+});

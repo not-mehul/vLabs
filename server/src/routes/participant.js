@@ -14,6 +14,7 @@ import { signParticipantToken } from '../lib/tokens.js';
 import { nowIso, parseUtc } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
+import { nextSeatNumber } from '../lib/seatSource.js';
 import { labProgress } from '../lib/labProgress.js';
 import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
 import {
@@ -205,7 +206,8 @@ function requireReachableStep(sections, si, sti, completed) {
 /* -------------------------------------------------------------------------- */
 
 // Assign the next seat number atomically inside a transaction so concurrent
-// joins can never collide on a number.
+// joins can never collide on a number. An exam linked to a lab session gives
+// a matching name its lab seat (lib/seatSource.js).
 //
 // Resuming by name: lab seats resume on name alone (a documented trade-off —
 // a lab seat holds nothing worth stealing). EXAM seats are bound to the device
@@ -240,7 +242,7 @@ const registerParticipant = db.transaction((session, firstName, lastName, nameKe
   if (count >= MAX_PARTICIPANTS) {
     throw httpError(409, `This session is full (${MAX_PARTICIPANTS} participants max).`);
   }
-  const seatNumber = maxSeat + 1;
+  const seatNumber = nextSeatNumber(session, nameKey, maxSeat);
   const now = nowIso();
   const info = q.insert.run(session.id, seatNumber, firstName, lastName, nameKey, now, now, now);
   let key = null;
@@ -256,7 +258,8 @@ const registerParticipant = db.transaction((session, firstName, lastName, nameKe
  * Body: { room_code, first_name, last_name }
  *
  * Registers a participant by name and assigns the next ascending seat number
- * (1-100) in join order. Rejoining with the same name resumes the same seat
+ * in join order (or, in an exam linked to a lab, their lab seat; at most 100
+ * participants). Rejoining with the same name resumes the same seat
  * and progress, so a participant who closes their browser can come straight
  * back in. Returns a participant token plus lightweight session metadata —
  * never the manual body.
@@ -677,6 +680,8 @@ router.get('/status', contentLimiter, (req, res) => {
     finished: Boolean(p.finished_at),
     submitted: Boolean(p.submitted_at),
     template_version: req.session.template_version,
+    // Exams: the instructor can change the seat (and so its values) mid-exam.
+    seat_number: p.seat_number,
   });
 });
 

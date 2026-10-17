@@ -228,6 +228,13 @@ export const api = {
       method: 'POST',
       token,
     }),
+  /** Exams: give the participant another seat number (and so that seat's values). */
+  changeSeat: (token, sessionId, participantId, seatNumber) =>
+    request(`/sessions/${sessionId}/participants/${participantId}/seat`, {
+      method: 'PUT',
+      body: { seat_number: seatNumber },
+      token,
+    }),
   /** Exams: undo a submission. */
   reopenExam: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}/reopen`, {

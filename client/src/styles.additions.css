@@ -1447,6 +1447,21 @@ input.field__input--sm[type='number'] {
   gap: 0.4rem;
   margin: 0 0 1rem;
 }
+/* Exam monitor: the inline "Change seat" form. */
+.seat-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.seat-change__label {
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.seat-change__input {
+  width: 5.5rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
 
 /* Section time allocation and class averages on the section cards. */
 /* Sections panel: each card is a button that opens the section drawer. */

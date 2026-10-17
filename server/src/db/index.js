@@ -131,7 +131,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   ended_at         TEXT,
   -- Class-wide breaks toggled by the instructor: [{ start, end|null }]. Time
   -- inside a break never counts towards anyone's section time.
-  breaks           TEXT NOT NULL DEFAULT '[]'
+  breaks           TEXT NOT NULL DEFAULT '[]',
+  -- Exams: the lab session whose seat numbers this exam reuses. A participant
+  -- whose name matches someone in that lab gets their lab seat (and so the same
+  -- per-seat values). NULL = seats in join order.
+  seat_source_session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL
 );
 
 -- Only one ACTIVE session may hold a given room_code at a time. Expired /
@@ -140,8 +144,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_active_code
   ON sessions(room_code) WHERE is_active = 1;
 
 -- A registered participant within a session. Each participant registers with
--- their first + last name and is assigned an ascending seat_number (1-100) in
--- join order; that number is what the templating engine uses as the seat value.
+-- their first + last name and is assigned an ascending seat_number in join
+-- order (an exam linked to a lab reuses lab seats instead; see
+-- lib/seatSource.js); that number is what the templating engine uses as the
+-- seat value.
 -- name_key (lowercased "first last") makes rejoin idempotent so a participant
 -- who closes their browser can return and resume the same seat and progress.
 -- Progress is tracked by SECTION: current_section is the section being viewed,
@@ -389,6 +395,17 @@ const MIGRATIONS = [
     name: 'session breaks (time-on-section excludes breaks)',
     up() {
       addColumnIfMissing('sessions', 'breaks', "TEXT NOT NULL DEFAULT '[]'");
+    },
+  },
+  {
+    version: 8,
+    name: 'exam seats from a lab session',
+    up() {
+      addColumnIfMissing(
+        'sessions',
+        'seat_source_session_id',
+        'INTEGER REFERENCES sessions(id) ON DELETE SET NULL',
+      );
     },
   },
 ];

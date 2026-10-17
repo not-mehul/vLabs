@@ -42,6 +42,13 @@ import {
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
 import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
+import {
+  MAX_SEAT_NUMBER,
+  checkSeatSource,
+  labSeatMap,
+  seatHolder,
+  seatSourceSummary,
+} from '../lib/seatSource.js';
 import { log } from '../lib/logger.js';
 
 const router = Router();
@@ -56,8 +63,8 @@ const q = {
   insert: db.prepare(
     `INSERT INTO sessions
        (room_code, title, kind, template_id, instructor_id, template_version, template_title,
-        content, variables, is_active, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        content, variables, is_active, expires_at, seat_source_session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
   ),
   byId: db.prepare('SELECT * FROM sessions WHERE id = ?'),
   // LEFT JOIN: the master template may have been archived or deleted since;
@@ -85,6 +92,7 @@ const q = {
   setGrades: db.prepare('UPDATE participants SET grades = ? WHERE id = ?'),
   setBreaks: db.prepare('UPDATE sessions SET breaks = ? WHERE id = ?'),
   removeParticipant: db.prepare('DELETE FROM participants WHERE id = ? AND session_id = ?'),
+  setSeat: db.prepare('UPDATE participants SET seat_number = ? WHERE id = ?'),
   // Unbinds the exam seat from its device and signs that device out; the next
   // join with the same name (on any device) takes the seat over.
   releaseSeat: db.prepare(
@@ -106,6 +114,9 @@ function participantOr404(req, row) {
 }
 
 const isExam = (row) => row.kind === 'exam';
+
+/** The seat this participant had in the linked lab: a number, null (not in it), or undefined (no link). */
+const labSeatOf = (labSeats, p) => (labSeats ? (labSeats.get(p.name_key) ?? null) : undefined);
 
 /** Resolve library image names in exam prompts/options for the instructor's view. */
 function withImages(question) {
@@ -403,18 +414,24 @@ router.post(
     if (template.archived_at)
       throw httpError(409, 'This template is archived — restore it to launch a session');
 
+    const exam = template.kind === 'exam';
     // Default length: a lab day (8 h) or an exam hour.
-    const fallback = DEFAULT_SESSION_MINUTES[template.kind === 'exam' ? 'exam' : 'lab'];
+    const fallback = DEFAULT_SESSION_MINUTES[exam ? 'exam' : 'lab'];
     const durationMinutes = Math.min(
       Math.max(parseInt(req.body?.duration_minutes ?? fallback, 10) || fallback, 5),
       24 * 60,
     );
 
+    // Exams only: reuse the seat numbers of one of the instructor's labs.
+    const seatSource = exam
+      ? checkSeatSource(req.body?.seat_source_session_id, req.instructor.id)
+      : null;
+
     const roomCode = generateRoomCode();
     const info = q.insert.run(
       roomCode,
       title || template.title,
-      template.kind === 'exam' ? 'exam' : 'lab',
+      exam ? 'exam' : 'lab',
       template.id,
       req.instructor.id,
       template.version,
@@ -422,6 +439,7 @@ router.post(
       template.content,
       template.variables,
       isoInMinutes(durationMinutes),
+      seatSource,
     );
 
     const row = q.detail.get(info.lastInsertRowid, req.instructor.id);
@@ -429,6 +447,7 @@ router.post(
       session: row.id,
       template: template.id,
       instructor: req.instructor.id,
+      seat_source: seatSource,
     });
     res.status(201).json(summarise(row));
   }),
@@ -454,7 +473,48 @@ router.get('/:id/participants/:pid', (req, res) => {
   const content = JSON.parse(row.content);
   if (!isExam(row)) return res.json(participantDetail(p, content, breaksOf(row)));
   const detail = examParticipantDetail(p, content, breaksOf(row), variablesOf(row));
-  res.json({ ...detail, questions: detail.questions.map(withImages) });
+  res.json({
+    ...detail,
+    lab_seat: labSeatOf(labSeatMap(row), p),
+    questions: detail.questions.map(withImages),
+  });
+});
+
+/**
+ * PUT /api/sessions/:id/participants/:pid/seat — EXAM sessions: body
+ * { seat_number }. Gives the participant another seat number (a typo or a
+ * name clash kept them from their lab seat). Refused when someone else holds
+ * that number. Their exam and marking use the new seat's values at once,
+ * because both are worked out from the seat whenever they are read; answers
+ * already given are kept as they are.
+ */
+router.put('/:id/participants/:pid/seat', (req, res) => {
+  const row = ownedOr404(req);
+  if (!isExam(row)) throw httpError(409, 'Seats can only be changed in exam sessions');
+  const p = participantOr404(req, row);
+  const seat = Number(req.body?.seat_number);
+  if (!Number.isInteger(seat) || seat < 1 || seat > MAX_SEAT_NUMBER) {
+    throw httpError(400, `Seat must be a whole number from 1 to ${MAX_SEAT_NUMBER}`);
+  }
+  if (seat !== p.seat_number) {
+    const holder = seatHolder(row.id, seat);
+    if (holder) {
+      throw httpError(
+        409,
+        `Seat ${seat} is taken by ${`${holder.first_name} ${holder.last_name}`.trim()}`,
+        'SEAT_IN_USE',
+      );
+    }
+    q.setSeat.run(seat, p.id);
+    log.info('participant.seat.changed', {
+      session: row.id,
+      participant: p.id,
+      from: p.seat_number,
+      to: seat,
+      instructor: req.instructor.id,
+    });
+  }
+  res.json({ seat_number: seat });
 });
 
 /**
@@ -599,10 +659,15 @@ function examSessionDetail(row) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
   const variables = variablesOf(row);
-  const participants = rows.map((p) => examParticipantView(p, content, breaksOf(row), variables));
+  const labSeats = labSeatMap(row);
+  const participants = rows.map((p) => ({
+    ...examParticipantView(p, content, breaksOf(row), variables),
+    lab_seat: labSeatOf(labSeats, p),
+  }));
   return {
     ...summarise(row),
     ...breakView(row),
+    seat_source: seatSourceSummary(row),
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
     section_count: content.length,

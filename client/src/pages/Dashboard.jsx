@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { downloadFile } from '../lib/files.js';
 import { slug } from '../lib/format.js';
+import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
@@ -16,9 +17,11 @@ function StatusPill({ status }) {
   return <span className={`pill pill--${status}`}>{status}</span>;
 }
 
-function CreateSession({ templates, onCreated }) {
+function CreateSession({ templates, sessions, onCreated }) {
   const { call } = useInstructorApi();
   const [templateId, setTemplateId] = useState('');
+  // Exams: the lab session whose seat numbers (and so per-seat values) to reuse.
+  const [seatSource, setSeatSource] = useState('');
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(DEFAULT_MINUTES.lab);
   // Until the instructor changes the length, it follows the template's kind.
@@ -27,6 +30,8 @@ function CreateSession({ templates, onCreated }) {
   const [error, setError] = useState('');
 
   const canSubmit = templateId && !busy;
+  const isExam = templates.find((t) => String(t.id) === templateId)?.kind === 'exam';
+  const labSessions = sessions.filter((s) => s.kind !== 'exam');
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -46,9 +51,11 @@ function CreateSession({ templates, onCreated }) {
           template_id: Number(templateId),
           title,
           duration_minutes: Number(duration),
+          seat_source_session_id: isExam && seatSource ? Number(seatSource) : null,
         }),
       );
       setTitle('');
+      setSeatSource('');
       onCreated(res);
     } catch (err) {
       setError(err.message);
@@ -108,6 +115,24 @@ function CreateSession({ templates, onCreated }) {
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>
+          {isExam && (
+            <label className="field">
+              <span className="field__label">Seats from</span>
+              <select
+                className="field__input"
+                value={seatSource}
+                onChange={(e) => setSeatSource(e.target.value)}
+              >
+                <option value="">Join order</option>
+                {labSessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title} · {s.room_code} · {formatDateTime(s.created_at)} ·{' '}
+                    {s.participant_count} joined
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <DurationField
             label="Runs for"
             value={duration}
@@ -126,6 +151,8 @@ function CreateSession({ templates, onCreated }) {
         Sessions run for 8 hours (labs) or 1 hour (exams) unless you change it; use +30 min on the
         monitor to extend. The session takes a copy of the template at launch; later edits only
         reach it when you push them from the monitor.
+        {isExam &&
+          ' Seats from a lab: anyone whose name matches someone in that lab gets their lab seat, and so the same values; use Change seat on the monitor for typos.'}
       </p>
       {error && (
         <p className="form__error" role="alert">
@@ -206,6 +233,7 @@ export default function Dashboard() {
 
       <CreateSession
         templates={templates}
+        sessions={sessions}
         onCreated={(s) => {
           setJustCreated(s);
           refresh();

@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.12.0). The first section is the original code
+Newest entry at the bottom (1.13.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -752,3 +752,25 @@ variables, and exams without any behave as before.
 
 `deploy/pi/update.sh` as usual. No migration: stored exams and running
 sessions are read in either shape.
+
+## 1.13.0 — exam seats from a lab
+
+- **An exam can take its seats from a lab session.** When you launch an
+  exam, choose **Seats from:** one of your lab sessions (running or ended).
+  Anyone who joins the exam under the same name as in that lab gets their
+  lab seat number, and so the same per-seat values (`STORE = 100 + seat`).
+  Anyone not in the lab gets the next number above the lab's highest seat,
+  so they never take a seat someone from the lab still needs. Leaving it on
+  **Join order** works as before.
+- **Change seat** in the exam monitor's participant panel gives someone
+  another seat number: for a typo in their name, or two students with the
+  same name. It is refused when the number is taken. Their exam and marking
+  switch to the new seat's values at once, and their page reloads within
+  about 15 seconds; answers already given are kept.
+- The exam monitor shows which lab the seats come from, and tags anyone
+  **not in lab** or on a different seat than in the lab (**lab #N**).
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. Migration 8 adds one column to sessions
+(`seat_source_session_id`); existing sessions keep join-order seats.

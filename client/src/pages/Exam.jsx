@@ -172,7 +172,7 @@ export default function Exam() {
       setError('');
       participantSession.set({
         token,
-        seatNumber,
+        seatNumber: res.seat_number ?? seatNumber,
         name,
         session: { ...session, kind: 'exam', expires_at: res.expires_at },
       });
@@ -195,7 +195,14 @@ export default function Exam() {
         setOffsetMs(clockOffset(st.server_time));
         setOnBreak(Boolean(st.on_break));
         if (st.submitted) setSubmitted(true);
-        if (data && st.template_version !== data.template_version) load();
+        // A pushed template, or the instructor changed the seat (new values).
+        if (
+          data &&
+          (st.template_version !== data.template_version ||
+            (st.seat_number != null && st.seat_number !== data.seat_number))
+        ) {
+          load();
+        }
       } catch (err) {
         handleAuthError(err);
       }
@@ -328,6 +335,8 @@ export default function Exam() {
   if (!token) return null;
 
   const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
+  // The server's number wins: the instructor may have changed the seat.
+  const seat = data?.seat_number ?? seatNumber;
   const sections = data?.sections || []; // unlocked sections only
   const totalSections = data?.total_sections ?? sections.length;
   // An unticked checklist locks every section after it straight away (the
@@ -351,8 +360,8 @@ export default function Exam() {
           </span>
           <h1>Exam completed</h1>
           <p>
-            Thank you, {displayName || `#${seatNumber}`}. Your exam is complete and your answers
-            have been recorded.
+            Thank you, {displayName || `#${seat}`}. Your exam is complete and your answers have been
+            recorded.
           </p>
           <div className="ended-actions">
             <button className="btn btn--primary" onClick={logout}>
@@ -434,7 +443,7 @@ export default function Exam() {
       <div className="lab__header">
         <header className="lab__bar">
           <div className="lab__bar-left">
-            <span className="lab__seat">#{seatNumber}</span>
+            <span className="lab__seat">#{seat}</span>
             <span className="lab__name">{displayName}</span>
             <span className="lab__session">{data?.title || session?.title}</span>
           </div>

@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.12.0**.
+Applies to vLabs **1.13.0**.
 
 ---
 
@@ -349,6 +349,31 @@ Section time works exactly as in labs (TEMPLATE_GUIDE.md §11.1):
 - Participants never see the allocation. Nothing locks when it runs out; it
   is a signal for the instructor, not a hard time limit.
 
+### 4.2 Seats from a lab
+
+Per-seat values (§2b) come from the seat number. To give everyone the same
+values in the exam as in the lab they just did, launch the exam with
+**Seats from:** that lab session (the launcher lists your lab sessions,
+running or ended).
+
+- Someone who joins the exam under the **same name** as in the lab (case
+  and extra spaces ignored) gets their **lab seat number**, whatever order
+  people join in, and so the same values.
+- Anyone not found in the lab gets the next number **above the lab's
+  highest seat**, so they never take a seat a lab participant still needs.
+- The monitor shows *Seats from …* above the participants, and tags anyone
+  **not in lab** (or whose seat differs from their lab seat, *lab #N*).
+- **Change seat** in the participant panel fixes the rest: a typo (*Jon* in
+  the lab, *John* in the exam), or two students with the same name (one
+  joins with, say, a middle initial and you give them their seat). It is
+  refused when someone else has that number. The participant's exam and the
+  marking switch to the new seat's values at once (their page reloads within
+  about 15 seconds); answers already given stay as they are.
+- Leaving **Seats from** on *Join order* numbers seats by join order, as
+  before. **Change seat** works there too.
+- Deleting the lab session unlinks it: seats already given stay, and later
+  joiners are numbered in join order.
+
 ## 5. Grading
 
 The exam monitor shows:
@@ -367,8 +392,9 @@ The exam monitor shows:
   answer, the verdict, the history of changes to that answer, and
   **Correct / Incorrect / Clear** buttons.
 
-Seat actions in the participant panel: **Reopen exam** (undo a submission
-while the session is live), **Move to another device** (above) and
+Seat actions in the participant panel: **Change seat** (§4.2), **Reopen
+exam** (undo a submission while the session is live), **Move to another
+device** (above) and
 **Remove** (deletes a mistaken registration and its answers). After a
 reopen, the participant continues from the furthest section they reached,
 with their answers, and the section clock starts again.
