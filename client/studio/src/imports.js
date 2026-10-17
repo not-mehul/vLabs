@@ -52,6 +52,7 @@ import {
   stepErrors,
   examErrors,
   gradeResponse,
+  examUnlockedSection,
 } from '../../../shared/exam-schema.js';
 import {
   parseExamMarkdown,

@@ -25,12 +25,14 @@ under **Templates → Import**, which sees that it is an exam, uploads the
 package's images and opens it, so you only need to press **Save**.
 
 Both have a **Participant Preview** where you can answer the exam yourself,
-**Check my answers** (graded exactly as vLabs grades) and **Show answer
-key**, a **Preview** beside each item showing it as seat 1 sees it, the
+**Check my answers** (graded exactly as vLabs grades), **Show answer key**
+and **Progressive Gating** (sections open as vLabs opens them), a
+**Preview** beside each item showing it as seat 1 sees it, the
 **Lineage Matrix** (which variables and saved answers are used where), and a
 **Validation Audit** that ends with vLabs' own save check.
 
-The exam is a list of sections, each a list of **questions and steps** (§2). **Add:** under a section adds an
+The exam is a list of sections, each a list of **questions and steps**
+(§2). **Add:** under a section adds an
 item of any of the seven types, and the type menu on an item changes it
 (text, options and points carry over where they fit). For a question write
 the prompt (Markdown, with images by library file name, e.g.

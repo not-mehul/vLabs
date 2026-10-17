@@ -2,10 +2,10 @@
 
 The editor for vLabs labs and exams. One set of sources builds it twice:
 
-| Build                                   | Where it runs                                            | Templates and images                                  |
-| --------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| `client/public/studio/` (not committed) | Inside the portal, framed by `pages/TemplateEditor.jsx`  | The portal's: load, save, versions, image library     |
-| `docs/vlabs_template_studio.html`       | Anywhere, offline: one file, nothing loaded from the web | The browser's: drafts in local storage, export/import |
+| Build                                   | Where it runs                                            | Templates and images                                 |
+| --------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| `client/public/studio/` (not committed) | Inside the portal, framed by `pages/TemplateEditor.jsx`  | The portal's: load, save, versions, image library    |
+| `docs/vlabs_template_studio.html`       | Anywhere, offline: one file, nothing loaded from the web | The browser's: documents in IndexedDB, files on disk |
 
 ## Layout
 
@@ -65,7 +65,11 @@ the origin and the sending window.
 | `upload-images` | `files`                      |
 | `delete-image`  | `name`                       |
 
-In the portal the Studio hides AI Polish and the mock image generator (they
-need the open internet or make images the portal's library cannot take),
-its theme switch (it follows the portal's) and **New** (a template's kind is
-fixed once saved; the portal has **New lab** and **New exam**).
+Offline, `src/documents.js` keeps each template as a document in IndexedDB
+(several at once, images included), saves to and opens `.zip` files, and
+says so when the browser will not store one.
+
+In the portal the Studio hides AI Polish (it needs the open internet, which
+the portal's CSP does not allow), its theme switch (it follows the
+portal's), **Documents** and **New** (a template's kind is fixed once saved;
+the portal has **New lab** and **New exam**).

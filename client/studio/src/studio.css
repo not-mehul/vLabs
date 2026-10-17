@@ -63,13 +63,12 @@ body {
 
 /* Inside vLabs (host bridge, host.js): the app provides the theme switch,
    saving and the image library's storage; AI Polish needs outside servers,
-   which the app's security policy does not allow, and mock SVG images
-   cannot go into vLabs' library. */
+   which the app's security policy does not allow (it stays offline). */
 html[data-studio-host] #headerThemeBtn,
 html[data-studio-host] #headerThemeDivider,
 html[data-studio-host] #newDropdownContainer,
+html[data-studio-host] #docsDropdownContainer,
 html[data-studio-host] #saveStatusIndicator,
-html[data-studio-host] #generateMocksBtn,
 html[data-studio-host] [data-on-click='openSettingsModal()'],
 html[data-studio-host] [data-on-click^='triggerAiPolish'] {
   display: none !important;

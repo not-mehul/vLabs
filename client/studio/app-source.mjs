@@ -17,6 +17,7 @@ export const APP_SCRIPTS = [
   'lab-core.js',
   'studio.js',
   'exam-ui.js',
+  'documents.js',
   'host.js',
 ];
 

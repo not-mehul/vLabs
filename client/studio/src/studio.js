@@ -186,10 +186,13 @@ function promptNewBlankLab() {
   document.getElementById('presetMenu')?.classList.add('hidden');
   openConfirmModal({
     title: 'Start New Blank Lab?',
-    message: 'This will replace your current workspace with a fresh blank lab template. You can still use Undo (Ctrl+Z) right after if needed.',
+    message: studioHost.embedded
+      ? 'This will replace the template with a fresh blank lab. You can still use Undo (Ctrl+Z) right after if needed.'
+      : 'This starts a new blank lab. The one you have open stays under Documents.',
     confirmText: 'Create Blank Lab',
     onConfirm: () => {
       if (!studioHost.allowsKind('lab')) return;
+      if (!studioHost.embedded) studioDocs.startNew();
       templateData = { ...createBlankTemplate(), images: studioHost.embedded ? templateData.images || [] : [] };
       resetPreviewSimulation(false);
       pushHistorySnapshot(true);
@@ -1734,7 +1737,6 @@ function extractReferencedImageNames() {
 function renderImagesGrid() {
   const grid = document.getElementById('imagesGrid');
   const missingNotice = document.getElementById('missingImagesNotice');
-  const mockBtn = document.getElementById('generateMocksBtn');
   if (!grid) return;
 
   grid.innerHTML = '';
@@ -1751,11 +1753,9 @@ function renderImagesGrid() {
   const missing = Array.from(missingSet);
   if (missing.length > 0) {
     missingNotice?.classList.remove('hidden');
-    mockBtn?.classList.remove('hidden');
-    missingNotice.innerHTML = `<i class="ph-bold ph-warning-circle mr-1"></i><strong>Missing referenced images (${missing.length}):</strong> <code class="font-mono">${missing.map(escapeHtml).join(', ')}</code>. Drag & drop them below or click <strong>"Generate Mock Assets"</strong>.`;
+    missingNotice.innerHTML = `<i class="ph-bold ph-warning-circle mr-1"></i><strong>Missing referenced images (${missing.length}):</strong> <code class="font-mono">${missing.map(escapeHtml).join(', ')}</code>. Drag & drop them below.`;
   } else {
     missingNotice?.classList.add('hidden');
-    mockBtn?.classList.add('hidden');
   }
 
   imgs.forEach((img, idx) => {
@@ -1787,28 +1787,6 @@ function deleteImage(idx) {
   renderImagesGrid();
   runFullValidation(false);
   scheduleAutoSave();
-}
-
-function generateMissingMockAssets() {
-  const referenced = extractReferencedImageNames();
-  let added = 0;
-
-  referenced.forEach(ref => {
-    if (ref.isDynamic) return;
-    const refName = ref.fileName;
-    if (!templateData.images.some(img => img.name.toLowerCase() === refName.toLowerCase())) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320"><rect width="640" height="320" rx="12" fill="#1e293b"/><rect x="16" y="16" width="608" height="288" rx="8" fill="none" stroke="#475569" stroke-width="2" stroke-dasharray="8 6"/><text x="50%" y="46%" fill="#e2e8f0" font-family="monospace" font-size="20" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${escapeHtml(refName)}</text><text x="50%" y="58%" fill="#94a3b8" font-family="sans-serif" font-size="13" text-anchor="middle" dominant-baseline="middle">vLabs Mock Library Asset</text></svg>`;
-      const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-      templateData.images.push({ name: refName, url: dataUrl });
-      added++;
-    }
-  });
-
-  pushHistorySnapshot(true);
-  renderImagesGrid();
-  runFullValidation(false);
-  scheduleAutoSave();
-  showToast(`Generated ${added} mock asset(s).`, 'success');
 }
 
 function resetPreviewSimulation(rerender = true) {
@@ -2562,14 +2540,24 @@ function studioLabFromCanonical(raw) {
   };
 }
 
+/** File-name stem for this template's exports. */
+function templateFileSlug() {
+  return (templateData.title || "template").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, '') || 'template';
+}
+
 async function exportAsZipPackage() {
   document.getElementById('exportMenu')?.classList.add('hidden');
-  if (typeof JSZip === 'undefined') {
-    showToast("JSZip library not available; falling back to .md export.", "error");
-    exportAsMarkdown();
-    return;
-  }
+  const content = await buildZipPackage();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(content);
+  a.download = `${templateFileSlug()}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast("Archive package downloaded (.zip)", "success");
+}
 
+/** The template and its images as a vLabs package (.zip Blob). */
+async function buildZipPackage() {
   const zip = new JSZip();
   const mdContent = generateMarkdown();
   zip.file("template.md", mdContent);
@@ -2607,14 +2595,7 @@ async function exportAsZipPackage() {
     }
   }
 
-  const content = await zip.generateAsync({ type: "blob" });
-  const slug = (templateData.title || "template").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, '') || 'template';
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(content);
-  a.download = `${slug}.zip`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showToast("Archive package downloaded (.zip)", "success");
+  return zip.generateAsync({ type: "blob" });
 }
 
 function exportAsMarkdown() {
@@ -3337,6 +3318,7 @@ function loadTemplatePreset(type) {
   const preset = parseMarkdown(md);
   if (!studioHost.allowsKind(preset.kind === 'exam' ? 'exam' : 'lab')) return;
   preset.images = studioHost.embedded ? templateData.images || [] : [];
+  if (!studioHost.embedded) studioDocs.startNew();
   templateData = preset;
   resetPreviewSimulation(false);
   pushHistorySnapshot(true);
@@ -3583,7 +3565,6 @@ function guessImageMimeType(filename) {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
   if (lower.endsWith('.gif')) return 'image/gif';
   if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.svg')) return 'image/svg+xml';
   return 'image/png';
 }
 
@@ -3606,6 +3587,7 @@ async function processImportedFile(file) {
       if (statusEl) statusEl.textContent = 'Extracting .zip archive...';
       const zip = await JSZip.loadAsync(file);
       const extractedImages = [];
+      const skipped = [];
       // As vLabs reads a package: the canonical template.json first (it is
       // lossless), else template.md, else any other .json / .md in it.
       const entries = Object.values(zip.files).filter(e => !e.dir);
@@ -3616,7 +3598,9 @@ async function processImportedFile(file) {
       for (const entry of entries) {
         const baseName = entry.name.split('/').pop();
         if (!baseName || baseName.startsWith('.')) continue;
-        if (/\.(png|jpe?g|gif|webp|svg)$/i.test(baseName)) {
+        // vLabs takes PNG, JPEG, GIF and WebP only (no SVG).
+        if (/\.svg$/i.test(baseName)) skipped.push(baseName);
+        else if (/\.(png|jpe?g|gif|webp)$/i.test(baseName)) {
           const b64 = await entry.async('base64');
           const mime = guessImageMimeType(baseName);
           extractedImages.push({
@@ -3629,6 +3613,9 @@ async function processImportedFile(file) {
       if (!mdText) {
         showToast('No template.md or .json file found inside the .zip package.', 'error');
         return;
+      }
+      if (skipped.length) {
+        showToast(`Left out ${skipped.join(', ')}: vLabs takes PNG, JPEG, GIF and WebP images, not SVG.`, 'error');
       }
 
       loadedImportRawContent = mdText;
@@ -3726,14 +3713,10 @@ function executeImport() {
       if (Array.isArray(loadedImportImages) && loadedImportImages.length > 0) {
         studioHost.uploadDataUrlImages(loadedImportImages);
       }
-    } else if (Array.isArray(loadedImportImages) && loadedImportImages.length > 0) {
-      const mergedImages = [...(templateData.images || [])];
-      loadedImportImages.forEach(newImg => {
-        const idx = mergedImages.findIndex(existing => existing.name.toLowerCase() === newImg.name.toLowerCase());
-        if (idx >= 0) mergedImages[idx] = newImg;
-        else mergedImages.push(newImg);
-      });
-      parsed.images = mergedImages;
+    } else {
+      // Offline, an import is a new document with the package's own images.
+      parsed.images = Array.isArray(loadedImportImages) ? loadedImportImages : [];
+      studioDocs.startNew();
     }
     templateData = parsed;
     resetPreviewSimulation(false);
@@ -3829,27 +3812,9 @@ function scheduleAutoSave(immediate = false) {
     studioHost.notifyChange();
     return;
   }
-  const indicator = document.getElementById('saveStatusIndicator');
-  if (indicator) {
-    indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>Saving</span>`;
-  }
+  // Offline, the open document is kept in the browser (documents.js).
   clearTimeout(autoSaveTimer);
-  const saveFn = () => {
-    try {
-      localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(templateData));
-    } catch (e) {
-      try {
-        const trimmed = {
-          ...templateData,
-          images: (templateData.images || []).map(img => ({ name: img.name, url: '' }))
-        };
-        localStorage.setItem('vlabs_studio_persistent_draft', JSON.stringify(trimmed));
-      } catch (_) {}
-    }
-    if (indicator) {
-      indicator.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Saved</span>`;
-    }
-  };
+  const saveFn = () => studioDocs.save(templateData);
 
   if (immediate) saveFn();
   else autoSaveTimer = setTimeout(saveFn, 500);
@@ -3860,6 +3825,7 @@ window.addEventListener('click', (e) => {
   if (!e.target.closest('#presetDropdownContainer')) document.getElementById('presetMenu')?.classList.add('hidden');
   if (!e.target.closest('#exportDropdownContainer')) document.getElementById('exportMenu')?.classList.add('hidden');
   if (!e.target.closest('#newDropdownContainer')) document.getElementById('newMenu')?.classList.add('hidden');
+  if (!e.target.closest('#docsDropdownContainer')) studioDocs.closeMenu();
 });
 
 // Global keyboard shortcuts (Escape + Undo/Redo when not inside native text inputs, or global Ctrl+Z/Y)
@@ -3875,9 +3841,10 @@ window.addEventListener('keydown', (e) => {
   }
 
   const isMod = e.ctrlKey || e.metaKey;
-  if (isMod && e.key.toLowerCase() === 's' && studioHost.embedded) {
+  if (isMod && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    studioHost.requestSave();
+    if (studioHost.embedded) studioHost.requestSave();
+    else studioDocs.saveToFile();
     return;
   }
   if (isMod && e.key.toLowerCase() === 'z') {
@@ -3895,7 +3862,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // App Startup Routine
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   loadAppSettings();
   initTheme();
 
@@ -3904,19 +3871,10 @@ window.addEventListener('load', () => {
     return;
   }
 
-  let loadedFromStorage = false;
-  try {
-    const saved = localStorage.getItem('vlabs_studio_persistent_draft');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.title && Array.isArray(parsed.content)) {
-        templateData = parsed;
-        loadedFromStorage = true;
-      }
-    }
-  } catch (_) {}
-
-  if (!loadedFromStorage) {
+  const saved = await studioDocs.init();
+  if (saved && Array.isArray(saved.content)) {
+    templateData = saved;
+  } else {
     // Default to the Network Bench Lab example so new authors can immediately explore all features
     templateData = parseMarkdown(GUIDE_PRESETS_MARKDOWN.network);
   }

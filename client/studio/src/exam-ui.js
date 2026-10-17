@@ -41,10 +41,13 @@ function promptNewBlankExam() {
   document.getElementById('newMenu')?.classList.add('hidden');
   openConfirmModal({
     title: 'Start New Blank Exam?',
-    message: 'This will replace your current workspace with a fresh blank exam. You can still use Undo (Ctrl+Z) right after if needed.',
+    message: studioHost.embedded
+      ? 'This will replace the template with a fresh blank exam. You can still use Undo (Ctrl+Z) right after if needed.'
+      : 'This starts a new blank exam. The one you have open stays under Documents.',
     confirmText: 'Create Blank Exam',
     onConfirm: () => {
       if (!studioHost.allowsKind('exam')) return;
+      if (!studioHost.embedded) studioDocs.startNew();
       templateData = { ...createBlankExam(), images: studioHost.embedded ? templateData.images || [] : [] };
       resetPreviewSimulation(false);
       pushHistorySnapshot(true);
@@ -64,9 +67,8 @@ function applyKindChrome() {
   const exam = isExamMode();
   // Exams saved by the Studio before they had variables.
   if (exam && !Array.isArray(templateData.variables)) templateData.variables = [];
-  // Exams have variables, saved answers, the variable map and per-item
-  // previews like labs; only checkpoint gating is a lab's alone.
-  document.getElementById('previewGateControls')?.classList.toggle('hidden', exam);
+  // Exams have variables, saved answers, the variable map, per-item
+  // previews and gating (a section opens once the one before is answered).
   const depsHead = document.getElementById('dependencyCapturesHint');
   if (depsHead) depsHead.textContent = exam ? 'saved answers' : 'checkpoint captures';
   const capturesHead = document.getElementById('captureTokensHead');
@@ -681,6 +683,18 @@ let examPreviewState = { answers: {}, checked: false, showKey: false };
 function examPreviewSet(key, value, rerender) {
   examPreviewState.answers[key] = value;
   if (rerender) renderExamPreview();
+  else if (value === true || value === false || typeof value === 'number' || Array.isArray(value)) examPreviewGateCheck(false);
+}
+
+/** The last section the preview opens: all of them, or as vLabs gates. */
+function examPreviewUnlocked() {
+  if (!previewState.progressiveGate) return Infinity;
+  return examUnlockedSection(examNormalise(templateData).content, examPreviewState.answers);
+}
+
+/** Re-render when an answer opened or locked a section (or `force`). */
+function examPreviewGateCheck(force) {
+  if (force || examPreviewUnlocked() !== examPreviewState.unlocked) renderExamPreview();
 }
 
 /** Tick or untick option `oi` of a multiple-answer question. */
@@ -754,10 +768,10 @@ function renderExamPreview() {
           <input type="radio" name="pv-${key}" ${a === v ? 'checked' : ''} data-on-change="examPreviewSet('${key}', ${v}, ${st.checked})"> ${v ? 'True' : 'False'}
         </label>`).join('');
     } else if (q.type === 'short') {
-      input = `<input type="text" value="${escapeHtml(a || '')}" data-on-input="examPreviewSet('${key}', this.value, false)" ${q.capture ? 'data-on-change="renderExamPreview()"' : ''} placeholder="${escapeHtml(q.placeholder || 'Type your answer')}"
+      input = `<input type="text" value="${escapeHtml(a || '')}" data-on-input="examPreviewSet('${key}', this.value, false)" data-on-change="examPreviewGateCheck(${q.capture ? 'true' : 'false'})" placeholder="${escapeHtml(q.placeholder || 'Type your answer')}"
         class="w-full sm:w-80 text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">`;
     } else {
-      input = `<textarea rows="3" data-on-input="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
+      input = `<textarea rows="3" data-on-input="examPreviewSet('${key}', this.value, false)" data-on-change="examPreviewGateCheck(false)" placeholder="Your answer"
         class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">${escapeHtml(a || '')}</textarea>`;
     }
     const keyNote = !st.showKey ? ''
@@ -793,8 +807,17 @@ function renderExamPreview() {
       </div>`;
   };
 
+  const unlocked = examPreviewUnlocked();
+  st.unlocked = unlocked;
   const sectionsHtml = templateData.content.map((sec, sIdx) => {
     const submit = examIsSubmit(sec);
+    if (sIdx > unlocked) {
+      return `
+        <div class="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50/50 dark:bg-surface-950/50 flex items-center justify-between gap-3 text-xs text-slate-400">
+          <span class="font-semibold flex items-center gap-2"><i class="ph-fill ph-lock-key text-sm"></i> ${submit ? 'Review and submit' : `Section ${sIdx + 1} · ${escapeHtml(substitutePlaceholders(sec.title || '', ctx))}`}</span>
+          <span class="text-[11px]">Locked: answer every question and tick every checklist item before it</span>
+        </div>`;
+    }
     let inner;
     if (submit) {
       inner = `

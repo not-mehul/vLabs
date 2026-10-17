@@ -857,12 +857,26 @@ sessions are unchanged.
   now reads the JSON, as the portal does.
 - **Exams and labs work alike in the Studio.** Exams now have the
   **Lineage Matrix** (where each variable and saved answer is used, and
-  answers used before they are saved) and a **Preview** beside each item;
-  exam sections are called sections, as in the portal. Checkpoint gating in
-  the preview stays a lab feature.
+  answers used before they are saved), a **Preview** beside each item, and
+  **Progressive Gating** in the participant preview (a section opens once
+  every question before it is answered and every checklist ticked, as
+  vLabs does). Exam sections are called sections, as in the portal.
+- **Documents in the offline Studio.** It keeps every template you work on
+  in the browser, images included, under **Documents**; **New**, an example
+  or an import starts a new document and the one you had stays listed.
+  **Save to file** (Ctrl+S) writes a `.zip` package to disk (back to the same
+  file where the browser allows), **Open file** reads one in. When the
+  browser will not store a document the header says **Not saved** and a
+  message says so, instead of images silently going missing. A draft from an
+  older Studio becomes the first document.
+- **Images:** SVG is refused everywhere in the Studio, as vLabs refuses it
+  (a package's SVG files are left out with a message). The mock image
+  generator, which made SVGs, is gone, as are the blank lab / blank exam
+  entries duplicated under **Examples** (they are under **New**).
 - In the portal the Studio hides what needs the open internet or its own
-  storage: AI Polish, the mock image generator, its theme switch (it follows
-  the portal's) and **New** (use **New lab** / **New exam**).
+  storage: AI Polish (kept in the offline Studio), its theme switch (it
+  follows the portal's), **Documents** and **New** (use **New lab** / **New
+  exam**).
 - **Fixed: the sample exam on a fresh install had no variables,** so its
   `{{ SUBNET }}` step could not be saved unchanged.
 - Security: the portal's CSP still allows no inline scripts or `eval`; the

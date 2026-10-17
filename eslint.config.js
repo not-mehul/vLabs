@@ -21,7 +21,7 @@ export default [
       // vLabs Template Studio's page scripts: they share one scope once
       // concatenated by client/studio/build.mjs, so they are not separate
       // modules to lint one by one.
-      'client/studio/src/{imports,exam-core,lab-core,studio,exam-ui,host}.js',
+      'client/studio/src/{imports,exam-core,lab-core,studio,exam-ui,documents,host}.js',
     ],
   },
 
