@@ -4,7 +4,7 @@ import Icon from '../Icon.jsx';
 /* --------------------------- Change history ----------------------------- */
 
 const stepsOf = (content) =>
-  (content || []).reduce((n, s) => n + (s.steps || s.questions || []).length, 0);
+  (content || []).reduce((n, s) => n + (s.items || s.steps || s.questions || []).length, 0);
 
 /** Human-readable summary of what changed between two snapshots. */
 function describeChanges(prev, curr) {

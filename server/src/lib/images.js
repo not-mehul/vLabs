@@ -79,10 +79,6 @@ export function getImage(id) {
   return q.byId.get(String(id));
 }
 
-export function getImageByName(name) {
-  return q.byName.get(normaliseImageName(name));
-}
-
 /**
  * Store (or replace) an image. Throws an Error with `.status` on bad input.
  *

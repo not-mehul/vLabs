@@ -32,7 +32,13 @@ import {
   parseArray,
   sessionAnswerLog,
 } from '../lib/examGrading.js';
-import { listQuestions, totalPoints, describeExpected } from '../../../shared/exam-schema.js';
+import {
+  listQuestions,
+  totalPoints,
+  describeExpected,
+  sectionItems,
+  isQuestion,
+} from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
 import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
@@ -572,7 +578,7 @@ router.get('/:id/sections/:index', (req, res) => {
     return res.json({
       kind: 'exam',
       ...sectionTimeDetail(section, index, views),
-      question_count: (section.questions || []).length,
+      question_count: sectionItems(section).filter(isQuestion).length,
       questions: examQuestionStats(rows, content, variablesOf(row)).filter(
         (x) => x.section_index === index,
       ),
@@ -601,7 +607,7 @@ function examSessionDetail(row) {
     template_archived: Boolean(row.template_archived_at),
     section_count: content.length,
     section_distribution: sectionFlow(content, participants, (sec) => ({
-      question_count: (sec.questions || []).length,
+      question_count: sectionItems(sec).filter(isQuestion).length,
     })),
     complete_count: participants.filter((p) => p.submitted).length,
     question_count: listQuestions(content).length,
@@ -936,7 +942,7 @@ function examExport(row) {
     index: i,
     number: i + 1,
     title: sec.title || `Section ${i + 1}`,
-    question_count: (sec.questions || []).length,
+    question_count: sectionItems(sec).filter(isQuestion).length,
     minutes: sec.minutes || null,
     avg_seconds: averages[i].avg_seconds,
     completed_count: averages[i].completed_count,

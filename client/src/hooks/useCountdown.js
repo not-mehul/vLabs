@@ -36,10 +36,3 @@ export function useCountdown(expiresAt, { hours = false, offsetMs = 0 } = {}) {
   }, [expiresAt, hours, offsetMs]);
   return label;
 }
-
-/** Seconds remaining (or 0), for threshold logic such as a low-time warning. */
-export function secondsUntil(expiresAt) {
-  if (!expiresAt) return 0;
-  const ms = new Date(expiresAt).getTime() - Date.now();
-  return Number.isNaN(ms) ? 0 : Math.max(0, Math.floor(ms / 1000));
-}

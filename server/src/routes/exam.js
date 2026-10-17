@@ -18,20 +18,18 @@ import {
   examUnlockedSection,
   isExamSectionComplete,
   listTasks,
-  sectionTasks,
-  infoSteps,
-  taskKey,
-  sectionType,
+  sectionLayout,
+  isSubmitSection,
 } from '../../../shared/exam-schema.js';
 
 /**
  * Participant side of EXAM sessions, mounted at /api/participant/exam.
  *
  * Sections unlock like a lab's: a section opens once every question in the
- * sections before it has an answer and every checklist item (informational
- * sections) is ticked — unticking one locks what follows again — and locked
- * sections are never sent (nor can they be answered).
- * Ticks are stored with the answers, under "<section>.t<item>" keys. Participants may move freely back through what they
+ * sections before it has an answer and every checklist item is ticked —
+ * unticking one locks what follows again — and locked sections are never sent
+ * (nor can they be answered). Ticks are stored with the answers, under
+ * "<section>.t<n>" keys. Participants may move freely back through what they
  * have unlocked. Correct answers and accepted-answer lists never leave the
  * server, and participants are never told whether a response was right.
  * Responses autosave (latest value per question on the seat, every change as a
@@ -157,7 +155,7 @@ router.get(
       question_count: questions.length,
       total_sections: content.length,
       // -1 for sessions launched before exams had a submit section.
-      submit_section: content.findIndex((sec) => sectionType(sec) === 'submit'),
+      submit_section: content.findIndex(isSubmitSection),
       submitted: Boolean(p.submitted_at),
       submitted_at: p.submitted_at,
     };
@@ -177,48 +175,51 @@ router.get(
 
     const unlocked = unlockedFor(content, p);
     const images = imageUrlMap();
-    let n = 0;
+    const numbers = new Map(questions.map(({ key, number }) => [key, number]));
     const sections = [];
     content.forEach((sec, si) => {
-      const delivered = si <= unlocked;
-      const type = sectionType(sec);
+      if (si > unlocked) return;
+      const submit = isSubmitSection(sec);
       const block = {
         index: si,
-        type,
+        type: submit ? 'submit' : 'part',
         title: sec.title,
         complete: isExamSectionComplete(content, si, all),
-        questions: [],
       };
-      if (delivered && type !== 'questions') {
-        if (type === 'info') {
-          // Checklist items are numbered across the steps (see taskKey).
-          const tasks = sectionTasks(sec);
-          block.steps = infoSteps(sec).map((st, sti) => ({
-            title: st.title || '',
-            body: injectImages(st.body || '', images),
-            tasks: tasks
-              .filter((t) => t.sti === sti)
-              .map((t) => ({ key: taskKey(si, t.ti), text: injectImages(t.text, images) })),
-          }));
-        } else {
-          block.body = injectImages(sec.body || '', images);
-          block.review = sec.review !== false;
-        }
-      }
-      (sec.questions || []).forEach((question, qi) => {
-        n += 1;
-        if (!delivered) return;
-        const pub = publicQuestion(question);
-        block.questions.push({
-          ...pub,
-          key: `${si}.${qi}`,
-          index: qi,
-          number: n,
-          prompt: injectImages(pub.prompt, images),
-          ...(pub.options ? { options: pub.options.map((o) => injectImages(o, images)) } : {}),
+      if (submit) {
+        block.body = injectImages(sec.body || '', images);
+        block.review = sec.review !== false;
+      } else {
+        // Questions without their answers; steps with their tick keys.
+        block.items = sectionLayout(sec, si).map((at) => {
+          const it = at.item;
+          if (!('qi' in at)) {
+            return {
+              type: it.type,
+              title: it.title || '',
+              body: injectImages(it.body || '', images),
+              ...(it.type === 'checklist'
+                ? {
+                    tasks: at.tasks.map((t) => ({
+                      key: t.key,
+                      text: injectImages(t.text, images),
+                    })),
+                  }
+                : {}),
+            };
+          }
+          const pub = publicQuestion(it);
+          return {
+            ...pub,
+            key: at.key,
+            index: at.qi,
+            number: numbers.get(at.key),
+            prompt: injectImages(pub.prompt, images),
+            ...(pub.options ? { options: pub.options.map((o) => injectImages(o, images)) } : {}),
+          };
         });
-      });
-      if (delivered) sections.push(block);
+      }
+      sections.push(block);
     });
     const answers = {};
     for (const { key, si } of [...questions, ...listTasks(content)]) {

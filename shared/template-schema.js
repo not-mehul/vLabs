@@ -109,7 +109,6 @@ export const BUILTIN_PLACEHOLDERS = Object.freeze([
 export const BUILTIN_IDENTIFIERS = Object.freeze(['seat', 'first_name', 'last_name']);
 
 export const STEP_TYPES = Object.freeze(['desk', 'computer', 'info']);
-export const CHECKPOINT_MODES = Object.freeze(['exact', 'pattern']);
 
 const str = (v, max) => {
   const s = v === null || v === undefined ? '' : String(v);

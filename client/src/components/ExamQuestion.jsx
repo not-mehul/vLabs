@@ -95,7 +95,7 @@ export default function ExamQuestion({ q, value, onChange, disabled }) {
         maxLength={500}
         autoComplete="off"
         spellCheck="false"
-        placeholder="Type your answer"
+        placeholder={q.placeholder || 'Type your answer'}
         value={value ?? ''}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}

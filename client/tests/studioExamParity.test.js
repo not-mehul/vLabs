@@ -16,7 +16,13 @@ import {
   SAMPLE_EXAM_MARKDOWN,
   TYPE_ALIASES,
 } from '../../shared/exam-format.js';
-import { normaliseExam, examErrors, QUESTION_TYPES } from '../../shared/exam-schema.js';
+import {
+  normaliseExam,
+  examErrors,
+  QUESTION_TYPES,
+  capturedValue,
+  sectionPages,
+} from '../../shared/exam-schema.js';
 
 const html = fs.readFileSync(
   new URL('../../docs/vlabs_template_studio.html', import.meta.url),
@@ -25,7 +31,7 @@ const html = fs.readFileSync(
 const block = /<script id="vlabs-exam-core">([\s\S]*?)<\/script>/.exec(html);
 assert.ok(block, 'the Studio has a vlabs-exam-core script block');
 const studio = vm.runInNewContext(
-  `${block[1]}\n;({ examParseMarkdown, examToMarkdownText, looksLikeExamMarkdown, examNormalise, examErrorsList, examGrade, EXAM_TYPE_ALIASES })`,
+  `${block[1]}\n;({ examParseMarkdown, examToMarkdownText, looksLikeExamMarkdown, examNormalise, examErrorsList, examGrade, examCapturedValue, examSectionPages, EXAM_TYPE_ALIASES })`,
   {},
 );
 
@@ -100,6 +106,38 @@ Hi {{ FULL_NAME }} {{ NOPE }}
 `,
   `---
 kind: exam
+title: Mixed
+---
+
+# Bench
+Intro before any item.
+## [checklist] Cable it
+- [ ] done
+## [short] Serial?
+> pattern: XXXX.XXXX
+> placeholder: e.g. AB12.CD34
+> capture: SERIAL
+## [informational] [x] Read this
+Text
+## [step]
+## [short] Bad mask
+> pattern: SN-
+## [short] Both
+> accept: a
+> pattern: 99
+## [tasks]
+Nothing to tick
+
+# Later
+## [text] Serial again?
+> accept: {{ SERIAL }}
+> minutes: 3
+
+# [submit] Done
+## Not a step here
+`,
+  `---
+kind: exam
 title: Edge
 description: d
 ---
@@ -141,10 +179,16 @@ test('Studio exam Markdown parsing and export match vLabs exactly', () => {
   }
   assert.throws(() => studio.examParseMarkdown('# A\n\n## [nope] x\n'), /Unknown question type/);
   assert.throws(
-    () => studio.examParseMarkdown('# [info] I\n## [mcq] x\n'),
-    /cannot go in a \[info\] section/,
+    () => studio.examParseMarkdown('# [submit] S\n## [mcq] x\n'),
+    /submit section cannot hold/,
   );
   assert.deepEqual(json(studio.EXAM_TYPE_ALIASES), json(TYPE_ALIASES));
+});
+
+test('the Studio sample exam is the vLabs sample', () => {
+  const preset = /\n {6}exam: `([\s\S]*?)`,\n {6}minimal: `/.exec(html);
+  assert.ok(preset, 'the Studio has an exam preset');
+  assert.equal(preset[1], SAMPLE_EXAM_MARKDOWN);
 });
 
 test('Studio tells labs and exams apart like vLabs', () => {
@@ -183,12 +227,37 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
       { type: 'info', title: 'I', body: 7, tasks: [' a ', '', null, 'b'], questions: [{}] },
       { type: 'info', title: 'J', steps: [{ title: 5, tasks: [' x '] }, null, 'y'], tasks: ['z'] },
       { type: 'submit', title: 'Dropped' },
+      {
+        title: 'Items',
+        items: [
+          { type: 'short', pattern: 'XX-99', placeholder: ' hint ' },
+          { type: 'short', match: 'pattern', pattern: 'nope' },
+          { type: 'short', match: 'exact', pattern: '99', accepted: ['A b'] },
+          { type: 'checklist', title: ' T ', body: 'b', tasks: ['', ' t '] },
+          { type: 'info', tasks: ['dropped'] },
+          { type: 'short', match: 'pattern', pattern: '\\' },
+          { type: 'short', pattern: 'XX-*' },
+        ],
+      },
     ],
   };
   const app = normaliseExam(odd);
   assert.deepEqual(json(studio.examNormalise(odd)), app);
-  const qs = app.content[0].questions;
-  const responses = [[0, 2], [2, 0], false, 1, 'A ', '  b', null];
+  const qs = app.content.flatMap((s) => (s.items || []).filter((it) => QUESTION_TYPES[it.type]));
+  const responses = [
+    [0, 2],
+    [2, 0],
+    false,
+    1,
+    'A ',
+    '  b',
+    null,
+    'ab12',
+    'AB-12',
+    'a  B',
+    '12',
+    `AB-${'1'.repeat(250)}`,
+  ];
   for (const q of qs) {
     for (const r of responses) {
       let expected;
@@ -198,6 +267,10 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
         continue; // the server would refuse this response outright
       }
       assert.equal(studio.examGrade(q, r), expected, `${q.type} ${JSON.stringify(r)}`);
+      assert.equal(studio.examCapturedValue(q, r), capturedValue(q, r));
     }
+  }
+  for (const sec of app.content) {
+    assert.deepEqual(json(studio.examSectionPages(sec.items)), sectionPages(sec.items));
   }
 });

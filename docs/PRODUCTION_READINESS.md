@@ -16,6 +16,28 @@ design trade-offs and features to plan for, not blockers for a LAN classroom
 deployment. A public/internet deployment needs the extra items marked
 **(hosted)**.
 
+## Re-check at 1.12.0
+
+Date: 2026-10-17. 1.12.0 changes the exam model (sections of mixed steps and
+questions, short answers by exact match or pattern), so the exam paths were
+checked again end to end:
+
+| Check                                                                       | Result                                                                                                     |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Server test suite                                                           | 91 / 91 pass                                                                                               |
+| Client test suite (incl. Studio ↔ vLabs parity) and production build        | 32 / 32 pass; build clean                                                                                  |
+| Lint and format check (as CI)                                               | Clean                                                                                                      |
+| `npm audit` (root, server, client)                                          | 0 high/critical; the moderate react-router advisory below is unchanged                                     |
+| Browser (Chromium): sample exam taken page by page, ticks, pattern answer   | Pass; graded 7 / 12 with the long answer pending, as expected                                              |
+| Browser: exam editor (every item type, retyping, pattern + placeholder)     | Pass; saved shape verified through the API                                                                 |
+| Browser: Template Studio builder, preview self-check, exports, old workspace | Pass; no page errors                                                                                       |
+| Exams and sessions stored before 1.12.0                                     | Read with the same answer keys (server and client tests)                                                   |
+| Worst-case pattern matching (author mask with three `*`, long answers)      | Found 350 ms per grade on 500 characters, run on every monitor refresh; fixed: answers over 200 never fit |
+
+Also fixed: the instructor sign-in page now only returns to a portal path
+after login (hardening for the react-router advisory, item 11), and unused
+code was removed.
+
 ## How this was audited
 
 Not just a read-through — each claim below was exercised:
@@ -140,15 +162,17 @@ None of these block a LAN classroom deployment. Ordered by priority.
    and either delete sessions after exporting or add a retention job. Note that
    deleting is irreversible.
 9. **Pushing a new exam version mid-exam** keys saved answers by question
-   position; the monitor warns, but only push typo fixes, never reordering.
+   position within its section (and ticks by checklist position); the
+   monitor warns, but only push typo fixes, never reordering.
 10. **Exam anti-cheating features** are not in scope today: no question or
     option shuffling, no per-student time limit (the session expiry is the
     limit), no lockdown or tab-switch detection. Use managed devices / Guided
     Access for high-stakes exams.
 11. **react-router advisory (moderate)**: open redirect via backslash paths in
     `<Link>`/`navigate`, and an SSR issue. Not reachable here (the only
-    dynamic navigation target is router state set by the app; no SSR). Fixing
-    it requires the breaking react-router v7 upgrade — plan it, don't force it.
+    dynamic navigation target is router state set by the app, now limited to
+    portal paths; no SSR). Fixing it requires the breaking react-router v7
+    upgrade — plan it, don't force it.
 
 ### Scale and capacity
 

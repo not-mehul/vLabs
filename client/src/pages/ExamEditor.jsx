@@ -15,23 +15,22 @@ import MinutesField from '../components/editor/MinutesField.jsx';
 import {
   EXAM_LIMITS,
   QUESTION_TYPES,
-  QUESTION_TYPE_NAMES,
-  blankQuestion,
+  ITEM_TYPES,
+  ITEM_TYPE_NAMES,
+  blankItem,
   blankSection,
-  blankStep,
-  sectionType,
-  SECTION_TYPES,
+  isQuestion,
+  isSubmitSection,
   normaliseExam,
   normaliseQuestion,
   examErrors,
   isManualQuestion,
 } from '../../../shared/exam-schema.js';
 import { examToMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
-import { LIMITS } from '../../../shared/template-schema.js';
+import { LIMITS, maskExample } from '../../../shared/template-schema.js';
 
 // The submit section is added by normaliseExam.
-const NEW_EXAM = () =>
-  normaliseExam({ title: '', description: '', content: [blankSection('questions', 1)] });
+const NEW_EXAM = () => normaliseExam({ title: '', description: '', content: [blankSection(1)] });
 
 const move = (arr, i, d) => {
   const j = i + d;
@@ -108,7 +107,7 @@ function OptionsEditor({ q, onChange }) {
   );
 }
 
-/** The checklist of an informational step: one line per item the participant ticks. */
+/** The boxes of a Checklist item: one line per thing the participant ticks. */
 function TasksEditor({ tasks, onChange }) {
   return (
     <div className="opts-editor">
@@ -216,188 +215,88 @@ function VariablesEditor({ variables, onChange }) {
   );
 }
 
-/** The steps of an informational section, shown to participants one at a time. */
-function InfoStepsEditor({ si, steps, onChange }) {
-  const setStep = (i, st) => onChange(steps.map((x, k) => (k === i ? st : x)));
-  return (
-    <div className="info-steps">
-      {steps.map((st, i) => (
-        <div className="qedit info-step" key={i}>
-          <div className="qedit__head">
-            <span className="qedit__num">Step {i + 1}</span>
-            <input
-              className="field__input info-step__title"
-              value={st.title}
-              maxLength={EXAM_LIMITS.stepTitle}
-              placeholder={steps.length === 1 ? 'Step title (optional)' : 'Step title'}
-              aria-label={`Section ${si + 1} step ${i + 1} title`}
-              onChange={(e) => setStep(i, { ...st, title: e.target.value })}
-            />
-            <span className="qedit__tools">
-              <button
-                type="button"
-                className="btn btn--xs btn--icon btn--ghost"
-                disabled={i === 0}
-                onClick={() => onChange(move(steps, i, -1))}
-                aria-label="Move step up"
-              >
-                <Icon name="arrowUp" size={13} />
-              </button>
-              <button
-                type="button"
-                className="btn btn--xs btn--icon btn--ghost"
-                disabled={i === steps.length - 1}
-                onClick={() => onChange(move(steps, i, 1))}
-                aria-label="Move step down"
-              >
-                <Icon name="arrowDown" size={13} />
-              </button>
-              <button
-                type="button"
-                className="btn btn--xs btn--icon btn--danger-ghost"
-                disabled={steps.length <= 1}
-                onClick={() => onChange(steps.filter((_, k) => k !== i))}
-                aria-label="Remove step"
-              >
-                <Icon name="trash" size={13} />
-              </button>
-            </span>
-          </div>
-          <label className="field field--compact">
-            <span className="field__label">
-              Instructions (Markdown; images by library file name)
-            </span>
-            <textarea
-              className="field__input"
-              rows={Math.min(12, Math.max(3, st.body.split('\n').length + 1))}
-              maxLength={EXAM_LIMITS.body}
-              value={st.body}
-              placeholder="e.g. Cable the switch to the router, then call your instructor over to check it."
-              onChange={(e) => setStep(i, { ...st, body: e.target.value })}
-            />
-          </label>
-          <TasksEditor tasks={st.tasks} onChange={(tasks) => setStep(i, { ...st, tasks })} />
-        </div>
-      ))}
-      <button
-        type="button"
-        className="btn btn--xs btn--ghost"
-        disabled={steps.length >= EXAM_LIMITS.steps}
-        onClick={() => onChange([...steps, blankStep()])}
-      >
-        <Icon name="plus" size={13} /> Add step
-      </button>
-    </div>
-  );
+/**
+ * Change an item's type, keeping what carries over: the prompt and points
+ * between questions (and the options between choice types), the title, text
+ * and checklist between Informational and Checklist, and the text either way
+ * between a step and a question.
+ */
+function retype(item, type) {
+  const fresh = blankItem(type);
+  const text = isQuestion(item) ? item.prompt : item.body;
+  if (!isQuestion(fresh)) {
+    return {
+      ...fresh,
+      title: item.title || '',
+      body: text,
+      ...(type === 'checklist' && item.tasks?.length ? { tasks: item.tasks } : {}),
+    };
+  }
+  const keepOptions =
+    QUESTION_TYPES[type].hasOptions && isQuestion(item) && item.options.length >= 2;
+  return normaliseQuestion({
+    ...fresh,
+    prompt: text,
+    points: isQuestion(item) ? item.points : fresh.points,
+    ...(keepOptions ? { options: item.options } : {}),
+  });
 }
 
-function QuestionEditor({ q, number, onChange, onMove, onRemove, canUp, canDown }) {
-  const changeType = (type) => {
-    const fresh = blankQuestion(type);
-    // Keep the prompt, points and (between choice types) the options.
-    const keepOptions = QUESTION_TYPES[type].hasOptions && q.options.length >= 2;
-    onChange(
-      normaliseQuestion({
-        ...fresh,
-        prompt: q.prompt,
-        points: q.points,
-        ...(keepOptions ? { options: q.options } : {}),
-      }),
-    );
+/** A short answer: exact accepted answers or a pattern, a placeholder and a capture. */
+function ShortAnswerEditor({ q, onChange }) {
+  const pattern = q.match === 'pattern';
+  const example = pattern ? maskExample(q.pattern || '') : '';
+  const setMode = (mode) => {
+    const { match: _m, pattern: _p, ...rest } = q;
+    onChange(mode === 'pattern' ? { ...rest, accepted: [], match: 'pattern', pattern: '' } : rest);
   };
   return (
-    <div className="qedit">
-      <div className="qedit__head">
-        <span className="qedit__num">Q{number}</span>
-        <select
-          className="field__input field__input--sm"
-          value={q.type}
-          onChange={(e) => changeType(e.target.value)}
-          aria-label="Question type"
-        >
-          {QUESTION_TYPE_NAMES.map((t) => (
-            <option key={t} value={t}>
-              {QUESTION_TYPES[t].label}
-            </option>
-          ))}
-        </select>
-        <label className="qedit__points">
-          <input
-            className="field__input field__input--sm"
-            type="number"
-            min="0"
-            max={EXAM_LIMITS.maxPoints}
-            step="0.5"
-            value={q.points}
-            onChange={(e) => onChange({ ...q, points: Number(e.target.value) })}
-            aria-label="Points"
-          />
-          pts
-        </label>
-        {isManualQuestion(q) && (
-          <span className="tag" title="Marked by hand in the session monitor">
-            hand-marked
-          </span>
-        )}
-        <span className="qedit__tools">
-          <button
-            type="button"
-            className="btn btn--xs btn--icon btn--ghost"
-            onClick={() => onMove(-1)}
-            disabled={!canUp}
-            aria-label="Move question up"
-          >
-            <Icon name="arrowUp" size={13} />
-          </button>
-          <button
-            type="button"
-            className="btn btn--xs btn--icon btn--ghost"
-            onClick={() => onMove(1)}
-            disabled={!canDown}
-            aria-label="Move question down"
-          >
-            <Icon name="arrowDown" size={13} />
-          </button>
-          <button
-            type="button"
-            className="btn btn--xs btn--icon btn--danger-ghost"
-            onClick={onRemove}
-            aria-label="Remove question"
-          >
-            <Icon name="trash" size={13} />
-          </button>
-        </span>
-      </div>
-      <label className="field field--compact">
-        <span className="field__label">Question (Markdown; images by library file name)</span>
-        <textarea
-          className="field__input"
-          rows={Math.min(12, Math.max(2, q.prompt.split('\n').length + 1))}
-          maxLength={EXAM_LIMITS.prompt}
-          value={q.prompt}
-          onChange={(e) => onChange({ ...q, prompt: e.target.value })}
-        />
-      </label>
-      {QUESTION_TYPES[q.type].hasOptions && <OptionsEditor q={q} onChange={onChange} />}
-      {q.type === 'truefalse' && (
-        <div className="segmented" role="radiogroup" aria-label="Correct answer">
-          {[true, false].map((v) => (
+    <>
+      <div className="segmented" role="radiogroup" aria-label="How the answer is checked">
+        {[
+          ['exact', 'Exact answers'],
+          ['pattern', 'Pattern (format only)'],
+        ].map(([mode, label]) => {
+          const on = (mode === 'pattern') === pattern;
+          return (
             <button
-              key={String(v)}
+              key={mode}
               type="button"
-              className={`segmented__btn ${q.correct === v ? 'is-active' : ''}`}
-              onClick={() => onChange({ ...q, correct: v })}
-              aria-pressed={q.correct === v}
+              className={`segmented__btn ${on ? 'is-active' : ''}`}
+              onClick={() => !on && setMode(mode)}
+              aria-pressed={on}
             >
-              Correct answer: {v ? 'True' : 'False'}
+              {label}
             </button>
-          ))}
-        </div>
-      )}
-      {q.type === 'short' && (
+          );
+        })}
+      </div>
+      {pattern ? (
         <label className="field field--compact">
           <span className="field__label">
-            Accepted answers — one per line; case and spacing are ignored. Leave empty to mark by
+            Pattern, as in a lab checkpoint: <code>X</code> any letter or digit, <code>9</code> a
+            digit, <code>A</code> a letter; other letters and digits must match as written, and
+            punctuation may be left out
+            {example && (
+              <>
+                {' '}
+                (e.g. <code>{example}</code>)
+              </>
+            )}
+          </span>
+          <input
+            className="field__input mono"
+            value={q.pattern || ''}
+            maxLength={LIMITS.pattern}
+            spellCheck={false}
+            placeholder="e.g. XXXX.XXXX.XXXX"
+            onChange={(e) => onChange({ ...q, pattern: e.target.value })}
+          />
+        </label>
+      ) : (
+        <label className="field field--compact">
+          <span className="field__label">
+            Accepted answers, one per line; case and spacing are ignored. Leave empty to mark by
             hand.
           </span>
           <textarea
@@ -413,26 +312,215 @@ function QuestionEditor({ q, number, onChange, onMove, onRemove, canUp, canDown 
           />
         </label>
       )}
-      {(q.type === 'short' || q.capture) && (
+      <label className="field field--compact">
+        <span className="field__label">Answer box placeholder (optional)</span>
+        <input
+          className="field__input"
+          value={q.placeholder || ''}
+          maxLength={LIMITS.placeholder}
+          placeholder="Type your answer"
+          onChange={(e) => {
+            const { placeholder: _old, ...rest } = q;
+            onChange(e.target.value ? { ...rest, placeholder: e.target.value } : rest);
+          }}
+        />
+      </label>
+    </>
+  );
+}
+
+/**
+ * One item of a section: an Informational or Checklist step, or a question.
+ * Steps and questions are numbered separately within the section, as in the
+ * messages that list what to fix.
+ */
+function ItemEditor({ si, item, label, onChange, onMove, onRemove, canUp, canDown, canRemove }) {
+  const question = isQuestion(item);
+  return (
+    <div className={`qedit ${question ? '' : 'qedit--step'}`}>
+      <div className="qedit__head">
+        <span className="qedit__num">{label}</span>
+        <select
+          className="field__input field__input--sm"
+          value={item.type}
+          onChange={(e) => onChange(retype(item, e.target.value))}
+          aria-label={`Section ${si + 1} ${label} type`}
+        >
+          {ITEM_TYPE_NAMES.map((t) => (
+            <option key={t} value={t}>
+              {ITEM_TYPES[t]}
+            </option>
+          ))}
+        </select>
+        {question && (
+          <label className="qedit__points">
+            <input
+              className="field__input field__input--sm"
+              type="number"
+              min="0"
+              max={EXAM_LIMITS.maxPoints}
+              step="0.5"
+              value={item.points}
+              onChange={(e) => onChange({ ...item, points: Number(e.target.value) })}
+              aria-label="Points"
+            />
+            pts
+          </label>
+        )}
+        {question && isManualQuestion(item) && (
+          <span className="tag" title="Marked by hand in the session monitor">
+            hand-marked
+          </span>
+        )}
+        <span className="qedit__tools">
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            onClick={() => onMove(-1)}
+            disabled={!canUp}
+            aria-label={`Move ${label} up`}
+          >
+            <Icon name="arrowUp" size={13} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--ghost"
+            onClick={() => onMove(1)}
+            disabled={!canDown}
+            aria-label={`Move ${label} down`}
+          >
+            <Icon name="arrowDown" size={13} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--xs btn--icon btn--danger-ghost"
+            onClick={onRemove}
+            disabled={!canRemove}
+            aria-label={`Remove ${label}`}
+          >
+            <Icon name="trash" size={13} />
+          </button>
+        </span>
+      </div>
+
+      {!question && (
+        <>
+          <input
+            className="field__input"
+            value={item.title}
+            maxLength={EXAM_LIMITS.itemTitle}
+            placeholder="Title (optional)"
+            aria-label={`Section ${si + 1} ${label} title`}
+            onChange={(e) => onChange({ ...item, title: e.target.value })}
+          />
+          <label className="field field--compact">
+            <span className="field__label">
+              Instructions (Markdown; images by library file name)
+              {item.type === 'checklist' ? ', optional' : ''}
+            </span>
+            <textarea
+              className="field__input"
+              rows={Math.min(12, Math.max(3, item.body.split('\n').length + 1))}
+              maxLength={EXAM_LIMITS.body}
+              value={item.body}
+              placeholder={
+                item.type === 'checklist'
+                  ? 'e.g. Cable the switch to the router, then call your instructor over to check it.'
+                  : 'e.g. Read the scenario below before you answer.'
+              }
+              onChange={(e) => onChange({ ...item, body: e.target.value })}
+            />
+          </label>
+          {item.type === 'checklist' && (
+            <TasksEditor tasks={item.tasks} onChange={(tasks) => onChange({ ...item, tasks })} />
+          )}
+        </>
+      )}
+
+      {question && (
+        <label className="field field--compact">
+          <span className="field__label">Question (Markdown; images by library file name)</span>
+          <textarea
+            className="field__input"
+            rows={Math.min(12, Math.max(2, item.prompt.split('\n').length + 1))}
+            maxLength={EXAM_LIMITS.prompt}
+            value={item.prompt}
+            onChange={(e) => onChange({ ...item, prompt: e.target.value })}
+          />
+        </label>
+      )}
+      {question && QUESTION_TYPES[item.type].hasOptions && (
+        <OptionsEditor q={item} onChange={onChange} />
+      )}
+      {item.type === 'truefalse' && (
+        <div className="segmented" role="radiogroup" aria-label="Correct answer">
+          {[true, false].map((v) => (
+            <button
+              key={String(v)}
+              type="button"
+              className={`segmented__btn ${item.correct === v ? 'is-active' : ''}`}
+              onClick={() => onChange({ ...item, correct: v })}
+              aria-pressed={item.correct === v}
+            >
+              Correct answer: {v ? 'True' : 'False'}
+            </button>
+          ))}
+        </div>
+      )}
+      {item.type === 'short' && <ShortAnswerEditor q={item} onChange={onChange} />}
+      {question && (item.type === 'short' || item.capture) && (
         <label className="field field--compact">
           <span className="field__label">
-            Save the answer as a variable (optional) — later sections can show it as{' '}
-            <code>{`{{ ${q.capture || 'NAME'} }}`}</code>, and accept it as an answer
+            Save the answer as a variable (optional): later sections can show it as{' '}
+            <code>{`{{ ${item.capture || 'NAME'} }}`}</code>, and accept it as an answer
           </span>
           <input
             className="field__input mono"
-            value={q.capture || ''}
+            value={item.capture || ''}
             placeholder="e.g. ROUTER_IP"
             maxLength={LIMITS.captureName}
             onChange={(e) => {
-              const { capture: _old, ...rest } = q;
+              const { capture: _old, ...rest } = item;
               const name = e.target.value.trim();
               onChange(name ? { ...rest, capture: name } : rest);
             }}
           />
         </label>
       )}
-      {q.type === 'long' && <p className="muted small">Long answers are always marked by hand.</p>}
+      {item.type === 'long' && (
+        <p className="muted small">Long answers are always marked by hand.</p>
+      )}
+    </div>
+  );
+}
+
+/** The items of a section with the numbers shown on them ("Step 2", "Question 3"). */
+function itemLabels(items) {
+  let steps = 0;
+  let questions = 0;
+  return items.map((it) =>
+    isQuestion(it) ? `Question ${(questions += 1)}` : `Step ${(steps += 1)}`,
+  );
+}
+
+/** A step (Informational or Checklist) as the participant sees it. */
+function StepView({ item }) {
+  return (
+    <div className="panel exam-info">
+      {item.title && <h4 className="preview__step-title">{item.title}</h4>}
+      {item.body && <Markdown>{item.body}</Markdown>}
+      {item.tasks?.length > 0 && (
+        <div className="exam-checklist">
+          {item.tasks.map((t, ti) => (
+            <label key={ti} className="choice exam-checklist__item">
+              <input type="checkbox" disabled />
+              <span className="choice__text">
+                <Markdown>{t}</Markdown>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -505,34 +593,6 @@ function ExamPreview({ id, draft }) {
               <Markdown>{sec.body}</Markdown>
             </div>
           )}
-          {sec.type === 'info' &&
-            (sec.steps || []).map((st, sti) => (
-              <div key={sti} className="preview__step">
-                {(st.title || sec.steps.length > 1) && (
-                  <h4 className="preview__step-title">
-                    Step {sti + 1}
-                    {st.title ? ` · ${st.title}` : ''}
-                  </h4>
-                )}
-                {st.body && (
-                  <div className="panel">
-                    <Markdown>{st.body}</Markdown>
-                  </div>
-                )}
-                {st.tasks.length > 0 && (
-                  <div className="exam-checklist">
-                    {st.tasks.map((t, ti) => (
-                      <label key={ti} className="choice exam-checklist__item">
-                        <input type="checkbox" disabled />
-                        <span className="choice__text">
-                          <Markdown>{t}</Markdown>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
           {sec.type === 'submit' && (
             <p className="muted small">
               {sec.review
@@ -540,12 +600,14 @@ function ExamPreview({ id, draft }) {
                 : 'Shows the Submit button only.'}
             </p>
           )}
-          {sec.questions.map((q) => {
+          {(sec.items || []).map((it, ii) => {
+            if (!isQuestion(it)) return <StepView key={ii} item={it} />;
+            const qi = n;
             n += 1;
             return (
               <ExamQuestion
-                key={q.index}
-                q={{ ...q, key: `${sec.index}.${q.index}`, number: n }}
+                key={ii}
+                q={{ ...it, key: `${sec.index}.${qi}`, number: n }}
                 value={undefined}
                 disabled
                 onChange={() => {}}
@@ -612,7 +674,6 @@ export default function ExamEditor({ id, initial }) {
     set({ ...tpl, content: tpl.content.map((s, i) => (i === si ? sec : s)) });
 
   const problems = useMemo(() => examErrors(normaliseExam(tpl)), [tpl]);
-  let counter = 0;
 
   async function handleImport(e) {
     const file = e.target.files?.[0];
@@ -681,11 +742,9 @@ export default function ExamEditor({ id, initial }) {
     }
   }
 
-  const totalQ = tpl.content.reduce((n, s) => n + s.questions.length, 0);
-  const totalPts = tpl.content.reduce(
-    (n, s) => n + s.questions.reduce((m, q) => m + (Number(q.points) || 0), 0),
-    0,
-  );
+  const questions = tpl.content.flatMap((s) => (s.items || []).filter(isQuestion));
+  const totalQ = questions.length;
+  const totalPts = questions.reduce((n, q) => n + (Number(q.points) || 0), 0);
 
   return (
     <PortalShell>
@@ -759,7 +818,7 @@ export default function ExamEditor({ id, initial }) {
       <div className="toolbar">
         <span className="muted small">
           Correct answers are never sent to participants. Auto-graded: multiple choice, select-all,
-          true/false, and short answers with accepted answers.
+          true/false, and short answers with accepted answers or a pattern.
         </span>
         <div className="toolbar__actions">
           <button className="btn btn--sm btn--ghost" onClick={() => fileRef.current?.click()}>
@@ -825,11 +884,16 @@ export default function ExamEditor({ id, initial }) {
           />
 
           {tpl.content.map((sec, si) => {
-            const type = sectionType(sec);
-            const isSubmit = type === 'submit';
+            const isSubmit = isSubmitSection(sec);
             const last = tpl.content.length - 1; // the submit section
+            const items = sec.items || [];
+            const labels = isSubmit ? [] : itemLabels(items);
+            const setItems = (next) => setSection(si, { ...sec, items: next });
             return (
-              <section className={`editor-section editor-section--${type}`} key={si}>
+              <section
+                className={`editor-section ${isSubmit ? 'editor-section--submit' : ''}`}
+                key={si}
+              >
                 <div className="editor-section__head">
                   <span className="dist__index">
                     {isSubmit ? <Icon name="flag" size={13} /> : si + 1}
@@ -842,7 +906,7 @@ export default function ExamEditor({ id, initial }) {
                     aria-label={`Section ${si + 1} title`}
                     onChange={(e) => setSection(si, { ...sec, title: e.target.value })}
                   />
-                  <span className={`tag tag--section-${type}`}>{SECTION_TYPES[type]}</span>
+                  {isSubmit && <span className="tag tag--section-submit">Submit</span>}
                   {!isSubmit && (
                     <MinutesField
                       label="Minutes"
@@ -902,14 +966,6 @@ export default function ExamEditor({ id, initial }) {
                   </label>
                 )}
 
-                {type === 'info' && (
-                  <InfoStepsEditor
-                    si={si}
-                    steps={sec.steps}
-                    onChange={(steps) => setSection(si, { ...sec, steps })}
-                  />
-                )}
-
                 {isSubmit && (
                   <label className="check">
                     <input
@@ -924,50 +980,33 @@ export default function ExamEditor({ id, initial }) {
                   </label>
                 )}
 
-                {type === 'questions' && (
+                {!isSubmit && (
                   <>
-                    {sec.questions.map((q, qi) => {
-                      counter += 1;
-                      return (
-                        <QuestionEditor
-                          key={qi}
-                          q={q}
-                          number={counter}
-                          canUp={qi > 0}
-                          canDown={qi < sec.questions.length - 1}
-                          onChange={(nq) =>
-                            setSection(si, {
-                              ...sec,
-                              questions: sec.questions.map((x, k) => (k === qi ? nq : x)),
-                            })
-                          }
-                          onMove={(d) =>
-                            setSection(si, { ...sec, questions: move(sec.questions, qi, d) })
-                          }
-                          onRemove={() =>
-                            setSection(si, {
-                              ...sec,
-                              questions: sec.questions.filter((_, k) => k !== qi),
-                            })
-                          }
-                        />
-                      );
-                    })}
+                    {items.map((it, ii) => (
+                      <ItemEditor
+                        key={ii}
+                        si={si}
+                        item={it}
+                        label={labels[ii]}
+                        canUp={ii > 0}
+                        canDown={ii < items.length - 1}
+                        canRemove={items.length > 1}
+                        onChange={(next) => setItems(items.map((x, k) => (k === ii ? next : x)))}
+                        onMove={(d) => setItems(move(items, ii, d))}
+                        onRemove={() => setItems(items.filter((_, k) => k !== ii))}
+                      />
+                    ))}
                     <div className="qedit__add">
-                      {QUESTION_TYPE_NAMES.map((t) => (
+                      <span className="muted small">Add:</span>
+                      {ITEM_TYPE_NAMES.map((t) => (
                         <button
                           key={t}
                           type="button"
                           className="btn btn--xs btn--ghost"
-                          disabled={sec.questions.length >= EXAM_LIMITS.questionsPerSection}
-                          onClick={() =>
-                            setSection(si, {
-                              ...sec,
-                              questions: [...sec.questions, blankQuestion(t)],
-                            })
-                          }
+                          disabled={items.length >= EXAM_LIMITS.itemsPerSection}
+                          onClick={() => setItems([...items, blankItem(t)])}
                         >
-                          <Icon name="plus" size={12} /> {QUESTION_TYPES[t].label}
+                          <Icon name="plus" size={12} /> {ITEM_TYPES[t]}
                         </button>
                       ))}
                     </div>
@@ -976,27 +1015,24 @@ export default function ExamEditor({ id, initial }) {
 
                 {si === last - 1 && (
                   <div className="section-add">
-                    <span className="muted small">Add a section before the submit step:</span>
-                    {['info', 'questions'].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        className="btn btn--sm btn--ghost"
-                        disabled={tpl.content.length > EXAM_LIMITS.sections}
-                        onClick={() =>
-                          set({
-                            ...tpl,
-                            content: [
-                              ...tpl.content.slice(0, last),
-                              blankSection(t, last + 1),
-                              tpl.content[last],
-                            ],
-                          })
-                        }
-                      >
-                        <Icon name="plus" size={14} /> {SECTION_TYPES[t]}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--ghost"
+                      disabled={tpl.content.length > EXAM_LIMITS.sections}
+                      onClick={() =>
+                        set({
+                          ...tpl,
+                          content: [
+                            ...tpl.content.slice(0, last),
+                            blankSection(last + 1),
+                            tpl.content[last],
+                          ],
+                        })
+                      }
+                    >
+                      <Icon name="plus" size={14} /> Add section
+                    </button>
+                    <span className="muted small">before the submit step</span>
                   </div>
                 )}
               </section>

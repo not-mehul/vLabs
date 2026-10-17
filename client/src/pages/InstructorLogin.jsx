@@ -7,7 +7,9 @@ export default function InstructorLogin() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/instructor';
+  // Only ever back into the portal (never an outside or odd-looking path).
+  const back = location.state?.from?.pathname;
+  const from = /^\/instructor(\/|$)/.test(back || '') ? back : '/instructor';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
