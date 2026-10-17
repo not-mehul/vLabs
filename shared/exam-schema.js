@@ -100,10 +100,11 @@ import {
 } from './template-schema.js';
 
 export const EXAM_LIMITS = Object.freeze({
-  sections: 50,
+  // Sections and accepted answers are the same concepts as in labs.
+  sections: LIMITS.sections,
   itemsPerSection: 200,
   options: 12,
-  accepted: 20,
+  accepted: LIMITS.acceptedAnswers,
   title: 200,
   description: 1000,
   sectionTitle: 200,

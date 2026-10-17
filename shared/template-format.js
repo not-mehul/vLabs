@@ -35,7 +35,8 @@
  *   ## [computer] Assign an IP
  *   Body…
  *
- *   > checkpoint: Prompt shown to the participant :: {{ HOST_IP }} | {{ HOST_IP }}/24
+ *   > checkpoint: Prompt shown to the participant
+ *   > accept: {{ HOST_IP }} | {{ HOST_IP }}/24
  *   > placeholder: e.g. 10.0.0.1XX
  *
  *   ## [computer] Read the serial number
@@ -51,10 +52,12 @@
  *   `> minutes: N` directly under a `# ` heading allocates N minutes to that
  *   section (optional; drives the monitor's "over time" highlighting).
  *   `# ` starts a section, `## ` starts a step (optional [desk]/[computer]/[info]
- *   prefix sets the type, default desk). `> hint:` and `> checkpoint:` lines use
- *   `::` to separate the two parts; write `\::` for a literal `::`. Checkpoint
- *   answers may list alternatives separated by ` | ` (write `\|` for a literal
- *   pipe). A checkpoint with no `:: answer` part followed by `> pattern: MASK`
+ *   prefix sets the type, default desk). `> hint:` lines use `::` to separate
+ *   the label from the text; write `\::` for a literal `::`. A checkpoint's
+ *   accepted answers follow on `> accept: a | b` (the first is the answer,
+ *   the rest alternatives; write `\|` for a literal pipe), the same line an
+ *   exam's short answer uses; the older `> checkpoint: prompt :: a | b` form
+ *   is still read. A checkpoint followed by `> pattern: MASK` instead
  *   is a pattern checkpoint (9 digit, A/a letter, X/x letter-or-digit, ? any,
  *   * anything; punctuation = optional separator). `> capture: NAME` saves the
  *   accepted value as {{ NAME }} for later steps. `> placeholder:` sets the
@@ -104,7 +107,7 @@ function splitAnswers(str) {
 
 const isFence = (line) => /^\s{0,3}(```|~~~)/.test(line);
 const isDirective = (line) =>
-  /^>\s*(hint|solution|checkpoint|placeholder|pattern|capture):/i.test(line);
+  /^>\s*(hint|solution|checkpoint|accept|placeholder|pattern|capture):/i.test(line);
 
 /* ------------------------------- Export --------------------------------- */
 
@@ -171,8 +174,10 @@ export function templateToMarkdown(input) {
           lines.push(`> checkpoint: ${escSep(cp.prompt)}`);
           lines.push(`> pattern: ${cp.pattern}`);
         } else {
-          const answers = [cp.answer, ...cp.answers].map((a) => escSep(escPipe(a))).join(' | ');
-          lines.push(`> checkpoint: ${escSep(cp.prompt)} :: ${answers}`);
+          // Accepted answers on their own line, as an exam's short answer.
+          lines.push(`> checkpoint: ${escSep(cp.prompt)}`);
+          const answers = [cp.answer, ...cp.answers].filter(Boolean).map(escPipe).join(' | ');
+          if (answers) lines.push(`> accept: ${answers}`);
         }
         if (cp.capture) lines.push(`> capture: ${cp.capture}`);
         if (cp.placeholder) lines.push(`> placeholder: ${cp.placeholder}`);
@@ -311,7 +316,8 @@ export function parseMarkdownTemplate(text) {
       const rest = line.replace(/^>\s*checkpoint:/i, '').trim();
       const [prompt, answerPart] = splitOnceUnescaped(rest);
       const [answer = '', ...alternatives] = splitAnswers(answerPart);
-      // No answer part: a `> pattern:` line is expected to follow.
+      // No answer part: an `> accept:` or `> pattern:` line is expected to
+      // follow (`prompt :: answers` is the form before 1.18.0).
       step.checkpoint = {
         prompt: (prompt || 'Enter the value to continue').trim(),
         placeholder: '',
@@ -321,6 +327,17 @@ export function parseMarkdownTemplate(text) {
         pattern: '',
         capture: '',
       };
+      afterDirective = true;
+    } else if (/^>\s*accept:/i.test(line) && step) {
+      const [answer = '', ...alternatives] = splitAnswers(line.replace(/^>\s*accept:/i, ''));
+      if (step.checkpoint) {
+        Object.assign(step.checkpoint, {
+          mode: 'exact',
+          answer,
+          answers: alternatives,
+          pattern: '',
+        });
+      }
       afterDirective = true;
     } else if (/^>\s*pattern:/i.test(line) && step) {
       const value = line.replace(/^>\s*pattern:/i, '').trim();
@@ -437,6 +454,7 @@ below to complete the lab.
 > - Base network: \`10.0.0.\`
 > - Host octet: \`100 + seat\` → **{{ HOST_IP }}**
 
-> checkpoint: Enter your Host IP address :: {{ HOST_IP }} | {{ HOST_IP }}/24
+> checkpoint: Enter your Host IP address
+> accept: {{ HOST_IP }} | {{ HOST_IP }}/24
 > placeholder: e.g. 10.0.0.1XX
 `;

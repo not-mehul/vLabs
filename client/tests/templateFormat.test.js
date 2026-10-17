@@ -120,6 +120,35 @@ test('multi-line hints, escaped separators and alternative answers parse', () =>
   });
 });
 
+test('a checkpoint lists its accepted answers on `> accept:`, as an exam short answer does', () => {
+  const md = [
+    '# S',
+    '## Step',
+    'Body',
+    '',
+    '> checkpoint: Which port :: of the two?',
+    '> accept: 443 | https \\| tls',
+    '> capture: PORT',
+    '',
+  ].join('\n');
+  const cp = parseMarkdownTemplate(md).content[0].steps[0].checkpoint;
+  assert.equal(cp.prompt, 'Which port');
+  assert.equal(cp.mode, 'exact');
+  assert.equal(cp.answer, '443');
+  assert.deepEqual(cp.answers, ['https | tls']);
+  assert.equal(cp.capture, 'PORT');
+
+  // Exports write the same form, and the one-line form before 1.18.0 reads the same.
+  const out = templateToMarkdown(parseMarkdownTemplate(md));
+  assert.match(out, /^> checkpoint: Which port$/m);
+  assert.match(out, /^> accept: 443 \| https \\\| tls$/m);
+  assert.doesNotMatch(out, /checkpoint: .* :: /);
+  const old = parseMarkdownTemplate(
+    '# S\n## Step\nBody\n\n> checkpoint: Which port :: 443 | https \\| tls\n',
+  );
+  assert.deepEqual(old.content[0].steps[0].checkpoint.answers, ['https | tls']);
+});
+
 test('a blank line ends a hint so following body text is not swallowed', () => {
   const md = '# S\n## Step\nBody\n\n> hint: L :: text\n\nMore body after the hint.\n';
   const step = parseMarkdownTemplate(md).content[0].steps[0];

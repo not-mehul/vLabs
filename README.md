@@ -384,12 +384,13 @@ templates for different kinds of courses.
 - The Markdown convention (documented in `shared/template-format.js`)
   uses frontmatter for `title`/`description`/`variables`, `#` for sections,
   `## [desk|computer|info]` for steps, and `> hint:` / `> solution:` /
-  `> checkpoint:` / `> pattern:` / `> capture:` / `> placeholder:` directives.
+  `> checkpoint:` / `> accept:` / `> pattern:` / `> capture:` /
+  `> placeholder:` directives, the last four the same lines exams use.
   Fenced code blocks are copied verbatim (a `#` inside one is not a heading),
   hints may span multiple quoted lines, `\::` and `\|` escape the separators,
-  and checkpoint answers may list alternatives separated by `|`. A
-  `> checkpoint: prompt` line without an `:: answer` part followed by
-  `> pattern: XXXX.XXXX.XXXX` is a pattern checkpoint; `> capture: SERIAL`
+  and `> accept: a | b` lists a checkpoint's accepted answers. A
+  `> checkpoint: prompt` line followed by `> pattern: XXXX.XXXX.XXXX`
+  instead is a pattern checkpoint; `> capture: SERIAL`
   saves the accepted value for later steps. **Round-trips are lossless**
   (covered by `client/tests/templateFormat.test.js`).
 
