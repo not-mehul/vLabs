@@ -56,6 +56,8 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: Offline Template Studio matches its sources
+        run: npm run check:studio
       - run: npm run build
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

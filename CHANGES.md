@@ -836,6 +836,57 @@ sessions are unchanged.
 
 `deploy/pi/update.sh` as usual. No migration.
 
+## 1.15.0 — Template Studio is the template editor
+
+- **vLabs Template Studio replaces the portal's lab and exam editors.**
+  Opening a template, **New lab** or **New exam** edits it in the Studio
+  inside the portal. **Save** (or Ctrl+S) stores a new version, images go to
+  the portal's library, **History** lists every version with revert, and an
+  archived template can be restored from the banner. Unsaved changes are
+  flagged and a leave warns first.
+- **The offline Studio stays.** **Templates → Offline Studio** downloads it
+  as one file (also `docs/vlabs_template_studio.html`) that now works with no
+  network at all: styles, fonts, icons and libraries are inside it, nothing
+  is loaded from the web. Import its `.zip`, `.md` or `.json` as before.
+- **One Studio, vLabs' own rules.** Both are built from `client/studio/` and
+  read, write, check and grade through the same shared modules vLabs saves
+  with (`shared/`). The Studio's own copy of the lab rules and formula engine
+  is gone (formulas no longer run through `new Function`), and the
+  Validation Audit ends with vLabs' save check, so **Ready to save** means
+  vLabs will accept it. A `.zip` with both `template.json` and `template.md`
+  now reads the JSON, as the portal does.
+- **Exams and labs work alike in the Studio.** Exams now have the
+  **Lineage Matrix** (where each variable and saved answer is used, and
+  answers used before they are saved), a **Preview** beside each item, and
+  **Progressive Gating** in the participant preview (a section opens once
+  every question before it is answered and every checklist ticked, as
+  vLabs does). Exam sections are called sections, as in the portal.
+- **Documents in the offline Studio.** It keeps every template you work on
+  in the browser, images included, under **Documents**; **New**, an example
+  or an import starts a new document and the one you had stays listed.
+  **Save to file** (Ctrl+S) writes a `.zip` package to disk (back to the same
+  file where the browser allows), **Open file** reads one in. When the
+  browser will not store a document the header says **Not saved** and a
+  message says so, instead of images silently going missing. A draft from an
+  older Studio becomes the first document.
+- **Images:** SVG is refused everywhere in the Studio, as vLabs refuses it
+  (a package's SVG files are left out with a message). The mock image
+  generator, which made SVGs, is gone, as are the blank lab / blank exam
+  entries duplicated under **Examples** (they are under **New**).
+- In the portal the Studio hides what needs the open internet or its own
+  storage: AI Polish (kept in the offline Studio), its theme switch (it
+  follows the portal's), **Documents** and **New** (use **New lab** / **New
+  exam**).
+- **Fixed: the sample exam on a fresh install had no variables,** so its
+  `{{ SUBNET }}` step could not be saved unchanged.
+- Security: the portal's CSP still allows no inline scripts or `eval`; the
+  Studio's buttons run through a small interpreter instead of inline
+  handlers. `frame-ancestors` is now `'self'` so the portal can frame it.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration. `npm run build` (client) also
+builds the Studio; CI checks that the committed offline file is current.
 ## 1.15.0 — exam progress, optional sections, unlock a checkpoint, admin account
 
 - **Exams track progress like labs.** The exam monitor gains a **Progress**

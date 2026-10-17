@@ -123,8 +123,9 @@ variable-shadowing crash in the exam statistics code.
   live and the seat still exists.
 - **IP protection**: progressive lab delivery; checkpoint answers, masks and
   exam answers never sent; `no-store` on content; no file downloads.
-- **Browser hardening**: strict CSP without `unsafe-inline`, `frame-ancestors
-'none'`, HSTS, `nosniff`, no referrer; Markdown sanitised with DOMPurify;
+- **Browser hardening**: strict CSP without `unsafe-inline` or `unsafe-eval`,
+  `frame-ancestors 'self'` (only the template editor frames vLabs Template
+  Studio, same origin), HSTS, `nosniff`, no referrer; Markdown sanitised with DOMPurify;
   images type-sniffed server-side (no SVG/HTML); CSV exports neutralise
   spreadsheet formulas.
 - **Sandboxed formulas**: a hand-written evaluator, no `eval`, whitelisted

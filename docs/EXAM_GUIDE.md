@@ -15,22 +15,24 @@ Applies to vLabs **1.15.0**.
 
 ## 1. Creating an exam
 
-Exams can be written in two places:
+Exams, like labs, are written in **vLabs Template Studio**. In the portal,
+**Templates → New exam** (or opening an exam) edits it in the Studio, and
+**Save** stores a new version. The same Studio works offline as one file
+(**Templates → Offline Studio**, or `docs/vlabs_template_studio.html`): there,
+**New → New Exam** or **Examples → E. Network Fundamentals Quiz**, then
+**Export** a `.zip` package (exam + images), `.md` or `.json` and bring it in
+under **Templates → Import**, which sees that it is an exam, uploads the
+package's images and opens it, so you only need to press **Save**.
 
-- **vLabs Template Studio** (`docs/vlabs_template_studio.html`): **New → New
-  Exam**, or **Examples → E. Network Fundamentals Quiz**. It has the same
-  parts, item types (steps and questions), answer matching, time
-  allocations, image library and validation as below,
-  plus a **Participant Preview** where you can answer the exam yourself,
-  **Check my answers** (graded exactly as vLabs grades) and **Show answer
-  key**. **Export** writes a `.zip` package (exam + images), `.md` or `.json`.
-  Import it in the portal under **Templates → Import**: vLabs sees that it is
-  an exam, uploads the package's images and opens it in the exam editor, so
-  you only need to press **Save exam**.
-- The portal's own editor, below.
+Both have a **Participant Preview** where you can answer the exam yourself,
+**Check my answers** (graded exactly as vLabs grades), **Show answer key**
+and **Progressive Gating** (sections open as vLabs opens them), a
+**Preview** beside each item showing it as seat 1 sees it, the
+**Lineage Matrix** (which variables and saved answers are used where), and a
+**Validation Audit** that ends with vLabs' own save check.
 
-**Templates → New exam** opens the exam editor: a list of sections ("parts"),
-each a list of **questions and steps** (§2). **Add:** under a section adds an
+The exam is a list of sections, each a list of **questions and steps**
+(§2). **Add:** under a section adds an
 item of any of the seven types, and the type menu on an item changes it
 (text, options and points carry over where they fit). For a question write
 the prompt (Markdown, with images by library file name, e.g.
@@ -38,10 +40,9 @@ the prompt (Markdown, with images by library file name, e.g.
 for a step write its instructions and, for a checklist, the items to tick.
 **Minutes** beside each section title sets the time allocated to that
 section (§4.1). **Add section** adds one before the submit step, which
-always stays last. **Import** (a Studio
-`.zip`, `.md` or `.json`) / **.md** / **.json** read and write the format
-below; **Sample .md** downloads a ready-made example. A sample exam is also
-created on a fresh install.
+always stays last. **Import** and **Export** (a `.zip` package, `.md` or
+`.json`) read and write the format below; **Examples** loads a ready-made
+exam. A sample exam is also created on a fresh install.
 
 Launch it from **Sessions** like a lab (exams are grouped under *Exams* in the
 template picker). The session takes a frozen copy, as labs do.
@@ -138,8 +139,7 @@ Accepted answers are resolved per seat before grading, so
 the monitor shows each participant the expected answer they were given.
 Unknown names are rejected when the exam is saved (*Unknown placeholder
 {{ XYZ }} in Section 1 · step 1*), as is a saved answer used too early. The
-exam editor's preview resolves any seat you choose, and the Studio's
-participant preview takes a seat and name.
+Studio's participant preview takes a seat and name.
 
 ## 2c. The submit section
 
@@ -321,7 +321,7 @@ the new shape.
 Section time works exactly as in labs (TEMPLATE_GUIDE.md §11.1):
 
 - Set the allocation with `> minutes: N` (Markdown), `"minutes": N` (JSON) or
-  **Minutes** beside the section title in the exam editor or the Studio.
+  **Minutes** beside the section title in the Studio.
   Leave it empty for none. The submit section has no
   allocation.
 - The monitor compares each participant's time on their furthest section
@@ -431,13 +431,13 @@ From **Download** on the monitor:
 1. Add an entry to `QUESTION_TYPES` in `shared/exam-schema.js`: `label`,
    `hasOptions`, `normalise`, `validate`, `normaliseResponse` and `grade`
    (return `null` for "needs a human").
-2. Render it for participants in `client/src/components/ExamQuestion.jsx` and
-   add its fields to `client/src/pages/ExamEditor.jsx`.
+2. Render it for participants in `client/src/components/ExamQuestion.jsx`.
 3. Optionally give it a Markdown type name / alias in
    `shared/exam-format.js`.
-4. Mirror it in the Template Studio's `vlabs-exam-core` block
-   (`docs/vlabs_template_studio.html`); `client/tests/studioExamParity.test.js`
-   fails until the Studio reads, writes and grades it like vLabs.
+4. Add its answer fields to the Template Studio's exam builder
+   (`client/studio/src/exam-ui.js`). The Studio reads, writes and grades
+   through the shared modules, so nothing else needs mirroring; rebuild it
+   with `npm run build:studio` (client) to refresh the offline file.
 
 Storage, the participant API, manual marking and exports work off that
 interface unchanged.

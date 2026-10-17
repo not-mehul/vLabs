@@ -1,5 +1,5 @@
 import { countingSections } from '../../../shared/lab-progress.js';
-import { isSectionCleared } from './templating.js';
+import { isSectionCleared } from '../../../shared/templating.js';
 
 /**
  * Sections a participant has opened: every section with recorded time, the

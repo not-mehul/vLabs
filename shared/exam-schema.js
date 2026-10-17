@@ -85,7 +85,7 @@
  * (coerce a participant's submission, or throw) and `grade` (true / false, or
  * null when it needs a human). Everything else — storage, the participant
  * API, manual marking, exports — works off that interface. Then teach the
- * client how to render it (ExamQuestion.jsx) and edit it (ExamEditor.jsx).
+ * client how to render it (ExamQuestion.jsx) and edit it (the Studio's exam-ui.js).
  */
 
 import {
@@ -337,7 +337,7 @@ export function isManualQuestion(q) {
 }
 
 /** A fresh question of the given type in canonical shape. */
-function blankQuestion(type = 'single') {
+export function blankQuestion(type = 'single') {
   const base = { type, prompt: '', points: 1, options: [], correct: null, accepted: [] };
   if (type === 'single') return { ...base, options: ['', ''], correct: 0 };
   if (type === 'multiple') return { ...base, options: ['', ''], correct: [] };
@@ -372,7 +372,7 @@ export function normaliseQuestion(raw) {
 }
 
 /** Normalise one item (a step or a question) into canonical shape. Never throws. */
-function normaliseItem(raw) {
+export function normaliseItem(raw) {
   const it = raw && typeof raw === 'object' ? raw : {};
   if (it.type !== 'info' && it.type !== 'checklist') return normaliseQuestion(it);
   const step = {
@@ -391,7 +391,7 @@ function normaliseItem(raw) {
 }
 
 /** The submit section added to an exam that has none. */
-function defaultSubmitSection() {
+export function defaultSubmitSection() {
   return { type: 'submit', title: 'Review and submit', minutes: null, body: '', review: true };
 }
 
@@ -489,7 +489,8 @@ export function sectionLayout(sec, si) {
 }
 
 /** Where an item is, for messages: "Section 2 · step 1" / "Section 2 · question 3". */
-const itemWhere = (si, at) => `Section ${si + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
+export const itemWhere = (si, at) =>
+  `Section ${si + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
 
 /**
  * Every text of an exam that may hold {{ PLACEHOLDERS }} (resolved per seat,
@@ -554,7 +555,7 @@ export function capturedValue(q, answer) {
  * answer saved in an EARLIER section (`early` when it is saved, but only in
  * this section or a later one).
  */
-function unknownExamPlaceholders(exam) {
+export function unknownExamPlaceholders(exam) {
   const known = new Set([...BUILTIN_PLACEHOLDERS, ...(exam?.variables || []).map((v) => v.name)]);
   const savedIn = new Map();
   for (const c of examCaptures(exam)) if (!savedIn.has(c.name)) savedIn.set(c.name, c.si);
@@ -573,7 +574,7 @@ function unknownExamPlaceholders(exam) {
 }
 
 /** Problems with the names questions save their answers under. */
-function captureErrors(exam, errors) {
+export function captureErrors(exam, errors) {
   const reserved = new Set([...BUILTIN_PLACEHOLDERS, ...BUILTIN_IDENTIFIERS]);
   const variables = new Set((exam?.variables || []).map((v) => v.name));
   const saved = new Map();
@@ -594,6 +595,23 @@ function captureErrors(exam, errors) {
   }
 }
 
+/** Authoring errors for one (normalised) question; `where` names it in messages. */
+export function questionErrors(q, where) {
+  const errors = [];
+  if (!q.prompt.trim()) errors.push(`${where} has an empty prompt`);
+  QUESTION_TYPES[q.type].validate(q, where, errors);
+  return errors;
+}
+
+/** Authoring errors for one (normalised) Informational or Checklist step. */
+export function stepErrors(it, where) {
+  if (it.type === 'info' && !it.body.trim()) return [`${where} needs instructions`];
+  if (it.type === 'checklist' && !it.tasks.length) {
+    return [`${where} needs at least one checklist item`];
+  }
+  return [];
+}
+
 /**
  * Authoring errors for a (normalised) exam. Returns a list of messages; empty
  * when the exam can be saved.
@@ -611,15 +629,7 @@ export function examErrors(exam) {
     if (!layout.length) errors.push(`Section ${si + 1} has no questions or steps`);
     for (const at of layout) {
       const where = itemWhere(si, at);
-      const it = at.item;
-      if ('qi' in at) {
-        if (!it.prompt.trim()) errors.push(`${where} has an empty prompt`);
-        QUESTION_TYPES[it.type].validate(it, where, errors);
-      } else if (it.type === 'info' && !it.body.trim()) {
-        errors.push(`${where} needs instructions`);
-      } else if (it.type === 'checklist' && !it.tasks.length) {
-        errors.push(`${where} needs at least one checklist item`);
-      }
+      errors.push(...('qi' in at ? questionErrors(at.item, where) : stepErrors(at.item, where)));
     }
   });
   captureErrors(exam, errors);

@@ -3,8 +3,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Icon from './Icon.jsx';
 
-/** Chrome for the instructor portal: top nav + account + logout. */
-export default function PortalShell({ children }) {
+/**
+ * Chrome for the instructor portal: top nav + account + logout. `fill` gives
+ * the page the whole remaining viewport (the template editor's Studio frame).
+ */
+export default function PortalShell({ children, fill = false }) {
   const { logout, instructor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -17,7 +20,7 @@ export default function PortalShell({ children }) {
   const onAdminPage = location.pathname === '/instructor/admin';
 
   return (
-    <div className="portal">
+    <div className={`portal${fill ? ' portal--fill' : ''}`}>
       <a className="skip-link" href="#portal-main">
         Skip to content
       </a>
@@ -64,7 +67,7 @@ export default function PortalShell({ children }) {
           </Link>
         </div>
       )}
-      <main id="portal-main" className="portal__main">
+      <main id="portal-main" className={`portal__main${fill ? ' portal__main--fill' : ''}`}>
         {children}
       </main>
     </div>

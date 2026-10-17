@@ -1,4 +1,4 @@
-import { resolveVariables, injectVariables } from './templating.js';
+import { resolveVariables, injectVariables } from '../../../shared/templating.js';
 import {
   isSubmitSection,
   isQuestion,
@@ -10,7 +10,7 @@ import {
 /**
  * Per-seat exams: an exam's {{ PLACEHOLDERS }} (its variables and the
  * built-ins SEAT_ID, FIRST_NAME, LAST_NAME, FULL_NAME) are resolved for each
- * participant exactly as a lab manual is (lib/templating.js), in everything
+ * participant exactly as a lab manual is (shared/templating.js), in everything
  * the participant reads and in the accepted answers used to grade them.
  *
  * A short question with `capture: NAME` saves the participant's answer as

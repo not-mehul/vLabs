@@ -85,8 +85,9 @@ export default function Templates() {
         <div>
           <h1>Templates</h1>
           <p className="muted">
-            Labs and exams, usually authored in vLabs Template Studio and imported here. Both can
-            also be written from scratch here. Shared by all instructors.
+            Labs and exams, written in vLabs Template Studio: opening one here edits it in the
+            Studio. To work without the server, download the offline Studio and import its package
+            here later. Shared by all instructors.
           </p>
         </div>
         <div className="page-head__actions">
@@ -96,6 +97,14 @@ export default function Templates() {
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
             </button>
           )}
+          <a
+            className="btn btn--ghost"
+            href="/studio/vlabs_template_studio.html"
+            download
+            title="vLabs Template Studio as one file that works offline"
+          >
+            <Icon name="download" size={16} /> Offline Studio
+          </a>
           <button
             className="btn btn--ghost"
             onClick={() => navigate('/instructor/templates/new-lab')}

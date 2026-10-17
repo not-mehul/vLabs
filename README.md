@@ -10,9 +10,9 @@ downloadable materials), and deliver per-seat instructions live to classroom
 devices.
 
 Labs are organised into **sections** (each a page of steps) that participants
-move through one at a time. Labs are written in **vLabs Template Studio**
-(`docs/vlabs_template_studio.html`) and imported; the portal can also build
-and restructure labs (**Templates → New lab**).
+move through one at a time. Labs and exams are written in **vLabs Template
+Studio**, which is the portal's template editor and also ships as one file
+that works offline (`docs/vlabs_template_studio.html`).
 **Exams** are a second template kind: sections of steps (informational
 text and checklists) and questions (multiple choice, select-all, true/false,
 short and long answers) in any mix, short answers checked by exact answers
@@ -28,7 +28,7 @@ Inter and JetBrains Mono, a clean geometric line-icon set — with **full light
 | -------------------------------------------------------------- | --------------------------------------------------------------------- |
 | ![Participant lab, dark](docs/screenshots/participant-lab.png) | ![Participant lab, light](docs/screenshots/participant-lab-light.png) |
 
-| Instructor session monitor                               | Lab editor (labs are usually written in Template Studio) |
+| Instructor session monitor                               | Template editor (vLabs Template Studio)                  |
 | -------------------------------------------------------- | -------------------------------------------------------- |
 | ![Session monitor](docs/screenshots/session-monitor.png) | ![Template editor](docs/screenshots/template-editor.png) |
 
@@ -77,10 +77,10 @@ Participant registration (the default landing page) is in
 | **Instructor Portal** — create sessions, generate 6-digit codes, monitor, extend, push template updates & terminate                                                                                                                                                                                                       | `client/src/pages/Dashboard.jsx`, `SessionMonitor.jsx`; `server/src/routes/sessions.js`              |
 | **Participant registration** — first + last name, auto-assigned number (1–100) in join order                                                                                                                                                                                                                              | `client/src/pages/Join.jsx`; `server/src/routes/participant.js`                                      |
 | **Participant-first login** — registration is the default page; a small link goes to the instructor sign-in                                                                                                                                                                                                               | `client/src/App.jsx`                                                                                 |
-| **Dynamic templating** — one master template, `{{ PLACEHOLDERS }}` resolved per seat from sandboxed formulas                                                                                                                                                                                                              | `server/src/lib/templating.js`                                                                       |
-| **Sectioned manuals** — desk vs computer cards, hints, step solutions, checkpoints gating the next section                                                                                                                                                                                                                | `server/src/lib/templating.js`, `client/src/pages/Lab.jsx`, `components/StepCard.jsx`                |
+| **Dynamic templating** — one master template, `{{ PLACEHOLDERS }}` resolved per seat from sandboxed formulas                                                                                                                                                                                                              | `shared/templating.js`                                                                               |
+| **Sectioned manuals** — desk vs computer cards, hints, step solutions, checkpoints gating the next section                                                                                                                                                                                                                | `shared/templating.js`, `client/src/pages/Lab.jsx`, `components/StepCard.jsx`                        |
 | **Frozen-at-launch sessions** — a running class never changes under participants; instructor pushes updates explicitly                                                                                                                                                                                                    | `server/src/lib/sessionLifecycle.js`, `routes/sessions.js`                                           |
-| **Template authoring** — labs written in vLabs Template Studio and imported (`.zip` with images, `.md`, `.json`); in-portal lab building and editing, live per-seat preview, immutable change history with revert                                                                                                         | `client/src/pages/LabEditor.jsx`, `client/src/lib/studioPackage.js`, `shared/template-schema.js`     |
+| **Template authoring** — vLabs Template Studio is the template editor (labs and exams), with the same Studio as one offline file; `.zip` with images, `.md`, `.json` import/export, live per-seat preview, variable map, immutable change history with revert                                                             | `client/studio/`, `client/src/pages/TemplateEditor.jsx`, `shared/`                                   |
 | **Examination mode** — exam templates (sections mixing informational / checklist steps and single / multiple / true-false / short / long questions; short answers by exact match or pattern), autosave + submit lock, answers never sent to participants, automatic + manual grading, grade-by-question, CSV/JSON exports | `shared/exam-schema.js`, `routes/exam.js`, `lib/examGrading.js`, `pages/Exam.jsx`, `ExamMonitor.jsx` |
 | **Archive instead of delete** — templates archive by default; permanent deletion keeps session analytics and history                                                                                                                                                                                                      | `server/src/routes/templates.js`                                                                     |
 | **IP protection** — content is JSON to the DOM only, `no-store`, no file endpoints, print-hidden                                                                                                                                                                                                                          | `server/src/routes/participant.js`, `client/src/styles.additions.css`                                |
@@ -359,17 +359,18 @@ out.
 
 ### Template import / export
 
-Labs and exams are authored in **vLabs Template Studio**
-(`docs/vlabs_template_studio.html`, a standalone page; **New → New Lab / New
-Exam**) and imported under **Templates → Import**, which tells the two apart
-and opens the matching editor. The Studio's **`.zip` package**
-(`template.json` + `images/`) uploads its images to the library and loads the
-template in one step; `.md` and `.json` work too. In the
-portal a lab can only have its **text** corrected (titles, bodies, hints,
-solutions, checkpoint prompts/answers/patterns, formula expressions) — to add,
-remove or reorder anything, export it, change it in the Studio and re-import.
-Exams have their own format and can also be written or edited in the portal's
-exam editor ([docs/EXAM_GUIDE.md](docs/EXAM_GUIDE.md)).
+Labs and exams are written in **vLabs Template Studio**. Opening a template
+under **Templates** (or **New lab**, **New exam**) edits it in the Studio
+inside the portal: **Save** stores a new version, the image library is the
+portal's, and **History** lists every version with revert. The same Studio
+ships as one file that works offline (**Templates → Offline Studio**, or
+`docs/vlabs_template_studio.html`): write there, export its **`.zip`
+package** (`template.json` + `images/`), and **Templates → Import** uploads
+the images and opens the template in one step; `.md` and `.json` work too.
+Both are built from one codebase, `client/studio/` (see its README), on the
+same rules vLabs saves with (`shared/`), so a template that passes the
+Studio's Validation Audit is one vLabs accepts.
+Exams have their own format ([docs/EXAM_GUIDE.md](docs/EXAM_GUIDE.md)).
 **[docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) is the complete authoring
 reference** — model, Markdown syntax, every validation rule, the formula and
 mask languages, delivery/gating behaviour, and four ready-to-import example
@@ -378,7 +379,7 @@ templates for different kinds of courses.
 - **Export** as **JSON** (canonical form) or **Markdown** (human-friendly).
 - **Import** a Studio `.zip`, `.json` or `.md` file to create a lab or replace
   its content (review, then Save).
-- The Markdown convention (documented in `client/src/lib/templateFormat.js`)
+- The Markdown convention (documented in `shared/template-format.js`)
   uses frontmatter for `title`/`description`/`variables`, `#` for sections,
   `## [desk|computer|info]` for steps, and `> hint:` / `> solution:` /
   `> checkpoint:` / `> pattern:` / `> capture:` / `> placeholder:` directives.
@@ -612,6 +613,9 @@ Suites, all under Node's built-in test runner:
 - **`client/tests/templateFormat.test.js`** — lossless Markdown/JSON
   round-trips, code-fence handling, multi-line hints, escapes, alternatives,
   and the bundled sample.
+- **`client/tests/studio.test.js`** — the Template Studio's CSP-safe handler
+  interpreter, every handler the Studio writes, and that it runs on the
+  shared modules (no `eval`, no copy of the rules).
 
 `.github/workflows/ci.yml` runs lint + format check, both test suites with
 `npm audit`, a client production build, and a bare-metal production smoke test
@@ -691,21 +695,26 @@ vLabs/
 │                              #   Caddyfile.template (HTTPS, internal CA)
 ├── DEPLOYMENT.md              # Pi runbook + later hosted deployment
 ├── .github/                   # CI workflow + Dependabot
-├── shared/
-│   └── template-schema.js     # canonical template shape, limits, placeholder checks
+├── shared/                    # used by the server, the portal and the Studio
+│   ├── template-schema.js     # canonical template shape, limits, placeholder checks
+│   ├── templating.js          # formulas, placeholders, masks (per-seat rendering)
+│   ├── template-format.js     # lab Markdown/JSON
+│   ├── exam-schema.js, exam-format.js
+│   └── validate-template.js, validate-exam.js   # what a save must pass
 ├── server/                    # Express + SQLite API
 │   ├── src/
 │   │   ├── app.js             # express app (helmet, cors, logging, static SPA)
 │   │   ├── index.js           # entrypoint: prod guards, sweeps, graceful shutdown
 │   │   ├── config.js
 │   │   ├── db/                # schema + versioned migrations, seeder (sample lab)
-│   │   ├── lib/               # templating engine, validation, tokens, logger,
+│   │   ├── lib/               # tokens, logger, exam/lab progress,
 │   │   │                      #   session lifecycle, time
 │   │   ├── middleware/        # auth (session gating), rate limits, errors
 │   │   └── routes/            # auth, templates, sessions, participant
 │   └── tests/                 # templating unit tests + HTTP integration tests
 └── client/                    # React + Vite SPA
-    ├── tests/                 # template format unit tests (node:test)
+    ├── tests/                 # template format + Studio unit tests (node:test)
+    ├── studio/                # vLabs Template Studio: sources + build (in-app and offline)
     └── src/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
         │                      #   TemplateEditor, SessionMonitor, InstructorLogin, Admin
@@ -713,7 +722,7 @@ vLabs/
         │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
         ├── hooks/             # instructor API helper, countdown
         ├── context/           # AuthContext, ThemeContext (light/dark)
-        ├── lib/               # templateFormat (JSON/Markdown), files, format, datetime
+        ├── lib/               # markdown, files, format, datetime
         ├── styles.css         # design system + light & dark themes
         ├── styles.additions.css
         └── api.js             # fetch client (+ participant resume storage)

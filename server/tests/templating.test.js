@@ -19,8 +19,8 @@ import {
   checkpointKey,
   countSteps,
   FUNCTION_NAMES,
-} from '../src/lib/templating.js';
-import { validateTemplatePayload } from '../src/lib/validateTemplate.js';
+} from '../../shared/templating.js';
+import { validateTemplatePayload } from '../../shared/validate-template.js';
 import {
   normaliseTemplate,
   findUnknownPlaceholders,
