@@ -156,15 +156,11 @@ export const api = {
   /* ---------------------------- Instructor accounts ------------------------ */
 
   listInstructors: (token) => request('/auth/instructors', { token }),
-  /**
-   * Create an instructor. Signed in → pass `token`; from the unlinked page on
-   * the sign-in screen → pass `authorize: { username, password }` of an
-   * existing instructor instead.
-   */
-  createInstructor: (token, { username, password, authorize }) =>
+  /** Create an instructor (signed in; Admin → Add an instructor). */
+  createInstructor: (token, { username, password }) =>
     request('/auth/instructors', {
       method: 'POST',
-      body: { username, password: password || undefined, authorize },
+      body: { username, password: password || undefined },
       token,
     }),
   resetInstructorPassword: (token, id) =>

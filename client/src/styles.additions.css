@@ -1171,21 +1171,6 @@ body.has-drawer {
   border: 1px solid var(--border);
   user-select: all;
 }
-.auth-card--wide {
-  max-width: 480px;
-}
-.auth-card__quiet-link {
-  display: block;
-  margin-top: 0.9rem;
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--text-3);
-  opacity: 0.6;
-}
-.auth-card__quiet-link:hover {
-  opacity: 1;
-  color: var(--text-2);
-}
 .fieldset {
   border: 1px solid var(--border);
   border-radius: var(--radius);

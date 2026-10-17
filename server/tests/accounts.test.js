@@ -119,7 +119,8 @@ test('creating an instructor needs a signed-in instructor or valid authorising c
   });
   assert.equal(short.status, 400);
 
-  // Hidden page flow: an existing instructor's credentials vouch for the new account.
+  // An existing instructor's credentials in the body no longer stand in for
+  // signing in (the unlinked /instructor/add page is gone).
   const viaCreds = await call('/api/auth/instructors', {
     method: 'POST',
     body: {
@@ -127,11 +128,17 @@ test('creating an instructor needs a signed-in instructor or valid authorising c
       authorize: { username: 'instructor', password: 'a much better password' },
     },
   });
-  assert.equal(viaCreds.status, 201);
-  assert.equal(viaCreds.data.instructor.must_change_password, true);
-  assert.ok(viaCreds.data.temporary_password.length >= 10);
-  aliceId = viaCreds.data.instructor.id;
-  aliceTemp = viaCreds.data.temporary_password;
+  assert.equal(viaCreds.status, 401);
+  const alice = await call('/api/auth/instructors', {
+    method: 'POST',
+    token,
+    body: { username: 'alice' },
+  });
+  assert.equal(alice.status, 201);
+  assert.equal(alice.data.instructor.must_change_password, true);
+  assert.ok(alice.data.temporary_password.length >= 10);
+  aliceId = alice.data.instructor.id;
+  aliceTemp = alice.data.temporary_password;
 
   const dup = await call('/api/auth/instructors', {
     method: 'POST',

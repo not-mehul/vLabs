@@ -68,11 +68,6 @@ export default function InstructorLogin() {
           </button>
         </form>
 
-        {/* Deliberately discreet: adding an account needs an existing
-            instructor's credentials anyway (see AddInstructor.jsx). */}
-        <Link to="/instructor/add" className="auth-card__quiet-link">
-          Add an instructor
-        </Link>
       </div>
     </div>
   );
