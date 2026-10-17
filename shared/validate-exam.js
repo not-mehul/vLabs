@@ -1,5 +1,5 @@
 import { IMAGE_MD_RE, imageRefName, LIMITS } from './template-schema.js';
-import { minutesInvalid, cleanVariables, utf8Bytes } from './validate-template.js';
+import { minutesInvalid, optionalInvalid, cleanVariables, utf8Bytes } from './validate-template.js';
 import {
   EXAM_LIMITS,
   normaliseExam,
@@ -42,6 +42,9 @@ export function validateExamPayload(payload, opts = {}) {
         `Section ${si + 1} time allocated must be a whole number of minutes from 1 to ${LIMITS.sectionMinutes} (or empty)`,
       );
     }
+    if (optionalInvalid(s?.optional)) {
+      errors.push(`Section ${si + 1} optional must be true or false`);
+    }
     const items = sectionItems(s);
     if (items.length > EXAM_LIMITS.itemsPerSection) {
       errors.push(
@@ -63,10 +66,11 @@ export function validateExamPayload(payload, opts = {}) {
   });
 
   const exam = normaliseExam(payload);
-  const content = exam.content.map(({ minutes, ...sec }) => ({
+  const content = exam.content.map(({ minutes, optional, ...sec }) => ({
     ...sec,
     title: sec.title.trim(),
     ...(minutes ? { minutes } : {}),
+    ...(optional ? { optional: true } : {}),
     ...('body' in sec ? { body: sec.body.trim() } : {}),
     ...(sec.items
       ? {

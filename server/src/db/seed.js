@@ -143,6 +143,7 @@ const SAMPLE_CONTENT = [
   },
   {
     title: 'Section 3 · Wrap Up',
+    optional: true,
     steps: [
       {
         type: 'desk',

@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
+import { flagLegacyOptionalSections } from '../../../shared/lab-progress.js';
 
 // Ensure the directory holding the SQLite file exists.
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -413,6 +414,23 @@ const MIGRATIONS = [
     name: 'exams handed in automatically when the session ends',
     up() {
       addColumnIfMissing('participants', 'auto_submitted', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
+  {
+    version: 10,
+    name: 'explicit optional flag on sections (was guessed from the title)',
+    up() {
+      // Sections whose title marked them optional get `optional: true`, in
+      // templates and in session snapshots, so progress stays as it was.
+      db.transaction(() => {
+        for (const table of ['templates', 'sessions']) {
+          const update = db.prepare(`UPDATE ${table} SET content = ? WHERE id = ?`);
+          for (const row of db.prepare(`SELECT id, content FROM ${table}`).all()) {
+            const next = flagLegacyOptionalSections(row.content);
+            if (next) update.run(next, row.id);
+          }
+        }
+      })();
     },
   },
 ];

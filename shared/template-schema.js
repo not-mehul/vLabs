@@ -20,6 +20,7 @@
  *     title: string,
  *     minutes: number | null,               // time allocated to the section
  *                                           //   (whole minutes, 1–600); null = none
+ *     optional: boolean,                    // left out of progress / completion
  *     steps: [{
  *       type: 'desk' | 'computer' | 'info',
  *       title: string,
@@ -126,6 +127,21 @@ export function normaliseMinutes(v) {
   return Number.isInteger(n) && n >= 1 && n <= LIMITS.sectionMinutes ? n : null;
 }
 
+/**
+ * A section's "optional" flag: true or false, or null when the value given is
+ * neither (true/false, or "true"/"false"/"yes"/"no" from Markdown). Missing
+ * means false. An optional section is left out of progress and is not needed
+ * to complete the lab or exam (shared/lab-progress.js).
+ */
+export function optionalFlag(v) {
+  if (v === undefined || v === null || v === '') return false;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (s === 'true' || s === 'yes') return true;
+  if (s === 'false' || s === 'no') return false;
+  return null;
+}
+
 /** A fresh, empty step in canonical shape. */
 export function blankStep() {
   return { type: 'desk', title: '', body: '', hints: [], solution: '', checkpoint: null };
@@ -220,6 +236,7 @@ export function normaliseTemplate(obj) {
       return {
         title: str(s.title, LIMITS.sectionTitle),
         minutes: normaliseMinutes(s.minutes),
+        optional: optionalFlag(s.optional) === true,
         steps: (Array.isArray(s.steps) ? s.steps : [])
           .slice(0, LIMITS.stepsPerSection)
           .map(normaliseStep),

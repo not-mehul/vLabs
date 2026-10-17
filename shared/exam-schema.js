@@ -20,6 +20,7 @@
  *     {                                // a section: any mix of items
  *       title: string,
  *       minutes: number | null,        // time allocated (1–600), null = none
+ *       optional: boolean,             // left out of progress / completion
  *       items: [                       // in reading order; each declares its type
  *         { type: 'info',              // Informational: instructions only
  *           title: string, body: string },
@@ -91,6 +92,7 @@
 import {
   LIMITS,
   normaliseMinutes,
+  optionalFlag,
   BUILTIN_PLACEHOLDERS,
   BUILTIN_IDENTIFIERS,
   PLACEHOLDER_RE,
@@ -440,6 +442,7 @@ function normaliseSection(raw) {
   return {
     title,
     minutes: normaliseMinutes(s.minutes),
+    optional: optionalFlag(s.optional) === true,
     items: sectionItems(s).slice(0, EXAM_LIMITS.itemsPerSection).map(normaliseItem),
   };
 }

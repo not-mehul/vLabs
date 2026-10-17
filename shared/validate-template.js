@@ -6,6 +6,7 @@ import {
   findUnknownPlaceholders,
   findMissingImages,
   compileMask,
+  optionalFlag,
 } from './template-schema.js';
 import { resolveVariables, RESERVED_NAMES, FUNCTION_NAMES } from './templating.js';
 
@@ -73,6 +74,9 @@ export function validateTemplatePayload(payload, opts = {}) {
         `Section ${si + 1} time allocated must be a whole number of minutes from 1 to ${LIMITS.sectionMinutes} (or empty)`,
       );
     }
+    if (optionalInvalid(s?.optional)) {
+      errors.push(`Section ${si + 1} optional must be true or false`);
+    }
     const n = Array.isArray(s?.steps) ? s.steps.length : 0;
     if (n > LIMITS.stepsPerSection) {
       errors.push(`Section ${si + 1} has too many steps (max ${LIMITS.stepsPerSection})`);
@@ -111,6 +115,7 @@ export function validateTemplatePayload(payload, opts = {}) {
     const clean = { title: section.title.trim(), steps: [] };
     // Storage shape: `minutes` only when set (keeps older consumers unaffected).
     if (section.minutes) clean.minutes = section.minutes;
+    if (section.optional) clean.optional = true;
     if (!clean.title) errors.push(`Section ${si + 1} needs a title`);
     if (section.steps.length === 0) {
       errors.push(`Section ${si + 1} ("${clean.title || 'untitled'}") has no steps`);
@@ -239,6 +244,11 @@ function toStorageStep(s, sectionIndex, stepIndex, errors, variableNames, captur
     }
   }
   return step;
+}
+
+/** An optional value that was given but is not true or false. */
+export function optionalInvalid(v) {
+  return optionalFlag(v) === null;
 }
 
 /** A minutes value that was given but is not a valid allocation. */

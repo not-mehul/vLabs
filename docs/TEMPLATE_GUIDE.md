@@ -970,6 +970,7 @@ Then read your own address back and enter it below.
 > placeholder: e.g. 10.0.0.1XX
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 Nice work, {{ FULL_NAME }}. Leave the cable connected to port {{ PORT_NUM }} and raise your hand for a bench check. Your host was **{{ HOST_IP }}** on VLAN {{ VLAN }}.
@@ -1053,6 +1054,7 @@ In the console, open **{{ DEVICE_NAME }}** → Live. Note the firmware version s
 > placeholder: e.g. v12.3.4
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Record
 Done. For the records: bench {{ BENCH }}, serial **{{ SERIAL }}**, MAC **{{ MAC }}**, named **{{ DEVICE_NAME }}**, firmware {{ FIRMWARE }}. Leave the camera powered; the instructor will release it after class.
@@ -1184,6 +1186,7 @@ Attach the label **{{ ASSET }}** and re-enter the tag to confirm.
 > checkpoint: Confirm the asset tag :: {{ ASSET }}
 
 # Section 4 · Wrap up
+> optional: true
 
 ## [info] Done
 What to leave as-is and what to hand in. Your tag was {{ ASSET }}.
