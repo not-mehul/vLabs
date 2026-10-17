@@ -879,8 +879,13 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 7: session breaks)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 7);
+test('database schema version is recorded (migration 8: exam seats from a lab)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 8);
+  const sessionCols = db
+    .prepare('PRAGMA table_info(sessions)')
+    .all()
+    .map((c) => c.name);
+  assert.ok(sessionCols.includes('seat_source_session_id'));
   const cols = db
     .prepare('PRAGMA table_info(participants)')
     .all()

@@ -330,7 +330,10 @@ out.
 
 1. **Named registration** — participants enter a room code plus first and last
    name. The server assigns the next ascending seat number in join order (max
-   100 per session); that number is what formulas see as `seat`.
+   100 per session); that number is what formulas see as `seat`. An exam
+   launched with **Seats from** a lab session gives anyone found in that lab
+   (by name) their lab seat, and so the same values; the exam monitor's
+   **Change seat** fixes typos and name clashes (EXAM_GUIDE.md §4.2).
 2. **Idempotent rejoin** — registering again with the same name (case- and
    whitespace-insensitive) in the same session returns the _same_ number and
    progress, even from a different device or after clearing storage.

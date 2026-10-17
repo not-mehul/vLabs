@@ -16,6 +16,20 @@ design trade-offs and features to plan for, not blockers for a LAN classroom
 deployment. A public/internet deployment needs the extra items marked
 **(hosted)**.
 
+## Re-check at 1.13.0
+
+Date: 2026-10-17. 1.13.0 adds exam seats from a lab session and **Change
+seat** on the exam monitor. No dependencies changed.
+
+| Check                                                              | Result                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Server test suite                                                  | 92 / 92 pass (new: lab seats, fallbacks, Change seat, unlinking)          |
+| Client test suite and production build                             | 32 / 32 pass; build clean                                                 |
+| Lint and format check (as CI)                                      | Clean                                                                     |
+| Migration 8 on a 1.12.0 database                                   | Column added; deleting the linked lab sets it to NULL                     |
+| Seat source and Change seat access                                 | Only the instructor's own lab sessions and own exam sessions are accepted |
+| Browser (Chromium): launch with Seats from, join, Change seat      | Pass; taken seat refused, participant's page shows the new seat on poll  |
+
 ## Re-check at 1.12.0
 
 Date: 2026-10-17. 1.12.0 changes the exam model (sections of mixed steps and
