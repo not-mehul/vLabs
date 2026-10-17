@@ -38,6 +38,9 @@ export default function Lab() {
   const initialisedRef = useRef(false);
   const reportedRef = useRef(-1);
   const versionRef = useRef(null);
+  // Checkpoints cleared at the last status poll: a rise the participant did not
+  // cause (an instructor unlock) reloads the manual.
+  const clearedRef = useRef(null);
   const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
     offsetMs,
   });
@@ -103,7 +106,13 @@ export default function Lab() {
       setOnBreak(Boolean(res.on_break));
       if (res.finished) setRemoteFinished(true);
       setError('');
-      if (versionRef.current !== null && res.template_version !== versionRef.current) {
+      const cleared = res.checkpoints_cleared;
+      const unlocked = clearedRef.current !== null && cleared > clearedRef.current;
+      clearedRef.current = cleared ?? null;
+      if (
+        unlocked ||
+        (versionRef.current !== null && res.template_version !== versionRef.current)
+      ) {
         load();
       }
     } catch (err) {

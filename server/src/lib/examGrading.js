@@ -14,7 +14,11 @@ import {
   isManualQuestion,
   totalPoints,
   QUESTION_TYPES,
+  isSubmitSection,
+  isExamSectionComplete,
 } from '../../../shared/exam-schema.js';
+import { isOptionalSection } from '../../../shared/lab-progress.js';
+import { visitedSections } from './labProgress.js';
 import { seatExam } from './examSeat.js';
 
 /**
@@ -102,6 +106,37 @@ export function gradeParticipant(p, content, variables = []) {
   });
 }
 
+/**
+ * One participant's progress through an EXAM, on the same model as a lab's
+ * (lib/labProgress.js). A section is DONE once the participant has opened it
+ * and every question in it is answered and every checklist item ticked; the
+ * submit section is done once they submit. Progress is the share of counting
+ * sections done: the submit section and optional sections are left out, and
+ * submitting does not complete sections that were left unfinished.
+ */
+export function examProgress(content, p) {
+  const sections = Array.isArray(content) ? content : [];
+  const answers = parseObject(p.answers);
+  const visited = visitedSections(p);
+  const submitted = Boolean(p.submitted_at);
+  const done = sections.map((sec, i) =>
+    isSubmitSection(sec)
+      ? submitted
+      : visited.has(i) && isExamSectionComplete(sections, i, answers),
+  );
+  const parts = sections.map((_, i) => i).filter((i) => !isSubmitSection(sections[i]));
+  const required = parts.filter((i) => !isOptionalSection(sections[i]));
+  const counting = required.length ? required : parts;
+  const completedCounting = counting.filter((i) => done[i]).length;
+  return {
+    done,
+    optional: sections.map((sec, i) => !isSubmitSection(sec) && !counting.includes(i)),
+    countingTotal: counting.length,
+    completedCounting,
+    progressPct: counting.length ? Math.round((completedCounting / counting.length) * 100) : 0,
+  };
+}
+
 /** Score summary for one participant. */
 export function examParticipantView(p, content, breaks = [], variables = []) {
   const now = nowIso();
@@ -111,8 +146,9 @@ export function examParticipantView(p, content, breaks = [], variables = []) {
   const maxScore = totalPoints(content);
   const submitted = Boolean(p.submitted_at);
   // Section progress and timing, as for labs: placed at the furthest section
-  // opened; a section is done once moved past (or the exam is submitted).
+  // opened; a section is done once opened and finished (examProgress).
   const count = content.length;
+  const progress = examProgress(content, p);
   const furthest = Math.min(p.max_section || 0, Math.max(count - 1, 0));
   const sectionSeconds = sectionSecondsView(p, count, { now, breaks, frozen: submitted });
   const onFurthest = submitted ? 0 : sectionSeconds[furthest] || 0;
@@ -138,7 +174,10 @@ export function examParticipantView(p, content, breaks = [], variables = []) {
     complete: submitted,
     furthest_section: furthest,
     current_section: p.current_section,
-    sections_done: content.map((_, i) => submitted || i < furthest),
+    sections_done: progress.done,
+    completed_sections: progress.completedCounting,
+    counting_sections: progress.countingTotal,
+    progress_pct: progress.progressPct,
     section_seconds: sectionSeconds,
     seconds_on_furthest_section: onFurthest,
     allocated_seconds: allocated,

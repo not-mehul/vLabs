@@ -380,9 +380,17 @@ The exam monitor shows:
   count, correct rate (over graded responses), and how many still need
   marking. Click a question to see every participant's response to it and
   mark them in one place.
-- **Participants** — answered, score (`*` = provisional while answers still
-  need marking), the section they have reached, time on it against its
-  allocation, and status. Click a row for their time per section and their
+- **Participants** — answered, **progress**, score (`*` = provisional while
+  answers still need marking), the section they have reached, time on it
+  against its allocation, and status. Progress counts the sections they
+  have **completed**: opened, with every question answered and every
+  checklist item ticked. It is the same measure as a lab's, and the header
+  shows the class's **Avg progress**. The submit section is not counted,
+  and neither is a section whose title marks it optional (*optional*,
+  *bonus*, *extra credit*, *stretch*, *wrap up*, as in labs). Submitting
+  completes only the submit section, so a section left unfinished stays
+  unfinished, and clearing an answer makes its section incomplete again
+  (it does not lock anything). Click a row for their time per section and their
   whole exam: each question with
   the options (correct and chosen highlighted), their response, the expected
   answer, the verdict, the history of changes to that answer, and

@@ -548,7 +548,10 @@ Understanding delivery helps you place checkpoints well.
   still see it, can do it, and its checkpoints still gate what comes after
   it — it just isn't required. Name such sections accordingly, e.g.
   `# Section 4 · Wrap up` or `# Optional: VLAN tagging`. (This is read from
-  the title at display time; the template format itself has no flag.)
+  the title at display time; the template format itself has no flag.) An
+  optional section is only shown as completed, for that participant and in
+  the monitor's Sections panel, once they have opened it and cleared its
+  checkpoints: finishing the lab does not complete it.
 - A participant counts as **complete** the moment every counting section is
   cleared and they have reached the last one — their clock stops and the
   monitor shows *Complete* even if they keep reviewing or carry on into a

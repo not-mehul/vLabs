@@ -680,6 +680,8 @@ router.get('/status', contentLimiter, (req, res) => {
     finished: Boolean(p.finished_at),
     submitted: Boolean(p.submitted_at),
     template_version: req.session.template_version,
+    // Labs: the instructor can unlock a checkpoint; a change reloads the manual.
+    checkpoints_cleared: completedSetOf(p).size,
     // Exams: the instructor can change the seat (and so its values) mid-exam.
     seat_number: p.seat_number,
   });

@@ -222,6 +222,13 @@ export const api = {
     request(`/sessions/${id}/break`, { method: 'POST', body: { on }, token }),
   removeParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { method: 'DELETE', token }),
+  /** Labs: clear a checkpoint for a stuck participant (value: a pattern answer it saves). */
+  unlockCheckpoint: (token, sessionId, participantId, key, value) =>
+    request(`/sessions/${sessionId}/participants/${participantId}/checkpoints/${key}/unlock`, {
+      method: 'POST',
+      body: value == null ? {} : { value },
+      token,
+    }),
   /** Exams: let the seat be resumed on another device (signs out the current one). */
   releaseSeat: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}/release`, {

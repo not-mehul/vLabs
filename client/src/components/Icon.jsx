@@ -47,6 +47,12 @@ const P = {
       <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
     </>
   ),
+  unlock: (
+    <>
+      <rect x="4.5" y="10.5" width="15" height="9" rx="1.5" />
+      <path d="M8 10.5V8a4 4 0 0 1 7.75-1.4" />
+    </>
+  ),
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
   'check-circle': (
     <>

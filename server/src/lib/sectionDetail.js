@@ -37,8 +37,9 @@ function seat(v, i, allocated) {
 export function sectionTimeDetail(section, i, views) {
   const allocated = allocatedSeconds(section);
   const here = views.filter((v) => !v.complete && v.furthest_section === i);
-  const past = views.filter((v) => v.complete || v.sections_done[i]);
-  const notReached = views.filter((v) => !v.complete && v.furthest_section < i);
+  const past = views.filter((v) => v.sections_done[i]);
+  // Everyone else: not there yet, or finished without completing this section.
+  const notReached = views.filter((v) => !here.includes(v) && !past.includes(v));
   // Timing statistics over the participants who completed the section, as the
   // averages on the section cards.
   const timed = views.filter((v) => v.sections_done[i]).map((v) => v.section_seconds[i] || 0);
