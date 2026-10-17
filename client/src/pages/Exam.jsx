@@ -103,6 +103,8 @@ export default function Exam() {
   const [saveState, setSaveState] = useState({}); // key → saving | saved | error
   const [view, setView] = useState(0); // section index
   const [pageOf, setPageOf] = useState({}); // section index → page shown
+  // Sections opened so far: one with nothing to answer is only done once seen.
+  const [visited, setVisited] = useState(() => new Set());
   const [error, setError] = useState('');
   const [ended, setEnded] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -149,6 +151,7 @@ export default function Exam() {
       setOffsetMs(clockOffset(res.server_time));
       setOnBreak(Boolean(res.on_break));
       setSubmitted(res.submitted);
+      setVisited((v) => new Set([...v, ...(res.visited_sections || [])]));
       unlockedRef.current = res.unlocked_section ?? 0;
       captureKeys.current = new Set(
         res.sections.flatMap((s) =>
@@ -247,6 +250,7 @@ export default function Exam() {
   // Report the section being viewed: drives time per section (breaks
   // excluded) and the instructor's view of where everyone is.
   useEffect(() => {
+    if (data && !submitted) setVisited((v) => (v.has(view) ? v : new Set([...v, view])));
     if (!data || submitted || reportedRef.current === view) return;
     if (data.sections[view]?.virtual) return;
     reportedRef.current = view;
@@ -420,24 +424,6 @@ export default function Exam() {
     goTo(view - 1);
   }
 
-  function confirmSubmit() {
-    const left = [];
-    if (unanswered.length) {
-      left.push(
-        `${unanswered.length} question${unanswered.length === 1 ? ' is' : 's are'} unanswered`,
-      );
-    }
-    if (unticked.length) {
-      left.push(
-        `${unticked.length} checklist${unticked.length === 1 ? ' is' : 's are'} not complete`,
-      );
-    }
-    const msg = left.length
-      ? `${left.join(' and ')}. Submit anyway? You won't be able to change or review your answers afterwards.`
-      : "Submit your exam? You won't be able to change or review your answers afterwards.";
-    if (window.confirm(msg)) handleSubmit();
-  }
-
   return (
     <div className="lab exam">
       <div className="lab__header">
@@ -487,7 +473,9 @@ export default function Exam() {
             const s = sections[i];
             const locked = i > unlocked || !s;
             const submitStep = s?.type === 'submit' || i === totalSections - 1;
-            const done = !locked && sectionDone(s, answers);
+            // Answered and ticked, and opened: a section with nothing to
+            // answer is not ticked off before the participant has seen it.
+            const done = !locked && visited.has(i) && sectionDone(s, answers);
             const state = i === view ? 'current' : locked ? 'locked' : done ? 'done' : 'open';
             const what = 'complete';
             return (
@@ -725,7 +713,7 @@ export default function Exam() {
                 <button className="btn btn--ghost" disabled={view === 0} onClick={goBack}>
                   <Icon name="chevronLeft" size={16} /> Previous
                 </button>
-                <button className="btn btn--primary" disabled={submitting} onClick={confirmSubmit}>
+                <button className="btn btn--primary" disabled={submitting} onClick={handleSubmit}>
                   <Icon name="flag" size={16} />{' '}
                   {submitting ? 'Submitting…' : unsaved ? 'Save & submit' : 'Submit'}
                 </button>

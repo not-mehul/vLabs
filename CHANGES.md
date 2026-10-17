@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.13.0). The first section is the original code
+Newest entry at the bottom (1.13.1). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -774,3 +774,19 @@ sessions are read in either shape.
 
 `deploy/pi/update.sh` as usual. Migration 8 adds one column to sessions
 (`seat_source_session_id`); existing sessions keep join-order seats.
+
+## 1.13.1 — exam progress fixes
+
+- **Fixed: sections with nothing to answer showed as done before anyone
+  opened them.** The section bar at the top of the participant's exam
+  ticked off an informational section as soon as it unlocked. A section is
+  now ticked only once the participant has opened it and answered or ticked
+  everything in it. The server lists the sections each seat has opened
+  (`visited_sections`), so this survives a reload.
+- **No confirmation pop-up on Submit.** The submit section already lists
+  unanswered questions and unfinished checklists and says that submitting
+  is final, so the browser pop-up asking to confirm was removed.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.
