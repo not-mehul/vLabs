@@ -7,8 +7,8 @@ import { validateExamPayload } from '../lib/validateExam.js';
 import {
   listQuestions,
   totalPoints,
-  sectionType,
-  infoSteps,
+  isSubmitSection,
+  isQuestion,
   examCaptures,
 } from '../../../shared/exam-schema.js';
 import {
@@ -388,27 +388,30 @@ router.post(
         kind,
         seat_id: seatId,
         context,
-        sections: examForSeat(content, context).map((sec, si) => ({
-          ...sec,
-          index: si,
-          type: sectionType(sec),
-          ...(sec.body ? { body: injectImages(sec.body, images) } : {}),
-          ...(sectionType(sec) === 'info'
-            ? {
-                steps: infoSteps(sec).map((st) => ({
-                  ...st,
-                  body: injectImages(st.body, images),
-                  tasks: st.tasks.map((t) => injectImages(t, images)),
-                })),
-              }
-            : {}),
-          questions: (sec.questions || []).map((qq, qi) => ({
-            ...qq,
-            index: qi,
-            prompt: injectImages(qq.prompt, images),
-            options: qq.options.map((o) => injectImages(o, images)),
-          })),
-        })),
+        sections: examForSeat(content, context).map((sec, si) =>
+          isSubmitSection(sec)
+            ? { ...sec, index: si, body: injectImages(sec.body, images) }
+            : {
+                ...sec,
+                index: si,
+                type: 'part',
+                items: sec.items.map((it) =>
+                  isQuestion(it)
+                    ? {
+                        ...it,
+                        prompt: injectImages(it.prompt, images),
+                        options: it.options.map((o) => injectImages(o, images)),
+                      }
+                    : {
+                        ...it,
+                        body: injectImages(it.body, images),
+                        ...(it.tasks
+                          ? { tasks: it.tasks.map((t) => injectImages(t, images)) }
+                          : {}),
+                      },
+                ),
+              },
+        ),
       });
     }
 

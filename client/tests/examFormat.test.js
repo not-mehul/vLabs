@@ -11,12 +11,26 @@ import {
   examUnlockedSection,
   isExamSectionComplete,
   listTasks,
+  sectionPages,
+  capturedValue,
+  describeExpected,
 } from '../../shared/exam-schema.js';
 import {
   parseExamMarkdown,
   examToMarkdown,
   SAMPLE_EXAM_MARKDOWN,
 } from '../../shared/exam-format.js';
+import { compileMask } from '../../shared/template-schema.js';
+
+/** The message compileMask gives for a mask. */
+const patternError = (mask) => {
+  try {
+    compileMask(mask);
+    return '';
+  } catch (err) {
+    return err.message;
+  }
+};
 
 const doc = {
   questions: [
@@ -124,7 +138,7 @@ test('exam schema: normalising, validation, grading and the public view', () => 
       },
     ],
   });
-  const [single, short, unknown] = exam.content[0].questions;
+  const [single, short, unknown] = exam.content[0].items;
   assert.equal(single.correct, 1);
   assert.deepEqual(short.accepted, ['x']);
   assert.equal(unknown.type, 'single', 'unknown types fall back to multiple choice');
@@ -145,7 +159,7 @@ test('exam sections carry a time allocation through markdown', () => {
   const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
   assert.deepEqual(
     exam.content.map((s) => s.minutes),
-    [5, 10, 10, null],
+    [5, 15, 10, null],
   );
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
   const untimed = parseExamMarkdown('# A\n\n## [tf] Sky is blue\n> answer: true\n');
@@ -188,7 +202,7 @@ test('Studio imports: labs and exams are told apart (JSON kind, Markdown types)'
   assert.throws(() => parseExamMarkdown('---\nkind: lab\n---\n# S\n'), /is a lab/);
 });
 
-test('informational sections: steps of instructions and checklists the participant ticks off', () => {
+test('sections mix steps and questions; pages, checklists and unlocking', () => {
   const md = `---
 title: Bench exam
 ---
@@ -196,129 +210,252 @@ title: Bench exam
 ## [tf] Sky is blue
 > answer: true
 
-# [info] Bench check
+# Bench check
 > minutes: 15
 Cable the switch, then call your instructor over.
 
-## Wiring
+## [checklist] Wiring
 \`\`\`
 - [ ] not an item (fenced)
 \`\`\`
 - [ ] Switch cabled
 - [x] Instructor checked it
 
+## [short] Which port did you use?
+
+## [informational] Reminder
+Leave the cables in place.
+
 # Part 2
 ## [short] Port?
 `;
   const exam = parseExamMarkdown(md);
-  const info = exam.content[1];
-  assert.equal(info.type, 'info');
-  assert.equal(info.minutes, 15);
-  assert.equal(info.steps.length, 2, 'text before the first ## is an untitled first step');
-  assert.deepEqual(info.steps[0], {
-    title: '',
-    body: 'Cable the switch, then call your instructor over.',
-    tasks: [],
-  });
-  assert.equal(info.steps[1].title, 'Wiring');
-  assert.deepEqual(info.steps[1].tasks, ['Switch cabled', 'Instructor checked it']);
-  assert.match(info.steps[1].body, /not an item \(fenced\)/);
-  assert.deepEqual(info.questions, []);
+  const bench = exam.content[1];
+  assert.equal(bench.minutes, 15);
+  assert.deepEqual(
+    bench.items.map((it) => [it.type, it.title ?? it.prompt]),
+    [
+      ['info', ''],
+      ['checklist', 'Wiring'],
+      ['short', 'Which port did you use?'],
+      ['info', 'Reminder'],
+    ],
+    'text before the first item is an untitled Informational item',
+  );
+  assert.deepEqual(bench.items[1].tasks, ['Switch cabled', 'Instructor checked it']);
+  assert.match(bench.items[1].body, /not an item \(fenced\)/);
+  assert.deepEqual(sectionPages(bench.items), [[0], [1, 2], [3]], 'questions join the step above');
+  assert.deepEqual(sectionPages(exam.content[0].items), [[0]]);
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam, 'round-trips');
   assert.deepEqual(examErrors(exam), []);
   assert.deepEqual(
-    listTasks(exam.content).map((t) => t.key),
-    ['1.t0', '1.t1'],
+    listTasks(exam.content).map((t) => [t.key, t.ii]),
+    [
+      ['1.t0', 1],
+      ['1.t1', 1],
+    ],
   );
 
-  // The checklist gates the next section; ticks are `true` under the task keys.
+  // A section unlocks the next once its questions are answered and boxes ticked.
   const answered = { '0.0': true };
   assert.equal(examUnlockedSection(exam.content, answered), 1);
-  assert.equal(isExamSectionComplete(exam.content, 1, { ...answered, '1.t0': true }), false);
   const ticked = { ...answered, '1.t0': true, '1.t1': true };
-  assert.equal(examUnlockedSection(exam.content, ticked), 3, 'part 2, then straight to submit');
+  assert.equal(examUnlockedSection(exam.content, ticked), 1, 'its question is still open');
+  assert.equal(isExamSectionComplete(exam.content, 1, { ...ticked, '1.0': 'Gi0/1' }), true);
+  const done = { ...ticked, '1.0': 'Gi0/1' };
+  assert.equal(examUnlockedSection(exam.content, done), 3, 'part 2, then straight to submit');
   // …and a checklist right before submit has to be ticked too.
   const last = parseExamMarkdown(
-    '# A\n## [tf] x\n> answer: true\n\n# [checklist] Check\n- [ ] y\n',
+    '# A\n## [tf] x\n> answer: true\n\n# B\n## [checklist]\n- [ ] y\n',
   );
   assert.equal(examUnlockedSection(last.content, { '0.0': true }), 1);
   assert.equal(examUnlockedSection(last.content, { '0.0': true, '1.t0': true }), 2);
   // Unticking re-locks what follows, even past the high-water mark…
-  assert.equal(examUnlockedSection(exam.content, { ...ticked, '1.t1': null }, 3), 1);
+  assert.equal(examUnlockedSection(exam.content, { ...done, '1.t1': null }, 3), 1);
   // …while clearing an answer does not.
-  assert.equal(examUnlockedSection(exam.content, { ...ticked, '0.0': null }, 3), 3);
+  assert.equal(examUnlockedSection(exam.content, { ...done, '0.0': null }, 3), 3);
 
-  // Untitled later steps and titles that start with a tag survive a round trip.
+  // Untitled steps and titles that start with a tag survive a round trip.
   const steps = parseExamMarkdown(
-    '# [informational] I\n## [step]\n- [ ] a\n## [weird] Title\nText\n## [step] [x] odd\n- [ ] b\n',
+    '# I\n## [checklist]\n- [ ] a\n## [info] [weird] Title\nText\n## [step] [x] odd\n- [ ] b\n',
   );
   assert.deepEqual(
-    steps.content[0].steps.map((st) => st.title),
-    ['', '[weird] Title', '[x] odd'],
+    steps.content[0].items.map((it) => [it.type, it.title]),
+    [
+      ['checklist', ''],
+      ['info', '[weird] Title'],
+      ['checklist', '[x] odd'],
+    ],
+    'an [info] item with - [ ] lines is a checklist',
   );
   assert.deepEqual(parseExamMarkdown(examToMarkdown(steps)), steps);
-  assert.deepEqual(
-    listTasks(steps.content).map((t) => [t.key, t.sti]),
-    [
-      ['0.t0', 0],
-      ['0.t1', 2],
-    ],
-  );
 
+  assert.throws(() => parseExamMarkdown('# A\n## [weird] x\n'), /Unknown question type/);
   assert.throws(
-    () => parseExamMarkdown('# [info] I\n## [single] Not here\n- [x] a\n'),
-    /cannot go in an? \[info\] section/i,
+    () => parseExamMarkdown('# [submit] Done\n## [single] Not here\n- [x] a\n'),
+    /submit section cannot hold/,
   );
-  assert.deepEqual(examErrors(normaliseExam({ title: 'T', content: [{ type: 'info' }] })), [
+  assert.deepEqual(examErrors(normaliseExam({ title: 'T', content: [{ items: [] }] })), [
     'Section 1 needs a title',
-    'Section 1 needs instructions or a checklist',
+    'Section 1 has no questions or steps',
   ]);
   assert.deepEqual(
     examErrors(
       normaliseExam({
         title: 'T',
-        content: [{ type: 'info', title: 'I', steps: [{ tasks: ['a'] }] }],
+        content: [
+          {
+            title: 'I',
+            items: [
+              { type: 'checklist', tasks: ['a'] },
+              { type: 'info', title: 'Empty' },
+            ],
+          },
+          {
+            title: 'J',
+            items: [
+              { type: 'checklist', body: 'x' },
+              { type: 'truefalse', prompt: 'p', correct: true },
+            ],
+          },
+        ],
       }),
     ),
-    [],
-    'an exam can be checklists only',
-  );
-  assert.deepEqual(
-    examErrors(
-      normaliseExam({
-        title: 'T',
-        content: [{ type: 'info', title: 'I', steps: [{ tasks: ['a'] }, { title: 'Empty' }] }],
-      }),
-    ),
-    ['Section 1 · step 2 needs instructions or a checklist'],
+    [
+      'Section 1 · step 2 needs instructions',
+      'Section 2 · step 1 needs at least one checklist item',
+    ],
+    'steps need instructions or, for a checklist, its items',
   );
 });
 
-test('informational sections saved by 1.9.0 (body and tasks, no steps) still work', () => {
+test('short answers are checked by exact answers or by a pattern, like lab checkpoints', () => {
+  const exam = parseExamMarkdown(`---
+title: Patterns
+---
+# A
+## [short] Serial?
+> pattern: XXXX.XXXX
+> placeholder: e.g. AB12.CD34
+> capture: SERIAL
+> points: 2
+
+## [short] Port?
+> accept: 443 | tcp/443
+
+## [short] Bad mask
+> pattern: SN-
+
+# B
+## [short] Serial again?
+> accept: {{ SERIAL }}
+`);
+  const [serial, port, bad] = exam.content[0].items;
+  assert.equal(serial.match, 'pattern');
+  assert.equal(serial.pattern, 'XXXX.XXXX');
+  assert.deepEqual(serial.accepted, []);
+  assert.equal(port.match, undefined, 'exact is the default');
+  assert.deepEqual(examErrors(exam), [`Section 1 · question 3 pattern: ${patternError('SN-')}`]);
+  bad.pattern = 'XX';
+  assert.deepEqual(examErrors(exam), []);
+  assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam, 'round-trips');
+
+  assert.equal(gradeResponse(serial, 'ab12cd34').correct, true, 'separators may be left out');
+  assert.equal(gradeResponse(serial, 'ab12-cd34').correct, false);
+  assert.equal(gradeResponse(serial, 'ab1').correct, false);
+  const anything = { ...serial, pattern: 'SN-*' };
+  assert.equal(gradeResponse(anything, `SN-${'x'.repeat(150)}`).correct, true);
+  assert.equal(
+    gradeResponse(anything, `SN-${'x'.repeat(250)}`).correct,
+    false,
+    'answers longer than a lab checkpoint answer never fit a pattern',
+  );
+  assert.equal(gradeResponse(port, ' TCP/443 ').correct, true);
+  assert.equal(isManualQuestion(serial), false);
+  assert.equal(capturedValue(serial, 'ab12cd34'), 'AB12.CD34', 'saved in the canonical form');
+  assert.equal(capturedValue(port, ' 443 '), '443');
+  assert.equal(describeExpected(serial), 'fits XXXX.XXXX');
+
+  const pub = publicQuestion(serial);
+  assert.equal(pub.placeholder, 'e.g. AB12.CD34');
+  assert.equal('pattern' in pub || 'match' in pub || 'accepted' in pub, false, 'mask stays hidden');
+  // An empty pattern is still a pattern question (and an error), not an exact one.
+  const empty = normaliseExam({
+    title: 'T',
+    content: [{ title: 'A', items: [{ type: 'short', prompt: 'p', match: 'pattern' }] }],
+  });
+  assert.equal(empty.content[0].items[0].match, 'pattern');
+  assert.deepEqual(examErrors(empty), ['Section 1 · question 1 pattern: Pattern is empty']);
+});
+
+test('sections saved before 1.12 (questions or info steps) still read the same', () => {
   const legacy = [
+    {
+      type: 'questions',
+      title: 'Q',
+      questions: [{ type: 'truefalse', prompt: 'p', correct: true }],
+    },
     { type: 'info', title: 'Bench', body: 'Do it.', tasks: ['a', 'b'], questions: [] },
+    {
+      type: 'info',
+      title: 'Steps',
+      steps: [
+        { title: 'One', body: 'Read.', tasks: [] },
+        { title: 'Two', body: '', tasks: ['c'] },
+      ],
+      questions: [],
+    },
     { type: 'submit', title: 'Submit', body: '', review: true, questions: [] },
   ];
-  assert.deepEqual(normaliseExam({ title: 'T', content: legacy }).content[0].steps, [
-    { title: '', body: 'Do it.', tasks: ['a', 'b'] },
-  ]);
+  const exam = normaliseExam({ title: 'T', content: legacy });
+  assert.deepEqual(
+    exam.content.slice(0, 3).map((s) => s.items.map((it) => it.type)),
+    [['truefalse'], ['checklist'], ['info', 'checklist']],
+  );
+  assert.deepEqual(exam.content[1].items[0], {
+    type: 'checklist',
+    title: '',
+    body: 'Do it.',
+    tasks: ['a', 'b'],
+  });
+  assert.deepEqual(exam.content[3], {
+    type: 'submit',
+    title: 'Submit',
+    minutes: null,
+    body: '',
+    review: true,
+  });
+  // The keys running sessions saved answers under are unchanged.
   assert.deepEqual(
     listTasks(legacy).map((t) => t.key),
-    ['0.t0', '0.t1'],
+    ['1.t0', '1.t1', '2.t0'],
   );
-  assert.equal(examUnlockedSection(legacy, { '0.t0': true }), 0);
-  assert.equal(examUnlockedSection(legacy, { '0.t0': true, '0.t1': true }), 1);
+  assert.equal(examUnlockedSection(legacy, { '0.0': true, '1.t0': true }), 1);
+  assert.equal(examUnlockedSection(legacy, { '0.0': true, '1.t0': true, '1.t1': true }), 2);
+
+  // Markdown from before 1.12: `# [info]` sections whose ## headings are steps.
+  const md = parseExamMarkdown(
+    '# [info] Bench\nIntro.\n## Wiring\n- [ ] cabled\n## [weird] Title\nText\n## [tf] Mixed in now\n> answer: true\n',
+  );
+  assert.deepEqual(
+    md.content[0].items.map((it) => [it.type, it.title ?? it.prompt]),
+    [
+      ['info', ''],
+      ['checklist', 'Wiring'],
+      ['info', '[weird] Title'],
+      ['truefalse', 'Mixed in now'],
+    ],
+  );
 });
 
 test('every exam ends with exactly one submit section', () => {
-  const plain = normaliseExam({ title: 'T', content: [{ title: 'A', questions: [] }] });
+  const plain = normaliseExam({ title: 'T', content: [{ title: 'A', items: [] }] });
   assert.deepEqual(plain.content[1], {
     type: 'submit',
     title: 'Review and submit',
     minutes: null,
     body: '',
     review: true,
-    questions: [],
   });
   const moved = normaliseExam({
     content: [
@@ -330,7 +467,7 @@ test('every exam ends with exactly one submit section', () => {
   assert.deepEqual(
     moved.content.map((s) => [s.type, s.title]),
     [
-      ['questions', 'A'],
+      [undefined, 'A'],
       ['submit', 'Hand in'],
     ],
   );
@@ -357,7 +494,7 @@ variables:
 ---
 
 # [info] Bench for {{ FULL_NAME }}
-## Store {{ STORE }}
+## [checklist] Store {{ STORE }}
 Use {{ SUBNET }} on seat {{ SEAT_ID }}.
 - [ ] Ping {{ SUBNET }}
 

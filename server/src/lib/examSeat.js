@@ -1,5 +1,11 @@
 import { resolveVariables, injectVariables } from './templating.js';
-import { sectionType, infoSteps, listQuestions } from '../../../shared/exam-schema.js';
+import {
+  isSubmitSection,
+  isQuestion,
+  sectionItems,
+  listQuestions,
+  capturedValue,
+} from '../../../shared/exam-schema.js';
 
 /**
  * Per-seat exams: an exam's {{ PLACEHOLDERS }} (its variables and the
@@ -24,13 +30,15 @@ const parseAnswers = (json) => {
   }
 };
 
-/** Answers saved as variables: name → this participant's answer ('' until given). */
+/**
+ * Answers saved as variables: name → this participant's answer ('' until
+ * given; a pattern answer in the mask's canonical form).
+ */
 export function examCaptured(content, answers) {
   const out = {};
   for (const { key, q } of listQuestions(content)) {
     if (!q.capture || q.type !== 'short' || q.capture in out) continue;
-    const v = answers?.[key];
-    out[q.capture] = typeof v === 'string' ? v.trim() : '';
+    out[q.capture] = capturedValue(q, answers?.[key]);
   }
   return out;
 }
@@ -46,33 +54,37 @@ export function examContext(variables, p, images, captured = {}) {
   }
 }
 
-/** An exam's content with every placeholder resolved for one context. */
+/**
+ * An exam's content with every placeholder resolved for one context, sections
+ * of any version read as items (sectionItems).
+ */
 export function examForSeat(content, context) {
   const inject = (t) => injectVariables(String(t ?? ''), context);
   return (Array.isArray(content) ? content : []).map((sec) => {
-    const out = { ...sec, title: inject(sec.title) };
-    if (sectionType(sec) === 'info') {
-      delete out.body;
-      delete out.tasks;
-      out.steps = infoSteps(sec).map((st) => ({
-        ...st,
-        title: inject(st.title),
-        body: inject(st.body),
-        tasks: (st.tasks || []).map(inject),
-      }));
-    } else if ('body' in sec) {
-      out.body = inject(sec.body);
-    }
-    out.questions = (sec.questions || []).map((q) => ({
-      ...q,
-      prompt: inject(q.prompt),
-      ...(Array.isArray(q.options) ? { options: q.options.map(inject) } : {}),
-      // An accepted answer made of a saved answer not given yet accepts nothing.
-      ...(Array.isArray(q.accepted)
-        ? { accepted: q.accepted.map(inject).filter((a) => a.trim()) }
-        : {}),
-    }));
-    return out;
+    if (isSubmitSection(sec)) return { ...sec, title: inject(sec.title), body: inject(sec.body) };
+    return {
+      title: inject(sec.title),
+      minutes: sec.minutes ?? null,
+      items: sectionItems(sec).map((it) => {
+        if (!isQuestion(it)) {
+          return {
+            ...it,
+            title: inject(it.title),
+            body: inject(it.body),
+            ...(Array.isArray(it.tasks) ? { tasks: it.tasks.map(inject) } : {}),
+          };
+        }
+        return {
+          ...it,
+          prompt: inject(it.prompt),
+          ...(Array.isArray(it.options) ? { options: it.options.map(inject) } : {}),
+          // An accepted answer made of a saved answer not given yet accepts nothing.
+          ...(Array.isArray(it.accepted)
+            ? { accepted: it.accepted.map(inject).filter((a) => a.trim()) }
+            : {}),
+        };
+      }),
+    };
   });
 }
 

@@ -6,10 +6,15 @@
  *   kind: exam
  *   title: Network Fundamentals — Unit Test
  *   description: 20 minutes, closed book
+ *   variables:
+ *     SUBNET = '10.' + seat + '.0.0/24'
  *   ---
  *
  *   # Part 1 · Addressing
  *   > minutes: 10
+ *
+ *   ## [info] Your bench
+ *   Your subnet is {{ SUBNET }}.
  *
  *   ## [single] Which address is a valid private IPv4 address?
  *   - [ ] 8.8.8.8
@@ -28,13 +33,20 @@
  *   ## [short] What port does HTTPS use by default?
  *   > accept: 443 | tcp/443
  *
+ *   ## [short] Read the serial number off your switch.
+ *   > pattern: XXXX.XXXX.XXXX
+ *   > placeholder: e.g. ABCD.1234.EFGH
+ *   > capture: SERIAL
+ *
  *   ## [long]
  *   Explain, in a few sentences, why VLANs are used.
  *   Any Markdown works here, including images: ![topology](topology.png)
  *   > points: 5
  *
- *   # [info] Part 2 · Bench check
+ *   # Part 2 · Bench check
  *   > minutes: 15
+ *
+ *   ## [checklist] Cable the bench
  *   Cable the switch to the router, then call your instructor over.
  *   - [ ] Switch Gi0/1 is cabled to the router
  *   - [ ] My instructor has checked my bench
@@ -44,30 +56,40 @@
  *
  * `kind: exam` in the front matter marks the file as an exam (optional here;
  * it lets importers that also read labs tell the two apart — see
- * looksLikeExamMarkdown). `# ` starts a section and `## [type]` a question. `> minutes: N` under a
- * section heading allocates N minutes to that section (optional). Text after the type and
- * the lines below it form the prompt. Types: single (multiple choice, one
- * answer), multiple (select all that apply), truefalse, short, long — plus
- * the aliases in TYPE_ALIASES. Options are `- [ ]` / `- [x]` lines (x marks
- * the correct ones). `> points: N` sets the weight (default 1); `> answer:`
- * gives a true/false answer; `> accept:` lists accepted short answers
- * separated by ` | ` (write `\|` for a literal pipe) — a short question
- * without `> accept:` is marked by hand, as is every long question.
- * `> capture: NAME` on a short question saves the participant's answer as
- * {{ NAME }} for every later section. Front matter `variables:` declares
- * per-seat formulas (`  NAME = formula` lines), as in labs. Fenced
- * code blocks are copied verbatim.
+ * looksLikeExamMarkdown). Front matter `variables:` declares per-seat
+ * formulas (`  NAME = formula` lines), as in labs.
  *
- * A section heading may carry a section type: `# [info] Title` is an
- * informational section (no questions): `## Step title` headings split it
- * into steps shown one at a time (text before the first one is an untitled
- * first step; `## [step] Title` is the same), each step's text is its
- * instructions and its `- [ ]` lines the checklist the participant ticks off.
- * `# [submit] Title`
- * the final submit section (its text is shown above the button; `> review:
- * false` leaves out the answered / unanswered summary). Without a tag a
- * section holds questions. An exam without a submit section gets the default
- * one (see normaliseExam), and exports always write it.
+ * `# Title` starts a section; `> minutes: N` under it allocates N minutes to
+ * the section (optional). `## [type]` starts an item of the section, and a
+ * section may mix any items:
+ *   - `[info]` (alias `[informational]`, `[step]`): instructions; the text
+ *     after the type is its title, the lines below its Markdown body.
+ *   - `[checklist]` (alias `[tasks]`): instructions plus `- [ ]` items the
+ *     participant ticks off (an `[info]` item with `- [ ]` lines is one too).
+ *   - a question type: single (multiple choice, one answer), multiple (select
+ *     all that apply), truefalse, short, long, or an alias in TYPE_ALIASES.
+ *     The text after the type and the lines below it form the prompt. Options
+ *     are `- [ ]` / `- [x]` lines (x marks the correct ones). `> points: N`
+ *     sets the weight (default 1); `> answer:` gives a true/false answer;
+ *     `> accept:` lists accepted short answers separated by ` | ` (write `\|`
+ *     for a literal pipe); `> pattern: MASK` grades a short answer by a mask
+ *     instead, exactly like a lab pattern checkpoint; `> placeholder:` is the
+ *     grey example in its box; `> capture: NAME` saves the answer as
+ *     {{ NAME }} for every later section. A short question with neither
+ *     `> accept:` nor `> pattern:` is marked by hand, as is every long one.
+ * A `##` heading without a type is a multiple-choice question. Text between a
+ * section heading and its first item is an untitled Informational item.
+ * Fenced code blocks are copied verbatim.
+ *
+ * `# [submit] Title` is the final submit section: its text is shown above
+ * the button and `> review: false` leaves out the answered / unanswered
+ * summary. An exam without one gets the default (see normaliseExam), and
+ * exports always write it.
+ *
+ * Files written before 1.12.0 are read as they were: `# [info] Title` (alias
+ * `[informational]`, `[checklist]`, `[tasks]`) starts a section whose `##`
+ * headings are steps (unless tagged with a question type), each a Checklist
+ * item when it has `- [ ]` lines and Informational otherwise.
  */
 
 import { normaliseExam, QUESTION_TYPES } from './exam-schema.js';
@@ -92,9 +114,17 @@ export const TYPE_ALIASES = Object.freeze({
   'long-answer': 'long',
 });
 
-/** Section type tags on `# [tag] Title` headings. */
-export const SECTION_ALIASES = Object.freeze({
-  questions: 'questions',
+/** Step tags on `## [tag] Title` items. */
+const STEP_ALIASES = Object.freeze({
+  info: 'info',
+  informational: 'info',
+  step: 'info',
+  checklist: 'checklist',
+  tasks: 'checklist',
+});
+
+/** Tags on `# [tag] Title` section headings (`info` ones are the pre-1.12 kind). */
+const SECTION_ALIASES = Object.freeze({
   info: 'info',
   informational: 'info',
   checklist: 'info',
@@ -104,16 +134,18 @@ export const SECTION_ALIASES = Object.freeze({
 });
 
 const OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
-const DIRECTIVE_RE = /^>\s*(points|answer|accept|capture)\s*:\s*(.*)$/i;
+const DIRECTIVE_RE = /^>\s*(points|answer|accept|pattern|placeholder|capture)\s*:\s*(.*)$/i;
 const FENCE_RE = /^\s*(```|~~~)/;
 
-/** Lab step types: a `## [desk]`-style heading means a lab, not an exam. */
-const LAB_STEP_TYPES = new Set(['desk', 'computer', 'info']);
+/** Lab step types: a `## [desk]` / `## [computer]` heading means a lab. */
+const LAB_STEP_TYPES = new Set(['desk', 'computer']);
 
 /**
  * True when Markdown text is an exam rather than a lab: `kind: exam` in the
- * front matter, or a `## [type]` heading with an exam question type (labs
- * only use [desk] / [computer] / [info]). Fenced code is ignored.
+ * front matter, a tagged `# [section]` heading, or a `## [type]` heading with
+ * an exam question or checklist type. Labs use [desk] / [computer] / [info]
+ * steps; `[info]` alone is in both, so it decides nothing. Fenced code is
+ * ignored.
  */
 export function looksLikeExamMarkdown(text) {
   const lines = String(text ?? '')
@@ -136,7 +168,7 @@ export function looksLikeExamMarkdown(text) {
     if (!m) continue;
     const t = m[1].trim().toLowerCase();
     if (LAB_STEP_TYPES.has(t)) return false;
-    if (TYPE_ALIASES[t]) return true;
+    if (TYPE_ALIASES[t] || STEP_ALIASES[t] === 'checklist') return true;
   }
   return false;
 }
@@ -185,35 +217,39 @@ export function parseExamMarkdown(text) {
     i += 1; // closing ---
   }
 
-  let section = null;
-  let q = null;
-  let step = null;
+  let section = null; // { title, minutes, items, legacy } or a submit section
+  let item = null; // the item being read; step items collect `tasks`
   let body = [];
-  let heading = '';
   let inFence = false;
 
+  // Close the current item (or the submit section's text).
   const flush = () => {
-    if (section?.type === 'info') {
-      const text = body.join('\n').trim();
-      body = [];
-      // An untitled first step only exists when it has something in it.
-      if (step && (step.explicit || text || step.tasks.length)) {
-        section.steps.push({ title: step.title, body: text, tasks: step.tasks });
-      }
-      step = null;
-      return;
-    }
-    if (section?.type === 'submit') {
-      section.body = body.join('\n').trim();
-      body = [];
-      return;
-    }
-    if (!q) return;
-    q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
-    section.questions.push(q);
-    q = null;
+    const text = body.join('\n').trim();
     body = [];
-    heading = '';
+    if (section?.type === 'submit') {
+      section.body = text;
+      return;
+    }
+    if (!item) {
+      // Text before the first item: an untitled Informational item.
+      if (text && section) section.items.push({ type: 'info', title: '', body: text });
+      return;
+    }
+    if (item.type === 'step') {
+      const { title, tasks, explicit } = item;
+      if (explicit || text || tasks.length) {
+        section.items.push(
+          tasks.length || item.checklist
+            ? { type: 'checklist', title, body: text, tasks }
+            : { type: 'info', title, body: text },
+        );
+      }
+    } else {
+      item.prompt = [item.heading.trim(), text].filter(Boolean).join('\n\n');
+      delete item.heading;
+      section.items.push(item);
+    }
+    item = null;
   };
 
   for (; i < lines.length; i += 1) {
@@ -223,86 +259,89 @@ export function parseExamMarkdown(text) {
       flush();
       const rest = line.replace(/^#\s+/, '').trim();
       const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
-      const type = tag ? SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
-      section = {
-        type: type || 'questions',
-        title: type ? tag[2].trim() : rest,
-        questions: [],
-        steps: [],
-      };
-      if (section.type === 'info') step = { title: '', tasks: [], explicit: false };
+      const kind = tag ? SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
+      const title = kind ? tag[2].trim() : rest;
+      section =
+        kind === 'submit'
+          ? { type: 'submit', title, body: '' }
+          : { title, items: [], legacy: kind === 'info' };
       exam.content.push(section);
+      // A pre-1.12 info section starts with an untitled step.
+      item = section.legacy ? { type: 'step', title: '', tasks: [], explicit: false } : null;
       continue;
     }
-    if (section && section.type !== 'questions') {
-      // Info / submit section: directives, checklist items, and body text.
-      if (!inFence) {
-        const qm = /^##\s+\[([^\]]+)\]/.exec(line);
-        if (qm && TYPE_ALIASES[qm[1].trim().toLowerCase()]) {
-          throw new Error(
-            `Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`,
-          );
-        }
-        if (section.type === 'info' && /^##\s+/.test(line)) {
-          flush();
-          const rest = line.replace(/^##\s+/, '').trim();
-          const sm = /^\[step\]\s*(.*)$/i.exec(rest);
-          step = { title: sm ? sm[1].trim() : rest, tasks: [], explicit: true };
-          continue;
-        }
-        const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
-        if (mm) {
-          if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
-          else section.review = mm[2].trim();
-          continue;
-        }
-        const task = OPTION_RE.exec(line);
-        if (task && section.type === 'info') {
-          step.tasks.push(task[2].trim());
-          continue;
-        }
-      }
-      body.push(line);
+    // Section settings, anywhere but inside a question (where they are text).
+    const setting = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
+    if (!inFence && setting && section && (!item || item.type === 'step')) {
+      if (setting[1].toLowerCase() === 'minutes') section.minutes = setting[2].trim();
+      else if (section.type === 'submit') section.review = setting[2].trim();
       continue;
     }
     if (!inFence && /^##\s+/.test(line)) {
+      const rest = line.replace(/^##\s+/, '').trim();
+      const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+      const raw = m ? m[1].trim().toLowerCase() : '';
+      if (section?.type === 'submit') {
+        if (TYPE_ALIASES[raw] || STEP_ALIASES[raw]) {
+          throw new Error(`The submit section cannot hold questions or steps, line ${i + 1}`);
+        }
+        body.push(line);
+        continue;
+      }
       flush();
       if (!section) {
-        section = { type: 'questions', title: 'Section 1', questions: [] };
+        section = { title: 'Section 1', items: [] };
         exam.content.push(section);
       }
-      const rest = line.replace(/^##\s+/, '');
-      const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
-      const rawType = m ? m[1].trim().toLowerCase() : 'single';
-      const type = TYPE_ALIASES[rawType];
+      // In a pre-1.12 info section any heading that is not a question is a
+      // step, a tag that is not a type included (it was part of the title).
+      if (STEP_ALIASES[raw] || (section.legacy && !TYPE_ALIASES[raw])) {
+        item = {
+          type: 'step',
+          title: STEP_ALIASES[raw] ? m[2].trim() : rest,
+          tasks: [],
+          explicit: true,
+          checklist: STEP_ALIASES[raw] === 'checklist',
+        };
+        continue;
+      }
+      const type = m ? TYPE_ALIASES[raw] : 'single';
       if (!type) throw new Error(`Unknown question type "[${m[1]}]" on line ${i + 1}`);
-      q = { type, points: 1, options: [], correct: type === 'multiple' ? [] : null, accepted: [] };
-      heading = m ? m[2] : rest;
+      item = {
+        type,
+        heading: m ? m[2] : rest,
+        points: 1,
+        options: [],
+        correct: type === 'multiple' ? [] : null,
+        accepted: [],
+      };
       continue;
     }
-    if (!q) {
-      // Section-level directive; any other text outside a question is ignored.
-      const mm = /^>\s*minutes\s*:\s*(.*)$/i.exec(line);
-      if (!inFence && mm && section) section.minutes = mm[1].trim();
-      continue;
-    }
-    if (!inFence) {
+    if (!inFence && item?.type === 'step') {
+      const task = OPTION_RE.exec(line);
+      if (task) {
+        item.tasks.push(task[2].trim());
+        continue;
+      }
+    } else if (!inFence && item) {
       const opt = OPTION_RE.exec(line);
-      if (opt && QUESTION_TYPES[q.type].hasOptions) {
-        q.options.push(opt[2].trim());
+      if (opt && QUESTION_TYPES[item.type].hasOptions) {
+        item.options.push(opt[2].trim());
         if (opt[1].toLowerCase() === 'x') {
-          if (q.type === 'multiple') q.correct.push(q.options.length - 1);
-          else q.correct = q.options.length - 1;
+          if (item.type === 'multiple') item.correct.push(item.options.length - 1);
+          else item.correct = item.options.length - 1;
         }
         continue;
       }
       const d = DIRECTIVE_RE.exec(line);
       if (d) {
         const key = d[1].toLowerCase();
-        if (key === 'points') q.points = Number(d[2]);
-        else if (key === 'answer') q.correct = d[2].trim();
-        else if (key === 'accept') q.accepted.push(...splitPipes(d[2]));
-        else if (key === 'capture') q.capture = d[2].trim();
+        const value = d[2].trim();
+        if (key === 'points') item.points = Number(value);
+        else if (key === 'answer') item.correct = value;
+        else if (key === 'accept') item.accepted.push(...splitPipes(value));
+        else if (key === 'pattern') Object.assign(item, { match: 'pattern', pattern: value });
+        else item[key] = value; // placeholder, capture
         continue;
       }
     }
@@ -325,43 +364,42 @@ export function examToMarkdown(input) {
   }
   out.push('---', '');
   for (const sec of exam.content) {
-    out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
-    if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
-    if (sec.type === 'submit' && !sec.review) out.push('> review: false');
-    out.push('');
-    if (sec.type === 'info') {
-      sec.steps.forEach((st, sti) => {
-        const empty = !st.body.trim() && !st.tasks.length;
-        if (st.title || sti > 0 || empty) {
-          const plain = st.title && !st.title.startsWith('[');
-          out.push(`## ${plain ? st.title : `[step] ${st.title}`.trim()}`, '');
-        }
-        if (st.body.trim()) out.push(st.body.trim(), '');
-        if (st.tasks.length) out.push(...st.tasks.map((t) => `- [ ] ${t}`), '');
-      });
-      continue;
-    }
     if (sec.type === 'submit') {
+      out.push(`# [submit] ${sec.title}`);
+      if (!sec.review) out.push('> review: false');
+      out.push('');
       if (sec.body.trim()) out.push(sec.body.trim(), '');
       continue;
     }
-    for (const q of sec.questions) {
-      const prompt = q.prompt.trim();
+    out.push(`# ${sec.title}`);
+    if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+    out.push('');
+    for (const it of sec.items) {
+      if (it.type === 'info' || it.type === 'checklist') {
+        out.push(`## [${it.type}]${it.title ? ` ${it.title}` : ''}`);
+        if (it.body.trim()) out.push(it.body.trim());
+        if (it.type === 'checklist') out.push(...it.tasks.map((t) => `- [ ] ${t}`));
+        out.push('');
+        continue;
+      }
+      const prompt = it.prompt.trim();
       const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
-      out.push(`## [${q.type}]${oneLine ? ` ${prompt}` : ''}`);
+      out.push(`## [${it.type}]${oneLine ? ` ${prompt}` : ''}`);
       if (!oneLine && prompt) out.push(prompt);
-      if (QUESTION_TYPES[q.type].hasOptions) {
-        q.options.forEach((o, oi) => {
-          const on = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+      if (QUESTION_TYPES[it.type].hasOptions) {
+        it.options.forEach((o, oi) => {
+          const on = it.type === 'multiple' ? it.correct.includes(oi) : it.correct === oi;
           out.push(`- [${on ? 'x' : ' '}] ${o}`);
         });
       }
-      if (q.type === 'truefalse') out.push(`> answer: ${q.correct ? 'true' : 'false'}`);
-      if (q.type === 'short' && q.accepted.length) {
-        out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
+      if (it.type === 'truefalse') out.push(`> answer: ${it.correct ? 'true' : 'false'}`);
+      if (it.type === 'short' && it.accepted.length) {
+        out.push(`> accept: ${it.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
       }
-      if (q.capture) out.push(`> capture: ${q.capture}`);
-      if (q.points !== 1) out.push(`> points: ${q.points}`);
+      if (it.match === 'pattern') out.push(`> pattern: ${it.pattern}`);
+      if (it.placeholder) out.push(`> placeholder: ${it.placeholder}`);
+      if (it.capture) out.push(`> capture: ${it.capture}`);
+      if (it.points !== 1) out.push(`> points: ${it.points}`);
       out.push('');
     }
   }
@@ -371,11 +409,16 @@ export function examToMarkdown(input) {
 export const SAMPLE_EXAM_MARKDOWN = `---
 kind: exam
 title: Network Fundamentals — Quiz (Sample)
-description: A short sample exam showing every question type.
+description: A short sample exam showing every question and step type.
+variables:
+  SUBNET = '10.' + seat + '.0.0/24'
 ---
 
 # Part 1 · Addressing
 > minutes: 5
+
+## [info] Your bench
+You are on seat {{ SEAT_ID }}. Your subnet is **{{ SUBNET }}**.
 
 ## [single] Which address is a valid private IPv4 address?
 - [ ] 8.8.8.8
@@ -392,32 +435,36 @@ description: A short sample exam showing every question type.
 ## [truefalse] A /24 network has 254 usable host addresses.
 > answer: true
 
-# Part 2 · Short answers
+# Part 2 · Bench check
+> minutes: 15
+
+## [checklist] Cable the bench
+Cable your switch to the router as shown on the bench card. Tick each item
+once it is done.
+- [ ] Switch port Gi0/1 is cabled to the router
+- [ ] The link light is green on both ends
+
+## [short] Read the serial number off the back of your switch.
+> pattern: XXXX.XXXX.XXXX
+> placeholder: e.g. ABCD.1234.EFGH
+> capture: SERIAL
+
+## [checklist] Instructor check
+Raise your hand so your instructor can check your bench.
+- [ ] My instructor has checked my bench
+
+# Part 3 · Short answers
 > minutes: 10
 
 ## [short] What TCP port does HTTPS use by default?
 > accept: 443 | tcp/443
 
+## [short] Type the serial number of your switch again.
+> accept: {{ SERIAL }}
+
 ## [long]
 In two or three sentences, explain why networks are split into VLANs.
 > points: 5
-
-# [info] Part 3 · Bench check
-> minutes: 10
-
-## Cable the bench
-
-Cable your switch to the router as shown on the bench card. Tick each item
-once it is done.
-
-- [ ] Switch port Gi0/1 is cabled to the router
-- [ ] The link light is green on both ends
-
-## Instructor check
-
-Raise your hand so your instructor can check your bench.
-
-- [ ] My instructor has checked my bench
 
 # [submit] Review and submit
 

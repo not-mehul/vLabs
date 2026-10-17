@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.11.0). The first section is the original code
+Newest entry at the bottom (1.12.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -717,3 +717,38 @@ title` starts a step inside an `# [info]` section; in JSON a section
 
 `deploy/pi/update.sh` as usual. No migration: sessions already store
 variables, and exams without any behave as before.
+
+## 1.12.0 — sections of mixed steps and questions; pattern answers
+
+- **Sections mix steps and questions.** A section is no longer either
+  informational or questions: it is a list of items, and each item declares
+  its type: **Informational**, **Checklist**, **Multiple choice**, **Select
+  all that apply**, **True / false**, **Short answer** or **Long answer**.
+  Participants see a section a page at a time: every step starts a page and
+  the questions after it join that page (_Page 1 of 3_, **Next page**). A
+  section unlocks the next once its questions are answered and its
+  checklists ticked.
+- **Short answers match exactly or by a pattern**, like lab checkpoints:
+  accepted answers (case and spacing ignored), or a mask such as
+  `XXXX.XXXX.XXXX` that any fitting answer passes. A pattern answer is saved
+  in the mask's canonical form when it is captured. Short answers can also
+  have a placeholder in their box. The mask, like the answers, is never sent
+  to participants.
+- **Markdown**: `## [info] Title` and `## [checklist] Title` items go in any
+  section beside questions; `> pattern:` and `> placeholder:` on short
+  answers. **JSON**: sections hold `"items"`, each with a `"type"`.
+- **Old templates keep working.** `# [info]` sections in Markdown, and
+  `questions` / `info` sections in JSON, stored templates and sessions
+  already running, are read as items with the same answer keys. Saving an
+  exam writes the new shape.
+- **Exam editor, Template Studio and exam guide** updated to match: an
+  **Add:** row with every item type, a type menu on each item, exact /
+  pattern answers with a live example, and the Studio preview pages and
+  self-check grade patterns like vLabs.
+- **Dead code removed**: unused helpers in the exam schema, the image store
+  and the countdown hook, and the old section-type styles.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration: stored exams and running
+sessions are read in either shape.

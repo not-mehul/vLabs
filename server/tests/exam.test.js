@@ -198,8 +198,8 @@ test('sections unlock like a lab: locked sections are neither sent nor answerabl
   assert.ok(!/"correct"/.test(raw), 'no correct answers');
   assert.ok(!/"accepted"/.test(raw), 'no accepted answers');
   assert.ok(!raw.includes('tcp/443'));
-  assert.deepEqual(res.data.sections[0].questions[0].options, ['A', 'B', 'C']);
-  assert.equal(res.data.sections[0].questions[0].key, '0.0');
+  assert.deepEqual(res.data.sections[0].items[0].options, ['A', 'B', 'C']);
+  assert.equal(res.data.sections[0].items[0].key, '0.0');
 
   const lab = await call('/api/participant/content', { token: ada });
   assert.equal(lab.status, 409);
@@ -351,33 +351,39 @@ test('the exam Markdown format round-trips and rejects unknown types', async () 
     await import('../../shared/exam-format.js');
   const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);
   assert.deepEqual(
-    exam.content.map((s) => s.type),
-    ['questions', 'questions', 'info', 'submit'],
+    exam.content.map((s) => (s.items ? s.items.map((it) => it.type) : s.type)),
+    [
+      ['info', 'single', 'multiple', 'truefalse'],
+      ['checklist', 'short', 'checklist'],
+      ['short', 'short', 'long'],
+      'submit',
+    ],
   );
   assert.deepEqual(
-    exam.content[2].steps.map((st) => [st.title, st.tasks.length]),
+    exam.content[1].items.filter((it) => it.tasks).map((it) => [it.title, it.tasks.length]),
     [
       ['Cable the bench', 2],
       ['Instructor check', 1],
     ],
   );
-  assert.equal(exam.content[0].questions[1].type, 'multiple');
-  assert.deepEqual(exam.content[0].questions[1].correct, [0, 2]);
+  assert.equal(exam.content[0].items[2].type, 'multiple');
+  assert.deepEqual(exam.content[0].items[2].correct, [0, 2]);
+  assert.equal(exam.content[1].items[1].pattern, 'XXXX.XXXX.XXXX');
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
 
   const aliases = parseExamMarkdown(
     '# S\n\n## [tf] Sky is blue\n> answer: yes\n\n## [essay]\nWhy?\n',
   );
-  assert.equal(aliases.content[0].questions[0].type, 'truefalse');
-  assert.equal(aliases.content[0].questions[0].correct, true);
-  assert.equal(aliases.content[0].questions[1].type, 'long');
-  assert.equal(aliases.content[0].questions[1].prompt, 'Why?');
+  assert.equal(aliases.content[0].items[0].type, 'truefalse');
+  assert.equal(aliases.content[0].items[0].correct, true);
+  assert.equal(aliases.content[0].items[1].type, 'long');
+  assert.equal(aliases.content[0].items[1].prompt, 'Why?');
 
   assert.throws(() => parseExamMarkdown('# S\n## [poll] x\n'), /Unknown question type/);
   // Code fences are verbatim: a "# heading" inside one is not a new section.
   const fenced = parseExamMarkdown('# S\n## [long] Read:\n```\n# not a section\n```\n');
   assert.equal(fenced.content.length, 2, 'the section and the default submit section');
-  assert.match(fenced.content[0].questions[0].prompt, /# not a section/);
+  assert.match(fenced.content[0].items[0].prompt, /# not a section/);
 });
 
 test('an exam seat is bound to its device: rejoining by name needs the resume key', async () => {
@@ -543,9 +549,10 @@ test('informational sections: the participant ticks every item to move on; nobod
     },
   });
   assert.equal(tpl.status, 201);
+  // Saved by 1.11 as typed sections; stored as sections of items.
   assert.deepEqual(
-    tpl.data.content.map((s) => s.type),
-    ['questions', 'info', 'questions', 'submit'],
+    tpl.data.content.map((s) => (s.items ? s.items.map((it) => it.type) : s.type)),
+    [['truefalse'], ['checklist', 'checklist'], ['short'], 'submit'],
   );
   const sess = await call('/api/sessions', {
     method: 'POST',
@@ -569,11 +576,11 @@ test('informational sections: the participant ticks every item to move on; nobod
   let view = await call('/api/participant/exam', { token: t });
   assert.equal(view.data.submit_section, 3);
   const info = view.data.sections[1];
-  assert.equal(info.type, 'info');
-  assert.equal(info.steps[0].body, 'Cable it, then call your instructor.');
-  assert.equal(info.steps[1].title, 'Check');
+  assert.equal(info.type, 'part');
+  assert.equal(info.items[0].body, 'Cable it, then call your instructor.');
+  assert.equal(info.items[1].title, 'Check');
   assert.deepEqual(
-    info.steps.map((st) => st.tasks.map((x) => x.key)),
+    info.items.map((st) => st.tasks.map((x) => x.key)),
     [['1.t0'], ['1.t1']],
     'items are numbered across the steps',
   );
@@ -676,7 +683,7 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
   const tpl = await call('/api/templates', { method: 'POST', token, body });
   assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
   assert.deepEqual(tpl.data.variables, body.variables);
-  assert.equal(tpl.data.content[1].questions[1].capture, 'ROUTER_IP');
+  assert.equal(tpl.data.content[1].items[1].capture, 'ROUTER_IP');
 
   // The instructor preview resolves a chosen seat.
   const pv = await call(`/api/templates/${tpl.data.id}/preview`, {
@@ -686,7 +693,7 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
   });
   assert.equal(pv.status, 200);
   assert.equal(pv.data.context.STORE, 103);
-  assert.equal(pv.data.sections[0].steps[0].body, 'Store 103');
+  assert.equal(pv.data.sections[0].items[0].body, 'Store 103');
   assert.match(pv.data.sections[2].title, /^Check \[answer to Section 2 · question 2\]$/);
 
   const sess = await call('/api/sessions', {
@@ -706,18 +713,18 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
 
   let view = await call('/api/participant/exam', { token: t });
   assert.equal(view.data.sections[0].title, `Bench ${seat}`);
-  assert.equal(view.data.sections[0].steps[0].title, 'Hi Dee');
-  assert.equal(view.data.sections[0].steps[0].tasks[0].text, `Ping store ${store}`);
+  assert.equal(view.data.sections[0].items[0].title, 'Hi Dee');
+  assert.equal(view.data.sections[0].items[0].tasks[0].text, `Ping store ${store}`);
   await put('0.t0', true);
   view = await call('/api/participant/exam', { token: t });
-  assert.equal(view.data.sections[1].questions[1].capture, 'ROUTER_IP');
+  assert.equal(view.data.sections[1].items[1].capture, 'ROUTER_IP');
   await put('1.0', store);
   await put('1.1', ' 10.0.0.1 ');
   view = await call('/api/participant/exam', { token: t });
   const check = view.data.sections[2];
   assert.equal(check.title, 'Check 10.0.0.1');
-  assert.equal(check.questions[0].prompt, `Is 10.0.0.1 on store ${store}?`);
-  assert.deepEqual(check.questions[0].options, ['Yes, 10.0.0.1', 'No']);
+  assert.equal(check.items[0].prompt, `Is 10.0.0.1 on store ${store}?`);
+  assert.deepEqual(check.items[0].options, ['Yes, 10.0.0.1', 'No']);
   // Changing the saved answer changes what later sections show.
   await put('1.1', '10.0.0.2');
   view = await call('/api/participant/exam', { token: t });
@@ -729,6 +736,148 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
   const d = detail.data.participants.find((x) => x.name === 'Dee Seat');
   assert.equal(d.score, 1 + 1 + 1, 'per-seat and saved answers grade automatically');
   assert.equal(d.pending_count, 1, 'the saved answer itself is marked by hand');
+});
+
+test('sections mix steps and questions; short answers match exactly or by a pattern', async () => {
+  const body = {
+    kind: 'exam',
+    title: 'Mixed',
+    content: [
+      {
+        title: 'Bench',
+        items: [
+          { type: 'info', title: 'Read', body: 'Your bench is ready.' },
+          { type: 'single', prompt: 'Pick B', options: ['A', 'B'], correct: 1 },
+          { type: 'checklist', title: 'Cable', body: 'Cable it.', tasks: ['Cabled', 'Checked'] },
+          {
+            type: 'short',
+            prompt: 'Serial?',
+            match: 'pattern',
+            pattern: 'XXXX.XXXX',
+            placeholder: 'e.g. AB12.CD34',
+            capture: 'SERIAL',
+          },
+          { type: 'short', prompt: 'Port?', accepted: ['443'] },
+        ],
+      },
+      {
+        title: 'After',
+        items: [{ type: 'short', prompt: 'Serial again', accepted: ['{{ SERIAL }}'] }],
+      },
+    ],
+  };
+  const bad = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      ...body,
+      content: [
+        {
+          title: 'X',
+          items: [
+            { type: 'short', prompt: 'p', match: 'pattern', pattern: 'SN-' },
+            { type: 'checklist', title: 'Empty', tasks: [] },
+            { type: 'info', title: 'No text' },
+          ],
+        },
+        { title: 'Empty', items: [] },
+      ],
+    },
+  });
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.data.details, [
+    'Section 1 · question 1 pattern: Pattern has no wildcards (9 A a X x ? *) — use an exact answer instead',
+    'Section 1 · step 1 needs at least one checklist item',
+    'Section 1 · step 2 needs instructions',
+    'Section 2 has no questions or steps',
+  ]);
+
+  const tpl = await call('/api/templates', { method: 'POST', token, body });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.data.id },
+  });
+  const join = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Mix', last_name: 'Ed' },
+  });
+  const t = join.data.token;
+  const put = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+
+  let view = await call('/api/participant/exam', { token: t });
+  const items = view.data.sections[0].items;
+  assert.deepEqual(
+    items.map((it) => it.type),
+    ['info', 'single', 'checklist', 'short', 'short'],
+  );
+  assert.deepEqual(
+    items[2].tasks.map((x) => x.key),
+    ['0.t0', '0.t1'],
+  );
+  assert.deepEqual(
+    [items[1].key, items[3].key, items[4].key],
+    ['0.0', '0.1', '0.2'],
+    'questions keep their own numbering between steps',
+  );
+  assert.equal(items[3].placeholder, 'e.g. AB12.CD34');
+  const raw = JSON.stringify(view.data);
+  assert.ok(!raw.includes('XXXX'), 'the mask is never sent');
+  assert.ok(!/"accepted"|"correct"|"match"/.test(raw));
+
+  await put('0.0', 1);
+  await put('0.1', 'ab12cd34');
+  assert.equal((await put('0.2', '443')).data.unlocked_section, 0, 'the checklist is not ticked');
+  await put('0.t0', true);
+  assert.equal((await put('0.t1', true)).data.unlocked_section, 2);
+  view = await call('/api/participant/exam', { token: t });
+  assert.equal(view.data.sections[1].items[0].prompt, 'Serial again');
+  await put('1.0', 'AB12.CD34');
+
+  const detail = await call(`/api/sessions/${sess.data.id}`, { token });
+  const p = detail.data.participants.find((x) => x.name === 'Mix Ed');
+  assert.equal(p.score, 4, 'single, pattern, exact and the saved canonical serial');
+  assert.equal(p.pending_count, 0);
+  const q1 = detail.data.questions.find((x) => x.key === '0.1');
+  assert.equal(q1.expected, 'fits XXXX.XXXX');
+
+  // A session launched before 1.12.0 keeps its typed sections and its answers.
+  const legacy = [
+    {
+      type: 'questions',
+      title: 'Old',
+      questions: [
+        { type: 'truefalse', prompt: 'T?', correct: true, points: 1, options: [], accepted: [] },
+      ],
+    },
+    {
+      type: 'info',
+      title: 'Old bench',
+      steps: [{ title: '', body: 'Do it', tasks: ['Done'] }],
+      questions: [],
+    },
+    { type: 'submit', title: 'Hand in', minutes: null, body: '', review: true, questions: [] },
+  ];
+  db.prepare('UPDATE sessions SET content = ? WHERE id = ?').run(
+    JSON.stringify(legacy),
+    sess.data.id,
+  );
+  const j2 = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Old', last_name: 'Timer' },
+  });
+  const t2 = j2.data.token;
+  const put2 = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t2, body: { key, value } });
+  assert.equal((await put2('0.0', true)).data.unlocked_section, 1);
+  view = await call('/api/participant/exam', { token: t2 });
+  assert.deepEqual(
+    view.data.sections[1].items.map((it) => [it.type, it.body, it.tasks.map((x) => x.key)]),
+    [['checklist', 'Do it', ['1.t0']]],
+  );
+  assert.equal((await put2('1.t0', true)).data.unlocked_section, 2);
 });
 
 test('a lab session runs for 8 hours unless told otherwise', async () => {

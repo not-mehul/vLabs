@@ -1041,24 +1041,12 @@ body.has-drawer {
   padding: 0;
   border: 0;
 }
-/* Steps of an informational section */
-.info-steps {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-.info-steps > .info-step {
-  align-self: stretch;
-  margin-top: 0.25rem;
-}
-.info-step__title.field__input {
-  flex: 1;
-  min-width: 10rem;
-}
 .preview__step-title {
   margin: 0.75rem 0 0.4rem;
   font-size: 0.9rem;
+}
+.exam-page {
+  display: contents;
 }
 .exam-steps {
   display: flex;
@@ -1072,12 +1060,6 @@ body.has-drawer {
 .exam-steps__title {
   margin: 0 0 0.5rem;
   font-size: 1rem;
-}
-.exam-steps__nav {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.85rem;
 }
 .exam-checklist__legend {
   display: inline-flex;
@@ -1379,6 +1361,12 @@ input.field__input--sm[type='number'] {
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+.qedit--step {
+  border-left: 3px solid var(--brand);
+}
+.qedit--step > .field__input {
+  margin-bottom: 0.5rem;
+}
 .qedit__head {
   display: flex;
   align-items: center;
@@ -1614,12 +1602,7 @@ input.field__input--sm[type='number'] {
   font-size: 0.78rem;
 }
 
-/* ---- Exam section types (editor) ----------------------------------- */
-.tag--section-info {
-  background: var(--warn-soft);
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
-}
+/* ---- Exam submit section (editor) ---------------------------------- */
 .tag--section-submit {
   background: var(--brand-soft);
   color: var(--brand);

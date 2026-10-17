@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.10.0**.
+Applies to vLabs **1.12.0**.
 
 ---
 
@@ -19,7 +19,7 @@ Exams can be written in two places:
 
 - **vLabs Template Studio** (`docs/vlabs_template_studio.html`): **New → New
   Exam**, or **Examples → E. Network Fundamentals Quiz**. It has the same
-  parts (informational, questions, submit), question types, time
+  parts, item types (steps and questions), answer matching, time
   allocations, image library and validation as below,
   plus a **Participant Preview** where you can answer the exam yourself,
   **Check my answers** (graded exactly as vLabs grades) and **Show answer
@@ -29,13 +29,16 @@ Exams can be written in two places:
   you only need to press **Save exam**.
 - The portal's own editor, below.
 
-**Templates → New exam** opens the exam editor: sections ("parts") of three
-kinds (§2a). For every question choose a type, write the prompt (Markdown,
-with images by library file name, e.g. `![topology](topology.png)`), set the
-points, and give the correct answer. **Minutes** beside each section title
-sets the time allocated to that section (§4.1).
-**Add a section before the submit step** adds an informational section or a
-questions section; the submit section always stays last. **Import** (a Studio
+**Templates → New exam** opens the exam editor: a list of sections ("parts"),
+each a list of **questions and steps** (§2). **Add:** under a section adds an
+item of any of the seven types, and the type menu on an item changes it
+(text, options and points carry over where they fit). For a question write
+the prompt (Markdown, with images by library file name, e.g.
+`![topology](topology.png)`), set the points, and give the correct answer;
+for a step write its instructions and, for a checklist, the items to tick.
+**Minutes** beside each section title sets the time allocated to that
+section (§4.1). **Add section** adds one before the submit step, which
+always stays last. **Import** (a Studio
 `.zip`, `.md` or `.json`) / **.md** / **.json** read and write the format
 below; **Sample .md** downloads a ready-made example. A sample exam is also
 created on a fresh install.
@@ -43,59 +46,77 @@ created on a fresh install.
 Launch it from **Sessions** like a lab (exams are grouped under *Exams* in the
 template picker). The session takes a frozen copy, as labs do.
 
-## 2. Question types
+## 2. Sections, steps and questions
 
-| Type        | Participant sees                  | Correct answer                         | Graded                                                        |
-| ----------- | --------------------------------- | -------------------------------------- | ------------------------------------------------------------- |
-| `single`    | options, choose one               | one option                             | automatically                                                 |
-| `multiple`  | options, choose all that apply    | one or more options (exact set needed) | automatically, all or nothing                                 |
-| `truefalse` | True / False                      | true or false                          | automatically                                                 |
-| `short`     | one-line text box                 | list of accepted answers (optional)    | automatically when accepted answers are given (case and spacing ignored), otherwise by hand |
-| `long`      | multi-line text box               | —                                      | by hand                                                       |
+An exam is a list of **sections**, then the **submit** section (§2c). Each
+section is a list of **items**, in any order and any mix, and every item
+declares its own type:
 
+| Type          | Markdown        | Participant sees                                  | Correct answer                         | Graded                                                     |
+| ------------- | --------------- | ------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------- |
+| Informational | `[info]`        | a title and instructions (Markdown, images)       | —                                      | not graded                                                 |
+| Checklist     | `[checklist]`   | instructions plus items they tick off             | —                                      | not graded; every item must be ticked to move on           |
+| Multiple choice | `[single]`    | options, choose one                               | one option                             | automatically                                              |
+| Select all that apply | `[multiple]` | options, choose all that apply              | one or more options (exact set needed) | automatically, all or nothing                              |
+| True / false  | `[truefalse]`   | True / False                                      | true or false                          | automatically                                              |
+| Short answer  | `[short]`       | one-line text box                                 | exact answers or a pattern (§2a)       | automatically, or by hand when it has neither              |
+| Long answer   | `[long]`        | multi-line text box                               | —                                      | by hand                                                    |
+
+Informational and Checklist items are **steps**; the rest are **questions**.
 Points default to 1 (0–100, halves allowed). An unanswered auto-graded
 question scores 0; unanswered hand-marked questions are simply not awarded.
+A section holds up to 200 items, a checklist up to 30 items.
 
-## 2a. Section types
+**Pages.** Participants see a section a page at a time. Every step starts a
+new page, and the questions after it join that page, so a step's
+instructions stay on screen while its questions are answered. A section that
+starts with questions has them on its first page. E.g. *Read the scenario*
+(Informational) + 3 questions, then *Cable the bench* (Checklist) + *Read the
+serial number* (Short answer), then *Instructor check* (Checklist) is three
+pages.
 
-Every exam is a list of sections. There are three kinds:
+**Checklists** are for practical work the participant completes before
+continuing: e.g. *Cable the bench* (items *Switch is cabled*, *Link light is
+green*), then *Instructor check* ("Call your instructor over", item *My
+instructor has checked my bench*). The participant ticks each item
+themselves. **Nobody approves it in vLabs**: if the instructor checks the
+work, they do it at the bench and record it on your own grading sheet. Ticks
+are saved like answers, appear in the **Answer log** export with their time,
+and are never graded. Unticking an item locks every section after it again
+until it is ticked once more. An Informational item needs instructions; a
+Checklist needs at least one item (its instructions are optional).
 
-| Kind                        | Markdown heading   | Participant sees                                                       | Moves on when                    |
-| --------------------------- | ------------------ | ---------------------------------------------------------------------- | -------------------------------- |
-| **Informational**           | `# [info] Title`   | one or more steps of instructions (Markdown, images), each with a checklist | every checklist item is ticked   |
-| **Questions** (the default) | `# Title`          | the questions                                                          | every question has an answer     |
-| **Submit**                  | `# [submit] Title` | optional text, a review of what is answered, and **Submit**            | (the last step)                  |
+## 2a. Short answers: exact or pattern
 
-**Informational** sections are for practical work the participant completes
-before continuing. Like a lab section, one can hold several **steps**, shown
-one at a time: e.g. *Cable the bench* (items *Switch is cabled*, *Link light
-is green*), then *Instructor check* ("Call your instructor over", item *My
-instructor has checked my bench*). The participant ticks each item themselves;
-**Next step** opens once every item of the step is ticked, and the next
-section once every item of the section is. **Nobody approves it in vLabs**: if
-the instructor checks the work, they do it at the bench and record it on your
-own grading sheet (linking that sheet to vLabs is future work). Ticks are
-saved like answers, appear in the **Answer log** export with their time, and
-are never graded. An informational section has no questions; give each step
-instructions, a checklist, or both (up to 20 steps, 30 items per step).
-Unticking an item locks every section after it again until it is ticked once
-more.
+A short answer is checked one of two ways, exactly like a lab checkpoint
+([TEMPLATE_GUIDE.md](TEMPLATE_GUIDE.md) §9):
 
-**Submit** is always the last section, exactly once. Every new exam has one,
-called *Review and submit*. Rename it, add text above the button (e.g. "Hand
-your bench card to your instructor before you submit"), and choose whether it
-shows the review: with **Show a review first** ticked, participants see how
-many questions they answered, with links to any unanswered question or
-unfinished checklist; unticked, they see only the text and the **Submit**
-button. Nothing else is added: the page shows only what the template says. An exam imported without a submit section gets the default one, and
-one placed anywhere else is moved to the end.
+- **Exact answers** (the default): a list of accepted answers. Case and
+  extra spaces are ignored, so ` TCP/443 ` matches `tcp/443`. With no
+  accepted answers the question is marked by hand.
+- **Pattern** (format only): a **mask** for answers you cannot know in
+  advance, such as a serial number or a MAC address. `9` is a digit, `A` a
+  letter, `X` a letter or digit (`a` / `x` the same, stored lower-case), `?`
+  any visible character and `*` anything. Other letters and digits must match
+  as written (`SN-9999` must start with *SN*), and punctuation is a separator
+  participants may leave out: `XXXX.XXXX.XXXX` accepts both `ABCD.1234.EFGH`
+  and `abcd1234efgh`. Write `\.` to make a separator required. A mask needs
+  at least one wildcard. Any answer that fits is correct (up to 200
+  characters, as in labs); the editor shows an example as you type.
+
+Either kind can have a **placeholder**, the grey example shown in the empty
+box (`e.g. ABCD.1234.EFGH`), and can **save the answer** as a variable for
+later sections (§2b). A pattern answer is saved in the mask's canonical form
+(`abcd1234efgh` is saved as `ABCD.1234.EFGH`). The accepted answers and the
+mask are never sent to participants; the placeholder is.
 
 ## 2b. Per-seat variables and saved answers
 
 Exams use the same **tokens** as labs ([TEMPLATE_GUIDE.md](TEMPLATE_GUIDE.md)
 §4): write `{{ NAME }}` in any section title, step title, instructions,
 checklist item, question prompt, option or accepted answer, and each
-participant sees their own value.
+participant sees their own value. (Patterns and placeholders are not
+resolved: they are written as is.)
 
 - **Built-ins**, always available: `{{ SEAT_ID }}`, `{{ FIRST_NAME }}`,
   `{{ LAST_NAME }}`, `{{ FULL_NAME }}`.
@@ -121,6 +142,18 @@ Unknown names are rejected when the exam is saved (*Unknown placeholder
 exam editor's preview resolves any seat you choose, and the Studio's
 participant preview takes a seat and name.
 
+## 2c. The submit section
+
+**Submit** is always the last section, exactly once. Every new exam has one,
+called *Review and submit*. Rename it, add text above the button (e.g. "Hand
+your bench card to your instructor before you submit"), and choose whether it
+shows the review: with **Show a review first** ticked, participants see how
+many questions they answered, with links to any unanswered question or
+unfinished checklist; unticked, they see only the text and the **Submit**
+button. Nothing else is added: the page shows only what the template says.
+An exam imported without a submit section gets the default one, and one
+placed anywhere else is moved to the end.
+
 ## 3. Markdown format
 
 ```markdown
@@ -134,6 +167,9 @@ variables:
 
 # Part 1 · Addressing
 > minutes: 10
+
+## [info] Your bench
+You are on seat {{ SEAT_ID }}. Your subnet is **{{ SUBNET }}**.
 
 ## [single] Which address is a valid private IPv4 address?
 - [ ] 8.8.8.8
@@ -149,21 +185,34 @@ variables:
 ## [truefalse] A /24 network has 254 usable host addresses.
 > answer: true
 
+# Part 2 · Bench check
+> minutes: 15
+
+## [checklist] Cable the bench
+Cable your switch to the router as shown on the bench card.
+- [ ] Switch port Gi0/1 is cabled to the router
+- [ ] The link light is green on both ends
+
+## [short] Read the serial number off the back of your switch.
+> pattern: XXXX.XXXX.XXXX
+> placeholder: e.g. ABCD.1234.EFGH
+> capture: SERIAL
+
+## [checklist] Instructor check
+Raise your hand so your instructor can check your bench.
+- [ ] My instructor has checked my bench
+
+# Part 3 · Short answers
+
 ## [short] What TCP port does HTTPS use by default?
 > accept: 443 | tcp/443
+
+## [short] Type the serial number of your switch again.
+> accept: {{ SERIAL }}
 
 ## [long]
 In two or three sentences, explain why networks are split into VLANs.
 > points: 5
-
-# [info] Part 2 · Bench check
-> minutes: 15
-
-Cable your switch to the router as shown on the bench card, then raise your
-hand so your instructor can check it.
-
-- [ ] Switch port Gi0/1 is cabled to the router
-- [ ] My instructor has checked my bench
 
 # [submit] Review and submit
 > review: true
@@ -172,69 +221,90 @@ Check every part before you hand in. You cannot change your answers after.
 ```
 
 - `kind: exam` in the front matter marks the file as an exam. Exports always
-  write it; on import it is optional (a file whose `## [type]` headings use
-  exam question types is recognised as an exam anyway).
-- `# ` starts a section, `## [type]` a question. Text after the type and the
-  lines below it are the prompt (Markdown). Fenced code blocks are verbatim.
-- Type aliases: `mcq` `choice` `radio` → single; `multi` `checkbox` →
-  multiple; `tf` `true-false` → truefalse; `text` `short-answer` → short;
-  `essay` `long-answer` → long.
-- `- [ ]` / `- [x]` lines are options for single/multiple (`x` = correct).
-- `> points: N`, `> answer: true|false`, `> accept: a | b` (write `\|` for a
-  literal pipe), `> capture: NAME` (short answers: save the answer as
-  `{{ NAME }}` for later sections, §2b).
+  write it; on import it is optional (a file with a `## [type]` heading of a
+  question type or `[checklist]`, or a tagged `# [submit]` or `# [info]`
+  section, is recognised as an exam anyway; a `## [info]` item alone is not,
+  since labs use it too).
+- `# Title` starts a section and `## [type]` an item of it, of any type
+  (§2). Text after the type is a step's title or the start of a question's
+  prompt; the lines below are the step's instructions or the rest of the
+  prompt (Markdown). Fenced code blocks are verbatim. A `##` heading with no
+  type is a multiple-choice question. Text between a section heading and its
+  first item becomes an untitled Informational item. Use `###` or smaller
+  headings inside instructions and prompts: `##` starts a new item and `#` a
+  new section.
+- Step tags: `[info]` (aliases `[informational]`, `[step]`) and `[checklist]`
+  (alias `[tasks]`). A step's `- [ ]` lines are its checklist (a `- [x]` is
+  read the same way: participants always start unticked), so an `[info]`
+  item with `- [ ]` lines is a Checklist.
+- Question type aliases: `mcq` `choice` `radio` → single; `multi` `checkbox`
+  `checkboxes` → multiple; `tf` `true-false` → truefalse; `text`
+  `short-answer` → short; `essay` `long-answer` → long. In a question,
+  `- [ ]` / `- [x]` lines are the options for single/multiple (`x` =
+  correct).
+- Question settings: `> points: N`, `> answer: true|false`, and for short
+  answers `> accept: a | b` (exact answers; write `\|` for a literal pipe),
+  `> pattern: MASK` (grade by a pattern instead, §2a), `> placeholder: text`
+  and `> capture: NAME` (save the answer as `{{ NAME }}` for later sections,
+  §2b).
 - `variables:` in the front matter, then one indented `NAME = formula` line
-  per variable (§2b). In JSON: `"variables": [{ "name", "expression" }]` at
-  the top level and `"capture": "NAME"` on a short question.
-- `> minutes: N` directly under a `#` section heading allocates N minutes to
-  that section: whole minutes, 1–600, optional (§4.1). In JSON it is
-  `"minutes": N` on the section.
-- `# [info] Title` starts an informational section (aliases
-  `[informational]`, `[checklist]`, `[tasks]`). Each `## Step title` line
-  starts a step (`## [step] Title` is the same; text before the first one is
-  an untitled first step). A step's text is its instructions and its `- [ ]`
-  lines its checklist (a `- [x]` is read the same way: participants always
-  start unticked). Questions cannot go in it. Use `###` or smaller headings
-  inside a step's instructions: `##` starts a new step and `#` a new section.
+  per variable (§2b).
+- `> minutes: N` under a `#` section heading (before its first question)
+  allocates N minutes to that section: whole minutes, 1–600, optional
+  (§4.1).
 - `# [submit] Title` is the submit section (alias `[review]`). Its text is
-  shown above the button; `> review: false` leaves out the review. Exports
-  always write it.
-- In JSON a section has `"type": "questions" | "info" | "submit"` (default
-  questions); info sections carry `"steps": [{ "title", "body", "tasks":
-  ["…"] }]`, the submit section `"body"` and `"review": true | false`.
-  Sections saved by 1.9.0 (`"body"` and `"tasks"` on the section) are read
-  as one step.
+  shown above the button; `> review: false` leaves out the review. It cannot
+  hold questions or steps. Exports always write it.
 - Export → import round-trips losslessly.
+
+**JSON.** A section is `{ "title", "minutes", "items": [ … ] }` and each
+item has a `"type"`: `{ "type": "info", "title", "body" }`, `{ "type":
+"checklist", "title", "body", "tasks": ["…"] }` or a question `{ "type",
+"prompt", "points", "options", "correct", "accepted" }`, where a short answer
+may add `"match": "pattern", "pattern": "MASK"`, `"placeholder"` and
+`"capture"`. The submit section is `{ "type": "submit", "title", "body",
+"review" }`, and `"variables": [{ "name", "expression" }]` sits at the top
+level.
+
+**Older files.** Exams written before 1.12.0 keep working, in Markdown, in
+JSON and in sessions already running: a `# [info] Title` section (aliases
+`[informational]`, `[checklist]`, `[tasks]`) reads its `##` headings as
+steps, and JSON sections with `"type": "questions"` (`"questions": […]`) or
+`"type": "info"` (`"steps": [{ "title", "body", "tasks" }]`, or 1.9.0's
+`"body"` and `"tasks"` on the section) are read as items: a step with
+checklist items as a Checklist, one without as Informational. Answers,
+ticks and exports keep their keys. Saving such an exam in the editor writes
+the new shape.
 
 ## 4. During the exam
 
-- **Sections unlock like a lab's.** One section per page. A participant
-  starts with only the first section. The next one unlocks once **every
-  question** in the current section has an answer, or **every checklist
-  item** is ticked in an informational section; **Next** stays disabled
-  until then. Locked sections are never sent to the browser and
-  cannot be answered, so nobody can read ahead.
+- **Sections unlock like a lab's.** One section at a time, a page at a time
+  (§2). A participant starts with only the first section. The next one
+  unlocks once **every question** in the current section has an answer and
+  **every checklist item** is ticked; **Next** stays disabled until then.
+  Locked sections are never sent to the browser and cannot be answered, so
+  nobody can read ahead.
 - **Free navigation, up to the furthest section reached.** Before
   submitting, participants can go back to any unlocked section and change
   answers. Progress stays at the furthest section they reached: clearing an
   earlier answer does not lock later sections again. Unticking a checklist
   item does: every section after it locks until it is ticked again. The
-  **submit section**
-  opens as soon as the last questions section does, so a participant can
-  hand in with questions left blank; a checklist right before it must be
-  ticked first. With the review on, it lists any unanswered questions and
-  unfinished checklists.
+  **submit section** opens as soon as the last section does, so a
+  participant can hand in with questions left blank, unless that section
+  has a checklist, which must be ticked first. With the review on, it lists
+  any unanswered questions and unfinished checklists.
 - Answers **save automatically**: choices immediately, typed answers after a
   short pause or when the field loses focus. The header shows one save
   indicator for the whole exam (a cloud: *Saving…*, *Saved*, or *Not saved,
   retrying*). There is no mark beside each question, so "saved" is never
   mistaken for "correct". Leaving and rejoining with the same name resumes.
-- **Informational** sections show one step at a time (*Step 1 of 3*), with
-  its instructions and checklist; ticking an item saves it at once. A
-  section always opens on its first step (also from the stepper); **Previous**
-  from the section after it returns to its last step.
-  **Next step** opens once every item of the step is ticked, and on the
-  last step **Next** opens the following section.
+- A section with several pages shows *Page 1 of 3* above them. **Next
+  page** opens once every question on the page has an answer and every item
+  of its checklist is ticked (ticking saves at once); on the last page
+  **Next** opens the following section. A section always opens on its first
+  page (also from the stepper); **Previous** from the section after it
+  returns to its last page. Links in the review open the page holding the
+  question, or the first page with a box left to tick.
 - Each exam seat is **bound to the device that joined it**. Rejoining with
   the same name on that device resumes. On any other device it is refused
   ("already taking the exam on another device"), so nobody can open a
@@ -317,8 +387,11 @@ From the monitor:
   unanswered), points and who marked it.
 - **Answer key** — every question with options and expected answer.
 - **Answer log** — every answer change across the class, in time order,
-  including checklist ticks (question `2.t0` = section 3, item 1, counting
-  across its steps: *Ticked* / *Unticked*).
+  including checklist ticks (question `2.t0` = section 3, its first
+  checklist item, counting across all its checklists: *Ticked* /
+  *Unticked*). Question keys (`2.1` = section 3, its second question) count
+  only the questions of a section, so steps between them do not change
+  them.
 - **JSON** — all of the above in one document, plus a `sections` index
   (allocated minutes, average seconds, completed count) and the session's
   total break time.
@@ -332,6 +405,9 @@ From the monitor:
    add its fields to `client/src/pages/ExamEditor.jsx`.
 3. Optionally give it a Markdown type name / alias in
    `shared/exam-format.js`.
+4. Mirror it in the Template Studio's `vlabs-exam-core` block
+   (`docs/vlabs_template_studio.html`); `client/tests/studioExamParity.test.js`
+   fails until the Studio reads, writes and grades it like vLabs.
 
 Storage, the participant API, manual marking and exports work off that
 interface unchanged.

@@ -1,6 +1,12 @@
 import { IMAGE_MD_RE, imageRefName, LIMITS } from '../../../shared/template-schema.js';
 import { minutesInvalid, cleanVariables } from './validateTemplate.js';
-import { EXAM_LIMITS, normaliseExam, examErrors } from '../../../shared/exam-schema.js';
+import {
+  EXAM_LIMITS,
+  normaliseExam,
+  examErrors,
+  sectionItems,
+  sectionLayout,
+} from '../../../shared/exam-schema.js';
 
 /**
  * Validate & normalise an instructor-authored EXAM payload (the counterpart of
@@ -36,16 +42,21 @@ export function validateExamPayload(payload, opts = {}) {
         `Section ${si + 1} time allocated must be a whole number of minutes from 1 to ${LIMITS.sectionMinutes} (or empty)`,
       );
     }
-    const n = Array.isArray(s?.questions) ? s.questions.length : 0;
-    if (n > EXAM_LIMITS.questionsPerSection) {
+    const items = sectionItems(s);
+    if (items.length > EXAM_LIMITS.itemsPerSection) {
       errors.push(
-        `Section ${si + 1} has too many questions (max ${EXAM_LIMITS.questionsPerSection})`,
+        `Section ${si + 1} has too many questions and steps (max ${EXAM_LIMITS.itemsPerSection})`,
       );
     }
-    (Array.isArray(s?.questions) ? s.questions : []).forEach((q, qi) => {
-      if (Array.isArray(q?.options) && q.options.length > EXAM_LIMITS.options) {
+    items.forEach((it, ii) => {
+      if (Array.isArray(it?.options) && it.options.length > EXAM_LIMITS.options) {
         errors.push(
-          `Section ${si + 1} · question ${qi + 1} has too many options (max ${EXAM_LIMITS.options})`,
+          `Section ${si + 1} · item ${ii + 1} has too many options (max ${EXAM_LIMITS.options})`,
+        );
+      }
+      if (Array.isArray(it?.tasks) && it.tasks.length > EXAM_LIMITS.tasks) {
+        errors.push(
+          `Section ${si + 1} · item ${ii + 1} has too many checklist items (max ${EXAM_LIMITS.tasks})`,
         );
       }
     });
@@ -57,8 +68,13 @@ export function validateExamPayload(payload, opts = {}) {
     title: sec.title.trim(),
     ...(minutes ? { minutes } : {}),
     ...('body' in sec ? { body: sec.body.trim() } : {}),
-    ...(sec.steps ? { steps: sec.steps.map((st) => ({ ...st, body: st.body.trim() })) } : {}),
-    questions: sec.questions.map((q) => ({ ...q, prompt: q.prompt.trim() })),
+    ...(sec.items
+      ? {
+          items: sec.items.map((it) =>
+            'prompt' in it ? { ...it, prompt: it.prompt.trim() } : { ...it, body: it.body.trim() },
+          ),
+        }
+      : {}),
   }));
   if ((payload?.variables?.length || 0) > LIMITS.variables) {
     errors.push(`Too many variables (max ${LIMITS.variables})`);
@@ -91,12 +107,11 @@ export function validateExamPayload(payload, opts = {}) {
     };
     content.forEach((sec, si) => {
       check([sec.body || ''], `Section ${si + 1}`);
-      (sec.steps || []).forEach((st, sti) =>
-        check([st.body, ...st.tasks], `Section ${si + 1} · step ${sti + 1}`),
-      );
-      sec.questions.forEach((q, qi) =>
-        check([q.prompt, ...q.options], `Section ${si + 1} · question ${qi + 1}`),
-      );
+      for (const at of sectionLayout(sec, si)) {
+        const it = at.item;
+        const where = `Section ${si + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
+        check('qi' in at ? [it.prompt, ...it.options] : [it.body, ...(it.tasks || [])], where);
+      }
     });
   }
 

@@ -6,6 +6,7 @@ import ExamQuestion from '../components/ExamQuestion.jsx';
 import Markdown from '../components/Markdown.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import Icon from '../components/Icon.jsx';
+import { sectionPages } from '../../../shared/exam-schema.js';
 
 const isAnswered = (v) =>
   v !== undefined &&
@@ -31,7 +32,6 @@ function withSubmitSection(res) {
     title: 'Review and submit',
     body: '',
     review: true,
-    questions: [],
     virtual: true,
   };
   return {
@@ -42,27 +42,36 @@ function withSubmitSection(res) {
   };
 }
 
-/** True when every checklist item of an informational step is ticked. */
-const stepDone = (st, answers) => (st?.tasks || []).every((t) => answers[t.key] === true);
+/** True when every tick of a checklist is ticked (always, for anything else). */
+const ticked = (it, answers) => (it?.tasks || []).every((t) => answers[t.key] === true);
 
-/** True when a section lets the participant move on (questions / checklist). */
+/** True when an item lets the participant move on: answered, or all ticked. */
+const itemDone = (it, answers) => (it.key ? isAnswered(answers[it.key]) : ticked(it, answers));
+
+/** The questions of a delivered section (they carry their answer key). */
+const questionsOf = (s) => (s?.items || []).filter((it) => it.key);
+
+/** True when a section lets the participant move on: every question answered and box ticked. */
 const sectionDone = (s, answers) =>
-  s.type === 'info'
-    ? (s.steps || []).every((st) => stepDone(st, answers))
-    : s.type === 'submit'
-      ? false
-      : s.questions.every((q) => isAnswered(answers[q.key]));
+  s.type !== 'submit' && (s.items || []).every((it) => itemDone(it, answers));
+
+/** True when a section has a checklist with a box still to tick. */
+const openChecklist = (s, answers) => (s?.items || []).some((it) => !ticked(it, answers));
+
+/** A section's pages: lists of its items (see sectionPages). */
+const pagesOf = (s) => sectionPages(s?.items).map((page) => page.map((ii) => s.items[ii]));
 
 /**
- * The first step of an informational section with an item still to tick (for
- * links from the review), else the first step. A step without a checklist has
- * nothing to tick, so it never counts as the place to resume.
+ * The page to open for a link from the review: the one holding `key`, else
+ * the first page with a box to tick, else the first page.
  */
-const firstUntickedStep = (s, answers) =>
-  Math.max(
-    (s?.steps || []).findIndex((st) => st.tasks?.length && !stepDone(st, answers)),
-    0,
-  );
+const pageFor = (s, answers, key) => {
+  const pages = pagesOf(s);
+  const at = key
+    ? pages.findIndex((page) => page.some((it) => it.key === key))
+    : pages.findIndex((page) => page.some((it) => !ticked(it, answers)));
+  return Math.max(at, 0);
+};
 
 /** Header badge for the autosave state of every answer together. */
 const SAVE_BADGE = {
@@ -72,13 +81,14 @@ const SAVE_BADGE = {
 };
 
 /**
- * Participant exam, one section per page. Sections unlock like a lab's: the
- * next section opens once every question in this one is answered, or every
- * item on its checklist ticked (the server decides and only sends unlocked
+ * Participant exam, one section at a time. Sections unlock like a lab's: the
+ * next section opens once every question in this one is answered and every
+ * checklist item ticked (the server decides and only sends unlocked
  * sections; unticking an item locks what follows again); earlier sections
- * stay open to revisit. Informational sections show their steps one at a
- * time, each step's checklist ticked before the next. The exam ends with its
- * submit section. Answers save as they are given, shown once in the header;
+ * stay open to revisit. A section is shown a page at a time: each
+ * Informational or Checklist item starts a page and the questions after it
+ * join it; a page's questions are answered and boxes ticked before the next
+ * page. The exam ends with its submit section. Answers save as they are given, shown once in the header;
  * the participant is never told whether an answer is right. Submitting is
  * final — the exam is no longer shown afterwards, not even for review.
  */
@@ -92,7 +102,7 @@ export default function Exam() {
   const [answers, setAnswers] = useState({});
   const [saveState, setSaveState] = useState({}); // key → saving | saved | error
   const [view, setView] = useState(0); // section index
-  const [stepOf, setStepOf] = useState({}); // section index → step shown (informational)
+  const [pageOf, setPageOf] = useState({}); // section index → page shown
   const [error, setError] = useState('');
   const [ended, setEnded] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -141,7 +151,11 @@ export default function Exam() {
       setSubmitted(res.submitted);
       unlockedRef.current = res.unlocked_section ?? 0;
       captureKeys.current = new Set(
-        res.sections.flatMap((s) => (s.questions || []).filter((q) => q.capture).map((q) => q.key)),
+        res.sections.flatMap((s) =>
+          questionsOf(s)
+            .filter((q) => q.capture)
+            .map((q) => q.key),
+        ),
       );
       if (!res.submitted) {
         const last = res.unlocked_section ?? 0;
@@ -318,12 +332,12 @@ export default function Exam() {
   const totalSections = data?.total_sections ?? sections.length;
   // An unticked checklist locks every section after it straight away (the
   // server agrees once the untick is saved).
-  const openChecklist = sections.findIndex((s) => s.type === 'info' && !sectionDone(s, answers));
+  const firstOpenChecklist = sections.findIndex((s) => openChecklist(s, answers));
   const unlocked =
-    openChecklist >= 0
-      ? Math.min(data?.unlocked_section ?? 0, openChecklist)
+    firstOpenChecklist >= 0
+      ? Math.min(data?.unlocked_section ?? 0, firstOpenChecklist)
       : (data?.unlocked_section ?? 0);
-  const allQuestions = sections.flatMap((s) => s.questions);
+  const allQuestions = sections.flatMap(questionsOf);
   const answeredCount = allQuestions.filter((q) => isAnswered(answers[q.key])).length;
   const total = data?.question_count ?? allQuestions.length;
 
@@ -353,21 +367,21 @@ export default function Exam() {
   const section = sections[view];
   const sectionComplete = section ? sectionDone(section, answers) : false;
   const nextUnlocked = view < unlocked;
-  // Informational sections show their steps one at a time, like a lab.
-  const steps = section?.type === 'info' ? section.steps || [] : [];
-  // A section always opens on its first step (going back opens the last one).
-  const stepIndex = Math.min(stepOf[view] ?? 0, steps.length - 1);
-  const step = steps[stepIndex];
-  const multiStep = steps.length > 1;
-  const onLastStep = !multiStep || stepIndex === steps.length - 1;
-  const canNext = onLastStep ? nextUnlocked : stepDone(step, answers);
-  const showStep = (i) => {
-    setStepOf((m) => ({ ...m, [view]: i }));
+  // A section always opens on its first page (going back opens the last one).
+  const pages = section?.type === 'submit' ? [] : pagesOf(section);
+  const pageIndex = Math.max(Math.min(pageOf[view] ?? 0, pages.length - 1), 0);
+  const page = pages[pageIndex] || [];
+  const multiPage = pages.length > 1;
+  const onLastPage = !multiPage || pageIndex === pages.length - 1;
+  const pageDone = page.every((it) => itemDone(it, answers));
+  const canNext = onLastPage ? nextUnlocked : pageDone;
+  const showPage = (i) => {
+    setPageOf((m) => ({ ...m, [view]: i }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const nextSection = sections[view + 1];
   const unanswered = allQuestions.filter((q) => !isAnswered(answers[q.key]));
-  const unticked = sections.filter((s) => s.type === 'info' && !sectionDone(s, answers));
+  const unticked = sections.filter((s) => openChecklist(s, answers));
   const unsaved = Object.values(saveState).some((s) => s === 'saving' || s === 'error');
   const states = Object.values(saveState);
   const saveBadge = states.includes('error')
@@ -378,9 +392,10 @@ export default function Exam() {
         ? 'saved'
         : null;
 
-  function jumpTo(si, anchor) {
-    setStepOf((m) => ({ ...m, [si]: firstUntickedStep(sections[si], answers) }));
+  function jumpTo(si, key) {
+    setPageOf((m) => ({ ...m, [si]: pageFor(sections[si], answers, key) }));
     goTo(si);
+    const anchor = key && `q-${key}`;
     if (!anchor) return;
     setTimeout(
       () =>
@@ -389,10 +404,10 @@ export default function Exam() {
     );
   }
 
-  /** Back to the previous section, on its last step. */
+  /** Back to the previous section, on its last page. */
   function goBack() {
     const prev = sections[view - 1];
-    setStepOf((m) => ({ ...m, [view - 1]: Math.max((prev?.steps?.length || 1) - 1, 0) }));
+    setPageOf((m) => ({ ...m, [view - 1]: Math.max(pagesOf(prev).length - 1, 0) }));
     goTo(view - 1);
   }
 
@@ -465,7 +480,7 @@ export default function Exam() {
             const submitStep = s?.type === 'submit' || i === totalSections - 1;
             const done = !locked && sectionDone(s, answers);
             const state = i === view ? 'current' : locked ? 'locked' : done ? 'done' : 'open';
-            const what = s?.type === 'info' ? 'all ticked' : 'all answered';
+            const what = 'complete';
             return (
               <button
                 key={i}
@@ -535,83 +550,87 @@ export default function Exam() {
               </span>
               <h1 className="section-head__title">{section.title}</h1>
             </div>
-            {section.type === 'info' ? (
-              <div key={stepIndex} className="panel exam-info">
-                {multiStep && (
-                  <div className="exam-steps" aria-live="polite">
-                    <span>
-                      Step {stepIndex + 1} of {steps.length}
-                    </span>
-                  </div>
-                )}
-                {step?.title && <h2 className="exam-steps__title">{step.title}</h2>}
-                {step?.body && <Markdown>{step.body}</Markdown>}
-                {step?.tasks.length > 0 && (
-                  <fieldset className="exam-checklist">
-                    <legend className="exam-checklist__legend">
-                      <Icon name="checklist" size={15} /> Tick each item once it is done
-                    </legend>
-                    {step.tasks.map((t) => {
-                      const on = answers[t.key] === true;
-                      return (
-                        <label
-                          key={t.key}
-                          id={`task-${t.key}`}
-                          className={`choice exam-checklist__item ${on ? 'choice--on' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={(e) => {
-                              // Stay on this step: ticking its last item must not move on.
-                              setStepOf((m) => ({ ...m, [view]: stepIndex }));
-                              change(t.key, e.target.checked ? true : null, { immediate: true });
-                            }}
-                          />
-                          <span className="choice__text">
-                            <Markdown>{t.text}</Markdown>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </fieldset>
-                )}
+            {multiPage && (
+              <div className="exam-steps" aria-live="polite">
+                <span>
+                  Page {pageIndex + 1} of {pages.length}
+                </span>
               </div>
-            ) : (
-              section.questions.map((q) => (
-                <ExamQuestion
-                  key={q.key}
-                  q={q}
-                  value={answers[q.key]}
-                  onChange={(v, opts) => change(q.key, v, opts)}
-                />
-              ))
             )}
+            <div key={pageIndex} className="exam-page">
+              {page.map((it, i) =>
+                it.key ? (
+                  <ExamQuestion
+                    key={it.key}
+                    q={it}
+                    value={answers[it.key]}
+                    onChange={(v, opts) => change(it.key, v, opts)}
+                  />
+                ) : (
+                  <div key={`step-${i}`} className="panel exam-info">
+                    {it.title && <h2 className="exam-steps__title">{it.title}</h2>}
+                    {it.body && <Markdown>{it.body}</Markdown>}
+                    {it.tasks?.length > 0 && (
+                      <fieldset className="exam-checklist">
+                        <legend className="exam-checklist__legend">
+                          <Icon name="checklist" size={15} /> Tick each item once it is done
+                        </legend>
+                        {it.tasks.map((t) => {
+                          const on = answers[t.key] === true;
+                          return (
+                            <label
+                              key={t.key}
+                              id={`task-${t.key}`}
+                              className={`choice exam-checklist__item ${on ? 'choice--on' : ''}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={(e) => {
+                                  // Stay on this page: ticking its last box must not move on.
+                                  setPageOf((m) => ({ ...m, [view]: pageIndex }));
+                                  change(t.key, e.target.checked ? true : null, {
+                                    immediate: true,
+                                  });
+                                }}
+                              />
+                              <span className="choice__text">
+                                <Markdown>{t.text}</Markdown>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </fieldset>
+                    )}
+                  </div>
+                ),
+              )}
+            </div>
             <div className="section-nav">
               <button
                 className="btn btn--ghost"
-                disabled={view === 0 && stepIndex <= 0}
-                onClick={() => (multiStep && stepIndex > 0 ? showStep(stepIndex - 1) : goBack())}
+                disabled={view === 0 && pageIndex <= 0}
+                onClick={() => (multiPage && pageIndex > 0 ? showPage(pageIndex - 1) : goBack())}
               >
                 <Icon name="chevronLeft" size={16} />{' '}
-                {multiStep && stepIndex > 0 ? 'Previous step' : 'Previous'}
+                {multiPage && pageIndex > 0 ? 'Previous page' : 'Previous'}
               </button>
-              {!canNext && !(onLastStep && sectionComplete) && (
+              {!canNext && !(onLastPage && sectionComplete) && (
                 <span className="section-nav__hint" role="status">
                   <Icon name="lock" size={14} />{' '}
-                  {section.type === 'info'
+                  {(onLastPage ? section.items : page).some((it) => !ticked(it, answers))
                     ? 'Tick every item to continue'
                     : 'Answer every question to continue'}
                 </span>
               )}
-              {!onLastStep ? (
+              {!onLastPage ? (
                 <button
                   className="btn btn--primary"
                   disabled={!canNext}
-                  onClick={() => showStep(stepIndex + 1)}
-                  title={canNext ? '' : 'Tick every item first'}
+                  onClick={() => showPage(pageIndex + 1)}
+                  title={canNext ? '' : 'Finish this page first'}
                 >
-                  Next step <Icon name="chevronRight" size={16} />
+                  Next page <Icon name="chevronRight" size={16} />
                 </button>
               ) : (
                 section.index < totalSections - 1 && (
@@ -659,8 +678,8 @@ export default function Exam() {
                               className="linklike"
                               onClick={() =>
                                 jumpTo(
-                                  sections.findIndex((s) => s.questions.includes(q)),
-                                  `q-${q.key}`,
+                                  sections.findIndex((s) => questionsOf(s).includes(q)),
+                                  q.key,
                                 )
                               }
                             >

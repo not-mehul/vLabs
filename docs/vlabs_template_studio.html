@@ -148,7 +148,7 @@
       </div>
 
       <span class="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.06]">
-        1.7.0
+        1.12.0
       </span>
 
       <div class="h-4 w-px bg-slate-200 dark:bg-white/[0.08] mx-1 hidden sm:block"></div>
@@ -196,7 +196,7 @@
           </button>
           <button onclick="promptNewBlankExam()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200">
             <i class="ph ph-exam text-sm text-violet-500"></i>
-            <div><span class="block font-medium">New Exam</span><span class="text-[10px] text-slate-400">Multiple choice, true/false, typed answers</span></div>
+            <div><span class="block font-medium">New Exam</span><span class="text-[10px] text-slate-400">Questions, steps and checklists</span></div>
           </button>
         </div>
       </div>
@@ -567,7 +567,7 @@
           <div class="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-4">
             <div>
               <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
-                Specification Audit (vLabs 1.7.0)
+                Specification Audit (vLabs 1.12.0)
               </h2>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Verifies structural limits, formulas across Seats 1/24/100, placeholder resolution, capture order, pattern masks, and image assets.
@@ -866,10 +866,10 @@
   -->
   <script id="vlabs-exam-core">
     const EXAM_LIMITS = Object.freeze({
-      sections: 50, questionsPerSection: 200, options: 12, accepted: 20, title: 200,
+      sections: 50, itemsPerSection: 200, options: 12, accepted: 20, title: 200,
       description: 1000, sectionTitle: 200, prompt: 10000, option: 500, acceptedAnswer: 200,
-      maxPoints: 100, sectionMinutes: 600, body: 20000, steps: 20, stepTitle: 200, tasks: 30, task: 300,
-      variables: 100, captureName: 40
+      maxPoints: 100, sectionMinutes: 600, body: 20000, itemTitle: 200, tasks: 30, task: 300,
+      variables: 100, captureName: 40, pattern: 120, placeholder: 120, answer: 200
     });
 
     /** Per-seat placeholders, exactly as in labs: the exam's variables plus these. */
@@ -878,16 +878,9 @@
     const EXAM_BUILTIN_IDENTIFIERS = Object.freeze(['seat', 'first_name', 'last_name']);
     const EXAM_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-    /** Section types: questions (default), info ("Informational": steps of
-        instructions, each with a checklist the participant ticks off) and
-        submit (the last section, always exactly one). */
-    const EXAM_SECTION_TYPES = Object.freeze({
-      questions: 'Questions', info: 'Informational', submit: 'Submit'
-    });
-    const EXAM_SECTION_ALIASES = Object.freeze({
-      questions: 'questions', info: 'info', informational: 'info', checklist: 'info', tasks: 'info', submit: 'submit', review: 'submit'
-    });
-    const examSectionType = (sec) => (Object.prototype.hasOwnProperty.call(EXAM_SECTION_TYPES, sec?.type) ? sec.type : 'questions');
+    /** A section is a list of items, each with its own type; the last section
+        is the submit section (always exactly one). */
+    const examIsSubmit = (sec) => sec?.type === 'submit';
 
     const EXAM_TYPE_LABELS = Object.freeze({
       single: 'Multiple choice', multiple: 'Select all that apply', truefalse: 'True / false',
@@ -896,12 +889,25 @@
     const EXAM_TYPES = Object.keys(EXAM_TYPE_LABELS);
     const EXAM_HAS_OPTIONS = (t) => t === 'single' || t === 'multiple';
 
+    /** Every item type: the two step types, then the question types. */
+    const EXAM_ITEM_TYPES = Object.freeze({ info: 'Informational', checklist: 'Checklist', ...EXAM_TYPE_LABELS });
+    const EXAM_ITEM_TYPE_NAMES = Object.keys(EXAM_ITEM_TYPES);
+    const examIsQuestion = (item) => EXAM_TYPES.includes(item?.type);
+
     const EXAM_TYPE_ALIASES = Object.freeze({
       single: 'single', mcq: 'single', choice: 'single', radio: 'single',
       multiple: 'multiple', multi: 'multiple', checkbox: 'multiple', checkboxes: 'multiple',
       truefalse: 'truefalse', 'true-false': 'truefalse', tf: 'truefalse',
       short: 'short', text: 'short', 'short-answer': 'short',
       long: 'long', essay: 'long', 'long-answer': 'long'
+    });
+    /** Step tags on `## [tag] Title` items. */
+    const EXAM_STEP_ALIASES = Object.freeze({
+      info: 'info', informational: 'info', step: 'info', checklist: 'checklist', tasks: 'checklist'
+    });
+    /** Tags on `# [tag] Title` section headings (`info` ones are the pre-1.12 kind). */
+    const EXAM_SECTION_ALIASES = Object.freeze({
+      info: 'info', informational: 'info', checklist: 'info', tasks: 'info', submit: 'submit', review: 'submit'
     });
 
     const examStr = (v, max) => {
@@ -933,6 +939,106 @@
       return String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
     }
 
+    // ---- Pattern masks (exactly as vLabs' lab checkpoints) ----------------
+    // 9 digit · A/a letter · X/x letter or digit · ? any visible character ·
+    // * anything · \c literal c. Other letters and digits are required;
+    // punctuation and spaces are separators participants may leave out.
+    const EXAM_MASK_CLASSES = {
+      9: { re: '[0-9]', examples: '1234567890' },
+      A: { re: '[A-Za-z]', examples: 'ABCDEFGHJK', case: 'upper' },
+      a: { re: '[A-Za-z]', examples: 'abcdefghjk', case: 'lower' },
+      X: { re: '[A-Za-z0-9]', examples: 'AB12CD34EF', case: 'upper' },
+      x: { re: '[A-Za-z0-9]', examples: 'ab12cd34ef', case: 'lower' },
+      '?': { re: '[^\\s]', examples: '#' },
+      '*': { re: '.+?', examples: '…', wild: true }
+    };
+    const examReEscape = (c) => c.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+
+    function examCompileMask(mask) {
+      const src = String(mask ?? '').trim();
+      if (!src) throw new Error('Pattern is empty');
+      if (src.length > EXAM_LIMITS.pattern) throw new Error(`Pattern is too long (max ${EXAM_LIMITS.pattern})`);
+      const tokens = [];
+      for (let i = 0; i < src.length; i += 1) {
+        let ch = src[i];
+        if (ch === '\\') {
+          i += 1;
+          if (i >= src.length) throw new Error('Pattern ends with a dangling backslash');
+          ch = src[i];
+          tokens.push({ kind: 'literal', ch, escaped: true });
+          continue;
+        }
+        const cls = Object.prototype.hasOwnProperty.call(EXAM_MASK_CLASSES, ch) ? EXAM_MASK_CLASSES[ch] : null;
+        if (cls) tokens.push({ kind: 'wild', ch, ...cls });
+        else tokens.push({ kind: 'literal', ch });
+      }
+      const wildcards = tokens.filter((t) => t.kind === 'wild').length;
+      if (!wildcards) throw new Error('Pattern has no wildcards (9 A a X x ? *) — use an exact answer instead');
+      if (tokens.filter((t) => t.wild).length > 3) throw new Error('Pattern may use * at most three times');
+      let re = '^';
+      let example = '';
+      const counters = {};
+      for (const t of tokens) {
+        if (t.kind === 'wild') {
+          re += `(${t.re})`;
+          const n = (counters[t.ch] = (counters[t.ch] || 0) + 1);
+          example += t.examples[(n - 1) % t.examples.length];
+        } else if (/\s/.test(t.ch)) {
+          re += '\\s*';
+          example += t.ch;
+        } else if (t.escaped || /[A-Za-z0-9]/.test(t.ch)) {
+          re += examReEscape(t.ch);
+          example += t.ch;
+        } else {
+          re += `(?:${examReEscape(t.ch)})?`;
+          example += t.ch;
+        }
+      }
+      re += '$';
+      return { tokens, regex: new RegExp(re, 'i'), example, wildcards };
+    }
+
+    /** The canonical value of an answer fitting the mask, or null. */
+    function examMatchMask(mask, input) {
+      const { tokens, regex } = examCompileMask(mask);
+      const m = regex.exec(String(input ?? '').trim());
+      if (!m) return null;
+      let out = '';
+      let g = 1;
+      for (const t of tokens) {
+        if (t.kind !== 'wild') {
+          out += t.ch;
+          continue;
+        }
+        let v = String(m[g++] ?? '');
+        if (t.case === 'upper') v = v.toUpperCase();
+        else if (t.case === 'lower') v = v.toLowerCase();
+        out += v;
+      }
+      return out;
+    }
+
+    /** An example answer for a mask, or '' when the mask is invalid. */
+    function examMaskExample(mask) {
+      try {
+        return examCompileMask(mask).example;
+      } catch {
+        return '';
+      }
+    }
+
+    /** A short answer fitted to its question's mask, or null when it does not
+        fit (or is longer than a lab checkpoint answer). */
+    function examPatternValue(q, v) {
+      if (String(v ?? '').trim().length > EXAM_LIMITS.answer) return null;
+      try {
+        return examMatchMask(q.pattern, v);
+      } catch {
+        return null;
+      }
+    }
+
+    // ---- Items and sections ---------------------------------------------
     function examNormaliseQuestion(raw) {
       const q = raw && typeof raw === 'object' ? raw : {};
       const type = EXAM_TYPES.includes(q.type) ? q.type : 'single';
@@ -955,69 +1061,97 @@
       } else if (type === 'truefalse') {
         out.correct = examToBool(q.correct);
       } else if (type === 'short') {
-        out.accepted = (Array.isArray(q.accepted) ? q.accepted : [])
+        // Exact (accepted answers) or a pattern, like a lab checkpoint.
+        const accepted = (Array.isArray(q.accepted) ? q.accepted : [])
           .map((a) => examStr(a, EXAM_LIMITS.acceptedAnswer).trim())
           .filter(Boolean)
           .filter((a, i, arr) => arr.indexOf(a) === i)
           .slice(0, EXAM_LIMITS.accepted);
+        const pattern = examStr(q.pattern, EXAM_LIMITS.pattern).trim();
+        const placeholder = examStr(q.placeholder, EXAM_LIMITS.placeholder).trim();
+        const isPattern = q.match === 'pattern' || (q.match !== 'exact' && pattern && !accepted.length);
+        if (isPattern) Object.assign(out, { accepted: [], match: 'pattern', pattern });
+        else out.accepted = accepted;
+        if (placeholder) out.placeholder = placeholder;
       }
       const capture = examStr(q.capture, EXAM_LIMITS.captureName).trim();
       if (capture) out.capture = capture;
       return out;
     }
 
-    function examDefaultSubmitSection() {
-      return { type: 'submit', title: 'Review and submit', minutes: null, body: '', review: true, questions: [] };
-    }
-
-    function examBlankStep() {
-      return { title: '', body: '', tasks: [''] };
-    }
-
-    /** Steps of an info section; 1.9.0 files hold one step's body / tasks on the section. */
-    function examInfoSteps(sec) {
-      if (Array.isArray(sec?.steps)) return sec.steps;
-      if (sec && (sec.body || (Array.isArray(sec.tasks) && sec.tasks.length))) {
-        return [{ title: '', body: sec.body || '', tasks: Array.isArray(sec.tasks) ? sec.tasks : [] }];
-      }
-      return [];
-    }
-
-    function examNormaliseStep(raw) {
-      const st = raw && typeof raw === 'object' ? raw : {};
+    /** One item (a step or a question) in canonical shape. */
+    function examNormaliseItem(raw) {
+      const it = raw && typeof raw === 'object' ? raw : {};
+      if (it.type !== 'info' && it.type !== 'checklist') return examNormaliseQuestion(it);
+      const step = {
+        type: it.type,
+        title: examStr(it.title, EXAM_LIMITS.itemTitle).trim(),
+        body: examStr(it.body, EXAM_LIMITS.body)
+      };
+      if (it.type === 'info') return step;
       return {
-        title: examStr(st.title, EXAM_LIMITS.stepTitle).trim(),
-        body: examStr(st.body, EXAM_LIMITS.body),
-        tasks: (Array.isArray(st.tasks) ? st.tasks : [])
+        ...step,
+        tasks: (Array.isArray(it.tasks) ? it.tasks : [])
           .map((t) => examStr(t, EXAM_LIMITS.task).trim())
           .filter(Boolean)
           .slice(0, EXAM_LIMITS.tasks)
       };
     }
 
+    function examDefaultSubmitSection() {
+      return { type: 'submit', title: 'Review and submit', minutes: null, body: '', review: true };
+    }
+
+    function examBlankQuestion(type = 'single') {
+      const base = { type, prompt: '', points: 1, options: [], correct: null, accepted: [] };
+      if (type === 'single') return { ...base, options: ['', ''], correct: 0 };
+      if (type === 'multiple') return { ...base, options: ['', ''], correct: [] };
+      if (type === 'truefalse') return { ...base, correct: true };
+      return base;
+    }
+
+    function examBlankItem(type = 'single') {
+      if (type === 'info') return { type, title: '', body: '' };
+      if (type === 'checklist') return { type, title: '', body: '', tasks: [''] };
+      return examBlankQuestion(type);
+    }
+
+    function examBlankSection(n = 1) {
+      return { title: `Section ${n}`, minutes: null, items: [examBlankQuestion()] };
+    }
+
+    /** The items of a stored section, whatever version saved it: `items` as
+        is; a 1.10/1.11 `info` section's steps (or a 1.9.0 one's body and
+        tasks) as Checklist or Informational items; a `questions` section's
+        questions. */
+    function examSectionItems(sec) {
+      if (!sec || typeof sec !== 'object' || examIsSubmit(sec)) return [];
+      if (Array.isArray(sec.items)) return sec.items;
+      if (sec.type === 'info') {
+        const steps = Array.isArray(sec.steps)
+          ? sec.steps
+          : sec.body || (Array.isArray(sec.tasks) && sec.tasks.length)
+            ? [{ title: '', body: sec.body, tasks: sec.tasks }]
+            : [];
+        return steps.map((st) => {
+          const tasks = Array.isArray(st?.tasks) ? st.tasks.filter((t) => String(t ?? '').trim()) : [];
+          const step = { title: st?.title ?? '', body: st?.body ?? '' };
+          return tasks.length ? { type: 'checklist', ...step, tasks } : { type: 'info', ...step };
+        });
+      }
+      return Array.isArray(sec.questions) ? sec.questions : [];
+    }
+
     function examNormaliseSection(raw) {
       const s = raw && typeof raw === 'object' ? raw : {};
-      const type = examSectionType(s);
       const title = examStr(s.title, EXAM_LIMITS.sectionTitle);
-      if (type === 'submit') {
-        return { type, title, minutes: null, body: examStr(s.body, EXAM_LIMITS.body), review: examToBool(s.review) !== false, questions: [] };
-      }
-      if (type === 'info') {
-        return {
-          type,
-          title,
-          minutes: examMinutes(s.minutes),
-          steps: examInfoSteps(s).slice(0, EXAM_LIMITS.steps).map(examNormaliseStep),
-          questions: []
-        };
+      if (examIsSubmit(s)) {
+        return { type: 'submit', title, minutes: null, body: examStr(s.body, EXAM_LIMITS.body), review: examToBool(s.review) !== false };
       }
       return {
-        type,
         title,
         minutes: examMinutes(s.minutes),
-        questions: (Array.isArray(s.questions) ? s.questions : [])
-          .slice(0, EXAM_LIMITS.questionsPerSection)
-          .map(examNormaliseQuestion)
+        items: examSectionItems(s).slice(0, EXAM_LIMITS.itemsPerSection).map(examNormaliseItem)
       };
     }
 
@@ -1028,7 +1162,7 @@
       const sections = (Array.isArray(o.content) ? o.content : [])
         .slice(0, EXAM_LIMITS.sections)
         .map(examNormaliseSection);
-      const submit = sections.find((sec) => sec.type === 'submit') || examDefaultSubmitSection();
+      const submit = sections.find(examIsSubmit) || examDefaultSubmitSection();
       return {
         kind: 'exam',
         title: examStr(o.title, EXAM_LIMITS.title),
@@ -1037,34 +1171,62 @@
           .filter((v) => v && typeof v === 'object')
           .slice(0, EXAM_LIMITS.variables)
           .map((v) => ({ name: examStr(v.name).trim(), expression: examStr(v.expression).trim() })),
-        content: [...sections.filter((sec) => sec.type !== 'submit'), submit]
+        content: [...sections.filter((sec) => !examIsSubmit(sec)), submit]
       };
+    }
+
+    /** The items of a section with their position: `n` numbers the steps and
+        the questions separately from 1; questions carry their answer key. */
+    function examSectionLayout(sec, si) {
+      let steps = 0;
+      let qi = 0;
+      let ti = 0;
+      return examSectionItems(sec).map((item, ii) => {
+        if (examIsQuestion(item)) {
+          const at = { item, ii, n: qi + 1, qi, key: `${si}.${qi}` };
+          qi += 1;
+          return at;
+        }
+        steps += 1;
+        const tasks = item?.type === 'checklist' && Array.isArray(item.tasks) ? item.tasks : [];
+        return { item, ii, n: steps, tasks: tasks.map((text) => ({ key: `${si}.t${ti++}`, text })) };
+      });
+    }
+
+    /** "Section 2 · step 1" / "Section 2 · question 3". */
+    const examItemWhere = (si, at) => `Section ${si + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
+
+    /** The participant's pages of a section: each step starts a page and the
+        questions after it join that page. Lists of item indexes. */
+    function examSectionPages(items) {
+      const pages = [];
+      (items || []).forEach((item, ii) => {
+        if (!pages.length || !examIsQuestion(item)) pages.push([]);
+        pages[pages.length - 1].push(ii);
+      });
+      return pages;
     }
 
     /** Every text of an exam that may hold {{ PLACEHOLDERS }}, with its section and location. */
     function examTextFields(exam) {
       const out = [];
       (exam?.content || []).forEach((sec, si) => {
-        const at = `Section ${si + 1}`;
         const push = (where, text) => out.push({ si, where, text });
-        push(`${at} title`, sec.title);
-        const type = examSectionType(sec);
-        if (type === 'info') {
-          examInfoSteps(sec).forEach((st, sti) => {
-            const where = `${at} · step ${sti + 1}`;
-            push(`${where} title`, st.title);
-            push(where, st.body);
-            (st.tasks || []).forEach((t, ti) => push(`${where} checklist item ${ti + 1}`, t));
-          });
-        } else if (type === 'submit') {
-          push(at, sec.body);
+        push(`Section ${si + 1} title`, sec.title);
+        if (examIsSubmit(sec)) push(`Section ${si + 1}`, sec.body);
+        for (const at of examSectionLayout(sec, si)) {
+          const where = examItemWhere(si, at);
+          const it = at.item;
+          if ('qi' in at) {
+            push(where, it.prompt);
+            (it.options || []).forEach((o, oi) => push(`${where} option ${oi + 1}`, o));
+            (it.accepted || []).forEach((a) => push(`${where} accepted answers`, a));
+          } else {
+            push(`${where} title`, it.title);
+            push(where, it.body);
+            (it.tasks || []).forEach((t, ti) => push(`${where} checklist item ${ti + 1}`, t));
+          }
         }
-        (sec.questions || []).forEach((q, qi) => {
-          const where = `${at} · question ${qi + 1}`;
-          push(where, q.prompt);
-          (q.options || []).forEach((o, oi) => push(`${where} option ${oi + 1}`, o));
-          (q.accepted || []).forEach((a) => push(`${where} accepted answers`, a));
-        });
       });
       return out;
     }
@@ -1072,10 +1234,12 @@
     /** Questions that save their answer as a variable, in reading order. */
     function examCaptures(exam) {
       const out = [];
-      (exam?.content || []).forEach((sec, si) =>
-        (sec.questions || []).forEach((q, qi) => {
-          if (q.capture) out.push({ name: q.capture, si, qi, where: `Section ${si + 1} · question ${qi + 1}` });
-        }));
+      (exam?.content || []).forEach((sec, si) => {
+        for (const at of examSectionLayout(sec, si)) {
+          if (!('qi' in at) || !at.item.capture) continue;
+          out.push({ name: at.item.capture, si, key: at.key, type: at.item.type, where: examItemWhere(si, at) });
+        }
+      });
       return out;
     }
 
@@ -1103,8 +1267,8 @@
       const reserved = new Set([...EXAM_BUILTIN_PLACEHOLDERS, ...EXAM_BUILTIN_IDENTIFIERS]);
       const variables = new Set((exam?.variables || []).map((v) => v.name));
       const saved = new Map();
-      for (const { name, si, qi, where } of examCaptures(exam)) {
-        if (exam.content[si].questions[qi].type !== 'short') {
+      for (const { name, type, where } of examCaptures(exam)) {
+        if (type !== 'short') {
           errors.push(`${where}: only a short answer can be saved as a variable`);
         } else if (!EXAM_IDENT_RE.test(name)) {
           errors.push(`${where}: "${name}" is not a valid variable name`);
@@ -1120,15 +1284,8 @@
       }
     }
 
-    function examBlankQuestion(type = 'single') {
-      const base = { type, prompt: '', points: 1, options: [], correct: null, accepted: [] };
-      if (type === 'single') return { ...base, options: ['', ''], correct: 0 };
-      if (type === 'multiple') return { ...base, options: ['', ''], correct: [] };
-      if (type === 'truefalse') return { ...base, correct: true };
-      return base;
-    }
-
-    const examIsManual = (q) => q.type === 'long' || (q.type === 'short' && !(q.accepted || []).length);
+    const examIsManual = (q) =>
+      q.type === 'long' || (q.type === 'short' && q.match !== 'pattern' && !(q.accepted || []).length);
 
     /** Per-question authoring errors, exactly as vLabs reports them on save. */
     function examQuestionErrors(q, at) {
@@ -1150,40 +1307,38 @@
       if (q.type === 'truefalse' && q.correct === null) {
         errors.push(`${at} needs the correct answer (true or false)`);
       }
+      if (q.type === 'short' && q.match === 'pattern') {
+        try {
+          examCompileMask(q.pattern);
+        } catch (err) {
+          errors.push(`${at} pattern: ${err.message}`);
+        }
+      }
       return errors;
+    }
+
+    /** Per-step authoring errors. */
+    function examStepErrors(it, at) {
+      if (it.type === 'info' && !it.body.trim()) return [`${at} needs instructions`];
+      if (it.type === 'checklist' && !it.tasks.length) return [`${at} needs at least one checklist item`];
+      return [];
     }
 
     /** Whole-exam authoring errors (normalised exam), in vLabs' wording. */
     function examErrorsList(exam) {
       const errors = [];
       if (!exam.title.trim()) errors.push('Title is required');
-      const parts = exam.content.filter((sec) => examSectionType(sec) !== 'submit');
-      if (!parts.length) errors.push('At least one section is required');
-      let count = 0;
+      if (!exam.content.some((sec) => !examIsSubmit(sec))) errors.push('At least one section is required');
       exam.content.forEach((sec, si) => {
         if (!sec.title.trim()) errors.push(`Section ${si + 1} needs a title`);
-        const type = examSectionType(sec);
-        if (type === 'submit') return;
-        if (type === 'info') {
-          const steps = examInfoSteps(sec);
-          if (!steps.length) errors.push(`Section ${si + 1} needs instructions or a checklist`);
-          steps.forEach((st, sti) => {
-            if (st.body.trim() || st.tasks.length) return;
-            errors.push(steps.length === 1
-              ? `Section ${si + 1} needs instructions or a checklist`
-              : `Section ${si + 1} · step ${sti + 1} needs instructions or a checklist`);
-          });
-          return;
+        if (examIsSubmit(sec)) return;
+        const layout = examSectionLayout(sec, si);
+        if (!layout.length) errors.push(`Section ${si + 1} has no questions or steps`);
+        for (const at of layout) {
+          const where = examItemWhere(si, at);
+          errors.push(...('qi' in at ? examQuestionErrors(at.item, where) : examStepErrors(at.item, where)));
         }
-        if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
-        sec.questions.forEach((q, qi) => {
-          count += 1;
-          errors.push(...examQuestionErrors(q, `Section ${si + 1} · question ${qi + 1}`));
-        });
       });
-      if (parts.length && !count && !parts.some((sec) => examSectionType(sec) === 'info')) {
-        errors.push('The exam has no questions');
-      }
       examCaptureErrors(exam, errors);
       for (const { name, where, early } of examUnknownPlaceholders(exam)) {
         errors.push(early
@@ -1203,23 +1358,32 @@
         return picked.length === q.correct.length && picked.every((i, k) => i === q.correct[k]);
       }
       if (q.type === 'short') {
-        if (!q.accepted.length) return null;
+        if (q.match === 'pattern') return examPatternValue(q, v) !== null;
         const want = examNormaliseText(v);
         return q.accepted.some((a) => examNormaliseText(a) === want);
       }
       return null;
     }
 
+    /** The value a question saves for its capture: a pattern answer in the
+        mask's canonical form, any other answer trimmed. */
+    function examCapturedValue(q, answer) {
+      if (typeof answer !== 'string') return '';
+      if (q?.match === 'pattern') return examPatternValue(q, answer) ?? answer.trim();
+      return answer.trim();
+    }
+
     // ---- Markdown (same format as vLabs' shared/exam-format.js) ----------
     const EXAM_OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
-    const EXAM_DIRECTIVE_RE = /^>\s*(points|answer|accept|capture)\s*:\s*(.*)$/i;
+    const EXAM_DIRECTIVE_RE = /^>\s*(points|answer|accept|pattern|placeholder|capture)\s*:\s*(.*)$/i;
     const EXAM_FENCE_RE = /^\s*(```|~~~)/;
-    const EXAM_LAB_STEP_TYPES = new Set(['desk', 'computer', 'info']);
+    const EXAM_LAB_STEP_TYPES = new Set(['desk', 'computer']);
 
     const examSplitPipes = (s) =>
       String(s).split(/(?<!\\)\|/).map((p) => p.replace(/\\\|/g, '|').trim()).filter(Boolean);
 
-    /** Exam (not lab) Markdown: `kind: exam`, or exam question types. */
+    /** Exam (not lab) Markdown: `kind: exam`, a tagged section, or an exam
+        question or checklist type. `[info]` is in both formats, so it decides nothing. */
     function looksLikeExamMarkdown(text) {
       const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
       let i = 0;
@@ -1239,7 +1403,7 @@
         if (!m) continue;
         const t = m[1].trim().toLowerCase();
         if (EXAM_LAB_STEP_TYPES.has(t)) return false;
-        if (EXAM_TYPE_ALIASES[t]) return true;
+        if (EXAM_TYPE_ALIASES[t] || EXAM_STEP_ALIASES[t] === 'checklist') return true;
       }
       return false;
     }
@@ -1276,32 +1440,33 @@
         i += 1;
       }
       let section = null;
-      let q = null;
-      let step = null;
+      let item = null;
       let body = [];
-      let heading = '';
       let inFence = false;
       const flush = () => {
-        if (section?.type === 'info') {
-          const text = body.join('\n').trim();
-          body = [];
-          if (step && (step.explicit || text || step.tasks.length)) {
-            section.steps.push({ title: step.title, body: text, tasks: step.tasks });
-          }
-          step = null;
-          return;
-        }
-        if (section?.type === 'submit') {
-          section.body = body.join('\n').trim();
-          body = [];
-          return;
-        }
-        if (!q) return;
-        q.prompt = [heading.trim(), body.join('\n').trim()].filter(Boolean).join('\n\n');
-        section.questions.push(q);
-        q = null;
+        const text = body.join('\n').trim();
         body = [];
-        heading = '';
+        if (section?.type === 'submit') {
+          section.body = text;
+          return;
+        }
+        if (!item) {
+          if (text && section) section.items.push({ type: 'info', title: '', body: text });
+          return;
+        }
+        if (item.type === 'step') {
+          const { title, tasks, explicit } = item;
+          if (explicit || text || tasks.length) {
+            section.items.push(tasks.length || item.checklist
+              ? { type: 'checklist', title, body: text, tasks }
+              : { type: 'info', title, body: text });
+          }
+        } else {
+          item.prompt = [item.heading.trim(), text].filter(Boolean).join('\n\n');
+          delete item.heading;
+          section.items.push(item);
+        }
+        item = null;
       };
       for (; i < lines.length; i += 1) {
         const line = lines[i];
@@ -1310,77 +1475,78 @@
           flush();
           const rest = line.replace(/^#\s+/, '').trim();
           const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
-          const type = tag ? EXAM_SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
-          section = { type: type || 'questions', title: type ? tag[2].trim() : rest, questions: [], steps: [] };
-          if (section.type === 'info') step = { title: '', tasks: [], explicit: false };
+          const kind = tag ? EXAM_SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
+          const title = kind ? tag[2].trim() : rest;
+          section = kind === 'submit'
+            ? { type: 'submit', title, body: '' }
+            : { title, items: [], legacy: kind === 'info' };
           exam.content.push(section);
+          // A pre-1.12 info section starts with an untitled step.
+          item = section.legacy ? { type: 'step', title: '', tasks: [], explicit: false } : null;
           continue;
         }
-        if (section && section.type !== 'questions') {
-          if (!inFence) {
-            const qm = /^##\s+\[([^\]]+)\]/.exec(line);
-            if (qm && EXAM_TYPE_ALIASES[qm[1].trim().toLowerCase()]) {
-              throw new Error(`Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`);
-            }
-            if (section.type === 'info' && /^##\s+/.test(line)) {
-              flush();
-              const rest = line.replace(/^##\s+/, '').trim();
-              const sm = /^\[step\]\s*(.*)$/i.exec(rest);
-              step = { title: sm ? sm[1].trim() : rest, tasks: [], explicit: true };
-              continue;
-            }
-            const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
-            if (mm) {
-              if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
-              else section.review = mm[2].trim();
-              continue;
-            }
-            const task = EXAM_OPTION_RE.exec(line);
-            if (task && section.type === 'info') {
-              step.tasks.push(task[2].trim());
-              continue;
-            }
-          }
-          body.push(line);
+        const setting = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
+        if (!inFence && setting && section && (!item || item.type === 'step')) {
+          if (setting[1].toLowerCase() === 'minutes') section.minutes = setting[2].trim();
+          else if (section.type === 'submit') section.review = setting[2].trim();
           continue;
         }
         if (!inFence && /^##\s+/.test(line)) {
+          const rest = line.replace(/^##\s+/, '').trim();
+          const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
+          const raw = m ? m[1].trim().toLowerCase() : '';
+          if (section?.type === 'submit') {
+            if (EXAM_TYPE_ALIASES[raw] || EXAM_STEP_ALIASES[raw]) {
+              throw new Error(`The submit section cannot hold questions or steps, line ${i + 1}`);
+            }
+            body.push(line);
+            continue;
+          }
           flush();
           if (!section) {
-            section = { type: 'questions', title: 'Section 1', questions: [] };
+            section = { title: 'Section 1', items: [] };
             exam.content.push(section);
           }
-          const rest = line.replace(/^##\s+/, '');
-          const m = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
-          const rawType = m ? m[1].trim().toLowerCase() : 'single';
-          const type = EXAM_TYPE_ALIASES[rawType];
+          if (EXAM_STEP_ALIASES[raw] || (section.legacy && !EXAM_TYPE_ALIASES[raw])) {
+            item = {
+              type: 'step',
+              title: EXAM_STEP_ALIASES[raw] ? m[2].trim() : rest,
+              tasks: [],
+              explicit: true,
+              checklist: EXAM_STEP_ALIASES[raw] === 'checklist'
+            };
+            continue;
+          }
+          const type = m ? EXAM_TYPE_ALIASES[raw] : 'single';
           if (!type) throw new Error(`Unknown question type "[${m[1]}]" on line ${i + 1}`);
-          q = { type, points: 1, options: [], correct: type === 'multiple' ? [] : null, accepted: [] };
-          heading = m ? m[2] : rest;
+          item = { type, heading: m ? m[2] : rest, points: 1, options: [], correct: type === 'multiple' ? [] : null, accepted: [] };
           continue;
         }
-        if (!q) {
-          const mm = /^>\s*minutes\s*:\s*(.*)$/i.exec(line);
-          if (!inFence && mm && section) section.minutes = mm[1].trim();
-          continue;
-        }
-        if (!inFence) {
+        if (!inFence && item?.type === 'step') {
+          const task = EXAM_OPTION_RE.exec(line);
+          if (task) {
+            item.tasks.push(task[2].trim());
+            continue;
+          }
+        } else if (!inFence && item) {
           const opt = EXAM_OPTION_RE.exec(line);
-          if (opt && EXAM_HAS_OPTIONS(q.type)) {
-            q.options.push(opt[2].trim());
+          if (opt && EXAM_HAS_OPTIONS(item.type)) {
+            item.options.push(opt[2].trim());
             if (opt[1].toLowerCase() === 'x') {
-              if (q.type === 'multiple') q.correct.push(q.options.length - 1);
-              else q.correct = q.options.length - 1;
+              if (item.type === 'multiple') item.correct.push(item.options.length - 1);
+              else item.correct = item.options.length - 1;
             }
             continue;
           }
           const d = EXAM_DIRECTIVE_RE.exec(line);
           if (d) {
             const key = d[1].toLowerCase();
-            if (key === 'points') q.points = Number(d[2]);
-            else if (key === 'answer') q.correct = d[2].trim();
-            else if (key === 'accept') q.accepted.push(...examSplitPipes(d[2]));
-            else if (key === 'capture') q.capture = d[2].trim();
+            const value = d[2].trim();
+            if (key === 'points') item.points = Number(value);
+            else if (key === 'answer') item.correct = value;
+            else if (key === 'accept') item.accepted.push(...examSplitPipes(value));
+            else if (key === 'pattern') Object.assign(item, { match: 'pattern', pattern: value });
+            else item[key] = value;
             continue;
           }
         }
@@ -1399,43 +1565,42 @@
       if (vars.length) out.push('variables:', ...vars.map((v) => `  ${v.name} = ${v.expression}`));
       out.push('---', '');
       for (const sec of exam.content) {
-        out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
-        if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
-        if (sec.type === 'submit' && !sec.review) out.push('> review: false');
-        out.push('');
-        if (sec.type === 'info') {
-          sec.steps.forEach((st, sti) => {
-            const empty = !st.body.trim() && !st.tasks.length;
-            if (st.title || sti > 0 || empty) {
-              const plain = st.title && !st.title.startsWith('[');
-              out.push(`## ${plain ? st.title : `[step] ${st.title}`.trim()}`, '');
-            }
-            if (st.body.trim()) out.push(st.body.trim(), '');
-            if (st.tasks.length) out.push(...st.tasks.map((t) => `- [ ] ${t}`), '');
-          });
-          continue;
-        }
         if (sec.type === 'submit') {
+          out.push(`# [submit] ${sec.title}`);
+          if (!sec.review) out.push('> review: false');
+          out.push('');
           if (sec.body.trim()) out.push(sec.body.trim(), '');
           continue;
         }
-        for (const q of sec.questions) {
-          const prompt = q.prompt.trim();
+        out.push(`# ${sec.title}`);
+        if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
+        out.push('');
+        for (const it of sec.items) {
+          if (it.type === 'info' || it.type === 'checklist') {
+            out.push(`## [${it.type}]${it.title ? ` ${it.title}` : ''}`);
+            if (it.body.trim()) out.push(it.body.trim());
+            if (it.type === 'checklist') out.push(...it.tasks.map((t) => `- [ ] ${t}`));
+            out.push('');
+            continue;
+          }
+          const prompt = it.prompt.trim();
           const oneLine = prompt && !prompt.includes('\n') && !prompt.startsWith('#');
-          out.push(`## [${q.type}]${oneLine ? ` ${prompt}` : ''}`);
+          out.push(`## [${it.type}]${oneLine ? ` ${prompt}` : ''}`);
           if (!oneLine && prompt) out.push(prompt);
-          if (EXAM_HAS_OPTIONS(q.type)) {
-            q.options.forEach((o, oi) => {
-              const on = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+          if (EXAM_HAS_OPTIONS(it.type)) {
+            it.options.forEach((o, oi) => {
+              const on = it.type === 'multiple' ? it.correct.includes(oi) : it.correct === oi;
               out.push(`- [${on ? 'x' : ' '}] ${o}`);
             });
           }
-          if (q.type === 'truefalse') out.push(`> answer: ${q.correct ? 'true' : 'false'}`);
-          if (q.type === 'short' && q.accepted.length) {
-            out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
+          if (it.type === 'truefalse') out.push(`> answer: ${it.correct ? 'true' : 'false'}`);
+          if (it.type === 'short' && it.accepted.length) {
+            out.push(`> accept: ${it.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
           }
-          if (q.capture) out.push(`> capture: ${q.capture}`);
-          if (q.points !== 1) out.push(`> points: ${q.points}`);
+          if (it.match === 'pattern') out.push(`> pattern: ${it.pattern}`);
+          if (it.placeholder) out.push(`> placeholder: ${it.placeholder}`);
+          if (it.capture) out.push(`> capture: ${it.capture}`);
+          if (it.points !== 1) out.push(`> points: ${it.points}`);
           out.push('');
         }
       }
@@ -2804,7 +2969,7 @@
     function toggleAllSections(collapse) {
       templateData.content.forEach(sec => {
         sec.collapsed = collapse;
-        (sec.steps || sec.questions || []).forEach(st => { st.collapsed = collapse; });
+        (sec.items || sec.steps || []).forEach(st => { st.collapsed = collapse; });
       });
       renderBuilder();
     }
@@ -2846,7 +3011,7 @@
     function deleteSection(sIdx) {
       if (isExamMode()) {
         // The submit section stays, and so does at least one part before it.
-        if (examSectionType(templateData.content[sIdx]) === 'submit') return;
+        if (examIsSubmit(templateData.content[sIdx])) return;
         if (templateData.content.length <= 2) {
           showToast("At least one part is required.", "error");
           return;
@@ -2877,7 +3042,7 @@
       const target = sIdx + dir;
       if (target < 0 || target >= templateData.content.length) return;
       // An exam's submit section is always last.
-      if (isExamMode() && [sIdx, target].some(i => examSectionType(templateData.content[i]) === 'submit')) return;
+      if (isExamMode() && [sIdx, target].some(i => examIsSubmit(templateData.content[i]))) return;
       const [sec] = templateData.content.splice(sIdx, 1);
       templateData.content.splice(target, 0, sec);
       pushHistorySnapshot(true);
@@ -2895,7 +3060,7 @@
       scheduleAutoSave();
     }
     function duplicateSection(sIdx) {
-      if (isExamMode() && examSectionType(templateData.content[sIdx]) === 'submit') return;
+      if (isExamMode() && examIsSubmit(templateData.content[sIdx])) return;
       const clone = JSON.parse(JSON.stringify(templateData.content[sIdx]));
       clone.title += " (Copy)";
       templateData.content.splice(sIdx + 1, 0, clone);
@@ -4267,7 +4432,7 @@
               <div class="flex items-center space-x-2.5">
                 <i class="ph-fill ph-check-circle text-xl text-emerald-500"></i>
                 <div>
-                  <div class="font-bold">All vLabs 1.7.0 Validation Rules Passed</div>
+                  <div class="font-bold">All vLabs 1.12.0 Validation Rules Passed</div>
                   <div class="text-[11px] opacity-80">${escapeHtml(okDetail)}</div>
                 </div>
               </div>
@@ -5208,11 +5373,16 @@
       exam: `---
 kind: exam
 title: Network Fundamentals — Quiz (Sample)
-description: A short sample exam showing every question type.
+description: A short sample exam showing every question and step type.
+variables:
+  SUBNET = '10.' + seat + '.0.0/24'
 ---
 
 # Part 1 · Addressing
 > minutes: 5
+
+## [info] Your bench
+You are on seat {{ SEAT_ID }}. Your subnet is **{{ SUBNET }}**.
 
 ## [single] Which address is a valid private IPv4 address?
 - [ ] 8.8.8.8
@@ -5229,32 +5399,36 @@ description: A short sample exam showing every question type.
 ## [truefalse] A /24 network has 254 usable host addresses.
 > answer: true
 
-# Part 2 · Short answers
+# Part 2 · Bench check
+> minutes: 15
+
+## [checklist] Cable the bench
+Cable your switch to the router as shown on the bench card. Tick each item
+once it is done.
+- [ ] Switch port Gi0/1 is cabled to the router
+- [ ] The link light is green on both ends
+
+## [short] Read the serial number off the back of your switch.
+> pattern: XXXX.XXXX.XXXX
+> placeholder: e.g. ABCD.1234.EFGH
+> capture: SERIAL
+
+## [checklist] Instructor check
+Raise your hand so your instructor can check your bench.
+- [ ] My instructor has checked my bench
+
+# Part 3 · Short answers
 > minutes: 10
 
 ## [short] What TCP port does HTTPS use by default?
 > accept: 443 | tcp/443
 
+## [short] Type the serial number of your switch again.
+> accept: {{ SERIAL }}
+
 ## [long]
 In two or three sentences, explain why networks are split into VLANs.
 > points: 5
-
-# [info] Part 3 · Bench check
-> minutes: 10
-
-## Cable the bench
-
-Cable your switch to the router as shown on the bench card. Tick each item
-once it is done.
-
-- [ ] Switch port Gi0/1 is cabled to the router
-- [ ] The link light is green on both ends
-
-## Instructor check
-
-Raise your hand so your instructor can check your bench.
-
-- [ ] My instructor has checked my bench
 
 # [submit] Review and submit
 
@@ -5641,7 +5815,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if (isExamMode()) {
         // Answers saved by short questions, usable from the following section on.
         examCaptures(templateData).forEach(c => {
-          captures.push({ name: c.name, sIdx: c.si, stIdx: c.qi, isReachable: maxSIdx === null || c.si < maxSIdx });
+          captures.push({ name: c.name, sIdx: c.si, where: c.where, isReachable: maxSIdx === null || c.si < maxSIdx });
         });
       } else templateData.content.forEach((s, sIdx) => (s.steps || []).forEach((st, stIdx) => {
         if (st.type !== 'info' && st.checkpoint && st.checkpoint.capture) {
@@ -5650,7 +5824,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         }
       }));
       captureList.innerHTML = captures.length ? captures.map(c => `
-        <button onclick="handleTokenSelect('${escapeHtml(c.name)}')" class="p-2 rounded-lg ${c.isReachable ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/50 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-surface-850 border-slate-200 dark:border-slate-800 text-slate-400'} border font-mono text-left font-semibold truncate" title="${isExamMode() ? `Saved by S${c.sIdx + 1}·Q${c.stIdx + 1}${c.isReachable ? '' : ' (only available in later sections)'}` : c.isReachable ? `Captured at S${c.sIdx + 1}·St${c.stIdx + 1}` : `Captured at S${c.sIdx + 1}·St${c.stIdx + 1} (Not yet available at this step)`}">
+        <button onclick="handleTokenSelect('${escapeHtml(c.name)}')" class="p-2 rounded-lg ${c.isReachable ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-100/50 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-surface-850 border-slate-200 dark:border-slate-800 text-slate-400'} border font-mono text-left font-semibold truncate" title="${isExamMode() ? `Saved by ${c.where}${c.isReachable ? '' : ' (only available in later sections)'}` : c.isReachable ? `Captured at S${c.sIdx + 1}·St${c.stIdx + 1}` : `Captured at S${c.sIdx + 1}·St${c.stIdx + 1} (Not yet available at this step)`}">
           {{ ${escapeHtml(c.name)} }} ${!c.isReachable ? '⚠️' : ''}
         </button>
       `).join('') : `<span class="text-slate-400 italic col-span-2">${isExamMode() ? 'No short answers are saved as variables' : 'No captures defined'}</span>`;
@@ -5850,7 +6024,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           const inspected = parseMarkdown(loadedImportRawContent);
           const secCount = inspected.content ? inspected.content.length : 0;
           let stepCount = 0;
-          (inspected.content || []).forEach(s => stepCount += (s.steps || s.questions || []).length);
+          (inspected.content || []).forEach(s => stepCount += (s.items || s.steps || []).length);
 
           if (detailsEl) {
             detailsEl.textContent = `${sizeKb} KB · "${inspected.title || 'Untitled'}" (${secCount} sections, ${stepCount} steps, ${extractedImages.length} image asset(s))`;
@@ -5881,7 +6055,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           const inspected = parseMarkdown(loadedImportRawContent);
           const secCount = inspected.content ? inspected.content.length : 0;
           let stepCount = 0;
-          (inspected.content || []).forEach(s => stepCount += (s.steps || s.questions || []).length);
+          (inspected.content || []).forEach(s => stepCount += (s.items || s.steps || []).length);
           if (detailsEl) detailsEl.textContent = `${sizeKb} KB · "${inspected.title || 'Untitled'}" (${secCount} sections, ${stepCount} steps)`;
           if (statusEl) statusEl.textContent = `Ready: ${secCount} sections, ${stepCount} steps detected`;
         } catch (_) {
@@ -6136,11 +6310,10 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         variables: [],
         content: [
           {
-            type: 'questions',
             title: 'Part 1',
             minutes: null,
             collapsed: false,
-            questions: [{ ...examBlankQuestion('single'), prompt: 'Which option is correct?', options: ['Option A', 'Option B'], collapsed: false }]
+            items: [{ ...examBlankQuestion('single'), prompt: 'Which option is correct?', options: ['Option A', 'Option B'], collapsed: false }]
           },
           { ...examDefaultSubmitSection(), collapsed: false }
         ],
@@ -6156,11 +6329,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         title: e.title,
         description: e.description,
         variables: e.variables,
-        content: e.content.map(sec => ({
-          ...sec,
-          collapsed: false,
-          questions: sec.questions.map(q => ({ ...q, collapsed: false }))
-        })),
+        content: e.content.map(sec => examIsSubmit(sec)
+          ? { ...sec, collapsed: false }
+          : { ...sec, collapsed: false, items: sec.items.map(it => ({ ...it, collapsed: false })) }),
         images: (templateData && templateData.images) || []
       };
     }
@@ -6211,57 +6382,74 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const addLabel = document.getElementById('addSectionLabel');
       if (addLabel) addLabel.textContent = exam ? 'Add Part' : 'Add Section';
       const search = document.getElementById('globalStepSearch');
-      if (search) search.placeholder = exam ? 'Filter questions...' : 'Filter steps, tokens...';
+      if (search) search.placeholder = exam ? 'Filter questions and steps...' : 'Filter steps, tokens...';
       const outlineFilter = document.getElementById('outlineQuickFilter');
-      if (outlineFilter) outlineFilter.placeholder = exam ? 'Jump to question...' : 'Jump to step...';
+      if (outlineFilter) outlineFilter.placeholder = exam ? 'Jump to question or step...' : 'Jump to step...';
       const title = document.getElementById('templateTitle');
       if (title) title.placeholder = exam ? 'e.g. Network Fundamentals — Unit Test' : 'e.g. Switch & Host Addressing — Bench Lab';
       if (exam && currentView === 'dependencies') switchView('builder');
     }
 
-    const EXAM_SECTION_BADGE = {
-      questions: 'bg-slate-100 text-slate-600 dark:bg-white/[0.06] dark:text-slate-300',
-      info: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-      submit: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+    const EXAM_TYPE_DOT = {
+      info: 'bg-slate-400', checklist: 'bg-amber-500',
+      single: 'bg-violet-500', multiple: 'bg-fuchsia-500', truefalse: 'bg-sky-500', short: 'bg-emerald-500', long: 'bg-rose-400'
     };
-    const EXAM_TYPE_DOT = { single: 'bg-violet-500', multiple: 'bg-fuchsia-500', truefalse: 'bg-sky-500', short: 'bg-emerald-500', long: 'bg-amber-500' };
+    const EXAM_INPUT_CLS = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
     const examLetter = (i) => String.fromCharCode(65 + i);
     const examGradingBadge = (q) => examIsManual(q)
       ? '<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">marked by hand</span>'
       : '<span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">auto-graded</span>';
-    const examAcceptedNote = (q) => q.accepted.length
-      ? 'Graded automatically; case and spacing are ignored.'
-      : 'No accepted answers: marked by hand in the session monitor.';
+    function examAcceptedNote(q) {
+      if (q.match === 'pattern') {
+        const example = examMaskExample(q.pattern || '');
+        return example
+          ? `Graded automatically: any answer that fits, e.g. ${example}. Punctuation may be left out.`
+          : 'Write a pattern: 9 a digit, A a letter, X a letter or digit; other letters and digits must match as written.';
+      }
+      return q.accepted.length
+        ? 'Graded automatically; case and spacing are ignored.'
+        : 'No accepted answers: marked by hand in the session monitor.';
+    }
     const examAcceptedText = (q) => (q.accepted || []).map(a => a.replace(/\|/g, '\\|')).join(' | ');
-    const examTotalPoints = () => templateData.content.reduce((n, s) => n + (s.questions || []).reduce((m, q) => m + (Number(q.points) || 0), 0), 0);
-    const examQuestionCount = () => templateData.content.reduce((n, s) => n + (s.questions || []).length, 0);
+    const examQuestions = () => templateData.content.flatMap(s => (s.items || []).filter(examIsQuestion));
+    const examTotalPoints = () => examQuestions().reduce((n, q) => n + (Number(q.points) || 0), 0);
+    const examQuestionCount = () => examQuestions().length;
+
+    /** "Step 2" / "Q3": steps and questions are numbered separately in each
+        part, as in vLabs' messages ("Section 1 · question 3"). */
+    function examItemLabels(items) {
+      let steps = 0;
+      let questions = 0;
+      return (items || []).map(it => (examIsQuestion(it) ? `Q${(questions += 1)}` : `Step ${(steps += 1)}`));
+    }
 
     function examSectionHeaderHtml(section, sIdx) {
       const isCollapsed = Boolean(section.collapsed);
-      const type = examSectionType(section);
-      const n = (section.questions || []).length;
+      const submit = examIsSubmit(section);
+      const items = section.items || [];
+      const nq = items.filter(examIsQuestion).length;
+      const ns = items.length - nq;
       const last = templateData.content.length - 1;
       const btn = (action, icon, title, disabled, danger) => `
         <button data-action="${action}" data-sec-idx="${sIdx}" ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06]'} rounded-md transition disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs"></i></button>`;
-      const count = type === 'questions'
-        ? `${n} ${n === 1 ? 'question' : 'questions'}`
-        : type === 'info' ? `${(section.steps || []).length} ${(section.steps || []).length === 1 ? 'step' : 'steps'}` : 'last step';
+      const count = submit
+        ? 'last step'
+        : [nq ? `${nq} ${nq === 1 ? 'question' : 'questions'}` : '', ns ? `${ns} ${ns === 1 ? 'step' : 'steps'}` : ''].filter(Boolean).join(' · ') || 'empty';
       return `
         <div class="px-4 py-3 border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between bg-slate-50/50 dark:bg-surface-850/40">
           <div class="flex items-center space-x-2.5 flex-1 mr-3">
             <button data-action="toggle-section" data-sec-idx="${sIdx}" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs p-1 rounded-md hover:bg-slate-200/50 dark:hover:bg-white/[0.06] transition" title="Toggle Part">
               <i class="ph ${isCollapsed ? 'ph-caret-right' : 'ph-caret-down'}"></i>
             </button>
-            <span class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${type === 'submit' ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
-            <input type="text" value="${escapeHtml(section.title || '')}" placeholder="${type === 'submit' ? 'Review and submit' : 'Part title...'}"
+            <span class="text-[11px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${submit ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
+            <input type="text" value="${escapeHtml(section.title || '')}" placeholder="${submit ? 'Review and submit' : 'Part title...'}"
               class="text-sm font-semibold tracking-tight text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 w-full transition"
               data-action="update-sec-title" data-sec-idx="${sIdx}">
-            <span class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${EXAM_SECTION_BADGE[type]}">${EXAM_SECTION_TYPES[type]}</span>
-            ${type === 'submit' ? '' : sectionTimeInputsHtml(section, sIdx, 'part')}
+            ${submit ? '<span class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">Submit</span>' : sectionTimeInputsHtml(section, sIdx, 'part')}
           </div>
           <div class="flex items-center space-x-1 shrink-0">
             <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 mr-1.5 hidden sm:inline">${count}</span>
-            ${type === 'submit' ? '' : [
+            ${submit ? '' : [
               btn('move-sec-up', 'ph-arrow-up', 'Move Part Up', sIdx === 0),
               btn('move-sec-down', 'ph-arrow-down', 'Move Part Down', sIdx >= last - 1),
               btn('duplicate-section', 'ph-copy', 'Duplicate Part', false),
@@ -6271,9 +6459,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         </div>`;
     }
 
-    function examAnswerEditorHtml(q, sIdx, qIdx) {
-      const at = `data-sec-idx="${sIdx}" data-q-idx="${qIdx}"`;
-      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
+    /** Options / correct answer / accepted answers or pattern of a question. */
+    function examAnswerEditorHtml(q, sIdx, ii) {
+      const at = `data-sec-idx="${sIdx}" data-item-idx="${ii}"`;
       if (q.type === 'single' || q.type === 'multiple') {
         const multi = q.type === 'multiple';
         return `
@@ -6283,11 +6471,11 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
               const on = multi ? q.correct.includes(oi) : q.correct === oi;
               return `
                 <div class="flex items-center gap-2">
-                  <input type="${multi ? 'checkbox' : 'radio'}" name="q-correct-${sIdx}-${qIdx}" ${on ? 'checked' : ''} ${at} data-opt-idx="${oi}" data-action="exam-q-correct"
+                  <input type="${multi ? 'checkbox' : 'radio'}" name="q-correct-${sIdx}-${ii}" ${on ? 'checked' : ''} ${at} data-opt-idx="${oi}" data-action="exam-q-correct"
                     class="shrink-0 text-emerald-600 focus:ring-0" title="Correct answer" aria-label="Option ${examLetter(oi)} is correct">
                   <span class="text-[11px] font-mono font-semibold w-4 text-slate-400">${examLetter(oi)}</span>
                   <input type="text" value="${escapeHtml(o)}" placeholder="Option ${examLetter(oi)}" ${at} data-opt-idx="${oi}" data-action="exam-q-option"
-                    class="${inputCls} ${on ? '!border-emerald-400 dark:!border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-500/[0.06]' : ''}">
+                    class="${EXAM_INPUT_CLS} ${on ? '!border-emerald-400 dark:!border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-500/[0.06]' : ''}">
                   <button data-action="exam-q-del-option" ${at} data-opt-idx="${oi}" class="p-1 text-slate-400 hover:text-rose-600 rounded disabled:opacity-30" ${q.options.length <= 2 ? 'disabled' : ''} title="Remove option">
                     <i class="ph ph-x text-xs pointer-events-none"></i>
                   </button>
@@ -6301,75 +6489,129 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         return `
           <div class="flex items-center gap-4 text-xs text-slate-700 dark:text-slate-200">
             <span class="text-[10px] font-medium text-slate-400">Correct answer</span>
-            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${qIdx}" value="true" ${q.correct === true ? 'checked' : ''} ${at} data-action="exam-q-tf"> True</label>
-            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${qIdx}" value="false" ${q.correct === false ? 'checked' : ''} ${at} data-action="exam-q-tf"> False</label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${ii}" value="true" ${q.correct === true ? 'checked' : ''} ${at} data-action="exam-q-tf"> True</label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="radio" name="q-tf-${sIdx}-${ii}" value="false" ${q.correct === false ? 'checked' : ''} ${at} data-action="exam-q-tf"> False</label>
           </div>`;
       }
       if (q.type === 'short') {
+        const pattern = q.match === 'pattern';
         return `
-          <div>
-            <label class="block text-[10px] font-medium text-slate-400 mb-1">Accepted answers (separate with <code class="font-mono">|</code>, write <code class="font-mono">\\|</code> for a literal pipe)</label>
-            <input type="text" value="${escapeHtml(examAcceptedText(q))}" placeholder="e.g. 443 | tcp/443" ${at} data-action="exam-q-accepted" class="${inputCls} font-mono">
-            <p id="q-accepted-note-${sIdx}-${qIdx}" class="mt-1 text-[10px] text-slate-400">${examAcceptedNote(q)}</p>
-            <label class="block text-[10px] font-medium text-slate-400 mt-2 mb-1">Save the answer as a variable (optional): later sections can show it, and accept it, as <code class="font-mono">{{ NAME }}</code></label>
-            <input type="text" value="${escapeHtml(q.capture || '')}" placeholder="e.g. ROUTER_IP" maxlength="${EXAM_LIMITS.captureName}" ${at} data-action="exam-q-capture" class="${inputCls} font-mono sm:w-60">
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-[10px] font-medium text-slate-400">Check the answer by</label>
+              <select data-action="exam-q-match" ${at} class="text-[11px] font-medium px-2 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.08] bg-slate-50 dark:bg-surface-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 cursor-pointer">
+                <option value="exact" ${pattern ? '' : 'selected'}>Exact answers</option>
+                <option value="pattern" ${pattern ? 'selected' : ''}>Pattern (format only)</option>
+              </select>
+            </div>
+            ${pattern ? `
+              <div>
+                <label class="block text-[10px] font-medium text-slate-400 mb-1">Pattern, as in a lab checkpoint: <code class="font-mono">9</code> a digit, <code class="font-mono">A</code> a letter, <code class="font-mono">X</code> a letter or digit</label>
+                <input type="text" value="${escapeHtml(q.pattern || '')}" placeholder="e.g. XXXX.XXXX.XXXX" maxlength="${EXAM_LIMITS.pattern}" ${at} data-action="exam-q-pattern" class="${EXAM_INPUT_CLS} font-mono sm:w-80" spellcheck="false">
+              </div>` : `
+              <div>
+                <label class="block text-[10px] font-medium text-slate-400 mb-1">Accepted answers (separate with <code class="font-mono">|</code>, write <code class="font-mono">\\|</code> for a literal pipe)</label>
+                <input type="text" value="${escapeHtml(examAcceptedText(q))}" placeholder="e.g. 443 | tcp/443" ${at} data-action="exam-q-accepted" class="${EXAM_INPUT_CLS} font-mono">
+              </div>`}
+            <p id="q-accepted-note-${sIdx}-${ii}" class="text-[10px] text-slate-400">${escapeHtml(examAcceptedNote(q))}</p>
+            <div class="grid sm:grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-medium text-slate-400 mb-1">Answer box placeholder (optional)</label>
+                <input type="text" value="${escapeHtml(q.placeholder || '')}" placeholder="Type your answer" maxlength="${EXAM_LIMITS.placeholder}" ${at} data-action="exam-q-placeholder" class="${EXAM_INPUT_CLS}">
+              </div>
+              <div>
+                <label class="block text-[10px] font-medium text-slate-400 mb-1">Save the answer as <code class="font-mono">{{ NAME }}</code> for later parts (optional)</label>
+                <input type="text" value="${escapeHtml(q.capture || '')}" placeholder="e.g. ROUTER_IP" maxlength="${EXAM_LIMITS.captureName}" ${at} data-action="exam-q-capture" class="${EXAM_INPUT_CLS} font-mono">
+              </div>
+            </div>
           </div>`;
       }
       return `<p class="text-[11px] text-slate-400"><i class="ph ph-pencil-simple-line"></i> Long answers are always marked by hand in the session monitor.</p>`;
     }
 
-    function examQuestionCardHtml(q, sIdx, qIdx, number) {
-      const collapsed = Boolean(q.collapsed);
-      const at = `data-sec-idx="${sIdx}" data-q-idx="${qIdx}"`;
-      const promptId = `q-prompt-${sIdx}-${qIdx}`;
+    /** Instructions and, for a Checklist, the boxes the participant ticks. */
+    function examStepEditorHtml(it, sIdx, ii) {
+      const at = `data-sec-idx="${sIdx}" data-item-idx="${ii}"`;
+      const bodyId = `exam-item-body-${sIdx}-${ii}`;
+      const tasks = it.tasks || [];
+      const checklist = it.type === 'checklist';
       return `
-        <div id="q-card-${sIdx}-${qIdx}" class="bg-white dark:bg-surface-850/90 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3 transition-all">
+        <input type="text" value="${escapeHtml(it.title || '')}" placeholder="Title (optional)" maxlength="${EXAM_LIMITS.itemTitle}" ${at} data-action="exam-item-title" class="${EXAM_INPUT_CLS}">
+        <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
+          ${renderMarkdownToolbar(bodyId, sIdx, ii)}
+          <textarea id="${bodyId}" rows="3" ${at} data-action="exam-item-body"
+            class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
+            placeholder="${checklist ? 'Instructions (optional), e.g. Cable the switch to the router, then call your instructor over.' : 'Instructions (Markdown; images by library file name)'}">${escapeHtml(it.body || '')}</textarea>
+        </div>
+        ${checklist ? `
+          <div class="space-y-1.5">
+            <span class="block text-[10px] font-medium text-slate-400">Checklist: the participant ticks every item to move on (nobody approves it)</span>
+            ${tasks.map((t, ti) => `
+              <div class="flex items-center gap-2">
+                <i class="ph ph-check-square text-sm text-amber-500 shrink-0"></i>
+                <input type="text" value="${escapeHtml(t)}" placeholder="e.g. My instructor has checked my cabling" ${at} data-task-idx="${ti}" data-action="exam-task" class="${EXAM_INPUT_CLS}">
+                <button data-action="exam-del-task" ${at} data-task-idx="${ti}" class="p-1 text-slate-400 hover:text-rose-600 rounded" title="Remove item"><i class="ph ph-x text-xs pointer-events-none"></i></button>
+              </div>`).join('')}
+            ${tasks.length < EXAM_LIMITS.tasks ? `<button data-action="exam-add-task" ${at} class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add checklist item</button>` : ''}
+          </div>` : ''}`;
+    }
+
+    /** One item of a part: an Informational or Checklist step, or a question. */
+    function examItemCardHtml(it, sIdx, ii, label, count) {
+      const collapsed = Boolean(it.collapsed);
+      const question = examIsQuestion(it);
+      const at = `data-sec-idx="${sIdx}" data-item-idx="${ii}"`;
+      const promptId = `q-prompt-${sIdx}-${ii}`;
+      const summary = question ? it.prompt : (it.title || it.body);
+      const tool = (action, icon, title, disabled, danger) => `<button data-action="${action}" ${at} ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05]'} rounded disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs pointer-events-none"></i></button>`;
+      return `
+        <div id="q-card-${sIdx}-${ii}" class="bg-white dark:bg-surface-850/90 border ${question ? 'border-slate-200/80 dark:border-white/[0.07]' : 'border-l-4 border-l-amber-400/80 border-slate-200/80 dark:border-white/[0.07]'} rounded-xl p-4 space-y-3 transition-all">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2 flex-1 min-w-[220px]">
-              <button data-action="exam-toggle-q" ${at} class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]">
-                <i class="ph ${collapsed ? 'ph-caret-right' : 'ph-caret-down'} text-xs"></i>
+              <button data-action="exam-toggle-item" ${at} class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]">
+                <i class="ph ${collapsed ? 'ph-caret-right' : 'ph-caret-down'} text-xs pointer-events-none"></i>
               </button>
-              <span class="text-[11px] font-mono font-semibold text-brand-600 dark:text-brand-400">Q${number}</span>
+              <span class="text-[11px] font-mono font-semibold ${question ? 'text-brand-600 dark:text-brand-400' : 'text-amber-600 dark:text-amber-400'}">${label}</span>
               <div class="relative flex items-center">
-                <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[q.type]} absolute left-2.5 pointer-events-none"></span>
-                <select data-action="exam-q-type" ${at}
+                <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[it.type]} absolute left-2.5 pointer-events-none"></span>
+                <select data-action="exam-item-type" ${at} aria-label="Type"
                   class="text-[11px] font-medium pl-5 pr-2 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.08] bg-slate-50 dark:bg-surface-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500 cursor-pointer">
-                  ${EXAM_TYPES.map(t => `<option value="${t}" ${q.type === t ? 'selected' : ''}>${EXAM_TYPE_LABELS[t]} [${t}]</option>`).join('')}
+                  ${EXAM_ITEM_TYPE_NAMES.map(t => `<option value="${t}" ${it.type === t ? 'selected' : ''}>${EXAM_ITEM_TYPES[t]} [${t}]</option>`).join('')}
                 </select>
               </div>
-              <label class="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                <input type="number" min="0" max="100" step="0.5" value="${escapeHtml(String(q.points))}" ${at} data-action="exam-q-points"
-                  class="w-14 text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-1.5 py-1 focus:outline-none focus:border-brand-500" aria-label="Points">
-                pts
-              </label>
-              <span id="q-grading-${sIdx}-${qIdx}">${examGradingBadge(q)}</span>
-              ${collapsed ? `<span class="text-[11px] text-slate-500 truncate max-w-[16rem]">${escapeHtml((q.prompt || '').replace(/\s+/g, ' ').slice(0, 80))}</span>` : ''}
+              ${question ? `
+                <label class="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                  <input type="number" min="0" max="100" step="0.5" value="${escapeHtml(String(it.points))}" ${at} data-action="exam-q-points"
+                    class="w-14 text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-1.5 py-1 focus:outline-none focus:border-brand-500" aria-label="Points">
+                  pts
+                </label>
+                <span id="q-grading-${sIdx}-${ii}">${examGradingBadge(it)}</span>` : ''}
+              ${collapsed ? `<span class="text-[11px] text-slate-500 truncate max-w-[16rem]">${escapeHtml(String(summary || '').replace(/\s+/g, ' ').slice(0, 80))}</span>` : ''}
             </div>
             <div class="flex items-center space-x-1 shrink-0">
-              <button data-action="exam-move-q-up" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Move Up"><i class="ph ph-arrow-up text-xs"></i></button>
-              <button data-action="exam-move-q-down" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Move Down"><i class="ph ph-arrow-down text-xs"></i></button>
-              <button data-action="exam-dup-q" ${at} class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05]" title="Duplicate Question"><i class="ph ph-copy text-xs"></i></button>
-              <button data-action="exam-del-q" ${at} class="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30" title="Delete Question"><i class="ph ph-trash text-xs"></i></button>
+              ${tool('exam-move-item-up', 'ph-arrow-up', 'Move Up', ii === 0)}
+              ${tool('exam-move-item-down', 'ph-arrow-down', 'Move Down', ii === count - 1)}
+              ${tool('exam-dup-item', 'ph-copy', 'Duplicate', count >= EXAM_LIMITS.itemsPerSection)}
+              ${tool('exam-del-item', 'ph-trash', 'Delete', count <= 1, true)}
             </div>
           </div>
           <div class="${collapsed ? 'hidden' : 'space-y-3'}">
-            <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
-              ${renderMarkdownToolbar(promptId, sIdx, qIdx)}
-              <textarea id="${promptId}" rows="2" ${at} data-action="exam-q-prompt"
-                class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
-                placeholder="Question prompt (Markdown; images by library file name)">${escapeHtml(q.prompt || '')}</textarea>
-            </div>
-            ${examAnswerEditorHtml(q, sIdx, qIdx)}
+            ${question ? `
+              <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
+                ${renderMarkdownToolbar(promptId, sIdx, ii)}
+                <textarea id="${promptId}" rows="2" ${at} data-action="exam-q-prompt"
+                  class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
+                  placeholder="Question prompt (Markdown; images by library file name)">${escapeHtml(it.prompt || '')}</textarea>
+              </div>
+              ${examAnswerEditorHtml(it, sIdx, ii)}` : examStepEditorHtml(it, sIdx, ii)}
           </div>
         </div>`;
     }
 
-    /** Body (instructions / text above the button) and checklist of an info or submit part. */
-    function examSectionBodyHtml(section, sIdx) {
-      const type = examSectionType(section);
+    /** Text above the button, and the review switch, of the submit part. */
+    function examSubmitBodyHtml(section, sIdx) {
       const bodyId = `sec-body-${sIdx}`;
-      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
-      const body = `
+      return `
         <div>
           <label class="block text-[10px] font-medium text-slate-400 mb-1">Text above the submit button (Markdown, optional)</label>
           <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
@@ -6378,77 +6620,31 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
               class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
               placeholder="e.g. Check every part before you hand in.">${escapeHtml(section.body || '')}</textarea>
           </div>
-        </div>`;
-      if (type === 'submit') {
-        return `${body}
-          <label class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-            <input type="checkbox" class="mt-0.5" data-action="exam-sec-review" data-sec-idx="${sIdx}" ${section.review !== false ? 'checked' : ''}>
-            <span>Show a review first: how many questions are answered, with links to any unanswered question or unfinished checklist. Untick for a plain submit button.</span>
-          </label>`;
-      }
-      return body;
+        </div>
+        <label class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+          <input type="checkbox" class="mt-0.5" data-action="exam-sec-review" data-sec-idx="${sIdx}" ${section.review !== false ? 'checked' : ''}>
+          <span>Show a review first: how many questions are answered, with links to any unanswered question or unfinished checklist. Untick for a plain submit button.</span>
+        </label>`;
     }
 
-    /** The steps of an informational part: participants see one at a time and
-        tick every item of a step before the next. */
-    function examInfoStepsHtml(section, sIdx) {
-      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
-      const steps = section.steps || [];
-      const btn = (action, stIdx, icon, title, disabled, danger) => `
-        <button data-action="${action}" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600' : 'hover:text-slate-700 dark:hover:text-slate-200'} rounded transition disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs pointer-events-none"></i></button>`;
-      return `${steps.map((st, stIdx) => {
-        const bodyId = `exam-step-body-${sIdx}-${stIdx}`;
-        const tasks = st.tasks || [];
-        return `
-          <div id="exam-step-${sIdx}-${stIdx}" class="rounded-lg border border-slate-200/80 dark:border-white/[0.07] bg-slate-50/40 dark:bg-surface-850/40 p-3 space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="text-[11px] font-mono font-semibold text-amber-600 dark:text-amber-400 shrink-0">Step ${stIdx + 1}</span>
-              <input type="text" value="${escapeHtml(st.title || '')}" placeholder="${steps.length === 1 ? 'Step title (optional)' : 'Step title'}" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-action="exam-step-title" class="${inputCls}">
-              ${btn('exam-move-step-up', stIdx, 'ph-arrow-up', 'Move step up', stIdx === 0)}
-              ${btn('exam-move-step-down', stIdx, 'ph-arrow-down', 'Move step down', stIdx === steps.length - 1)}
-              ${btn('exam-del-step', stIdx, 'ph-trash', 'Delete step', steps.length <= 1, true)}
-            </div>
-            <div>
-              <label class="block text-[10px] font-medium text-slate-400 mb-1">Instructions (Markdown; images by library file name)</label>
-              <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-white dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
-                ${renderMarkdownToolbar(bodyId, sIdx, stIdx)}
-                <textarea id="${bodyId}" rows="3" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-action="exam-step-body"
-                  class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
-                  placeholder="e.g. Cable the switch to the router, then call your instructor over to check it.">${escapeHtml(st.body || '')}</textarea>
-              </div>
-            </div>
-            <div class="space-y-1.5">
-              <span class="block text-[10px] font-medium text-slate-400">Checklist: the participant ticks every item to move on (nobody approves it)</span>
-              ${tasks.map((t, ti) => `
-                <div class="flex items-center gap-2">
-                  <i class="ph ph-check-square text-sm text-amber-500 shrink-0"></i>
-                  <input type="text" value="${escapeHtml(t)}" placeholder="e.g. My instructor has checked my cabling" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-task-idx="${ti}" data-action="exam-task" class="${inputCls}">
-                  <button data-action="exam-del-task" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-task-idx="${ti}" class="p-1 text-slate-400 hover:text-rose-600 rounded" title="Remove item"><i class="ph ph-x text-xs pointer-events-none"></i></button>
-                </div>`).join('')}
-              ${tasks.length < EXAM_LIMITS.tasks ? `<button data-action="exam-add-task" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add checklist item</button>` : ''}
-            </div>
-          </div>`;
-      }).join('')}
-        ${steps.length < EXAM_LIMITS.steps ? `<button data-action="exam-add-step" data-sec-idx="${sIdx}" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Add step</button>` : ''}`;
-    }
-
-    /** Keep exactly one submit section, last (older saved workspaces have none). */
+    /** Keep exactly one submit section, last, and every other part as a list
+        of items (workspaces saved before 1.12 have typed parts). */
     function ensureExamSubmitSection() {
-      // Informational parts saved before steps existed hold one step's body / tasks.
       templateData.content.forEach(sec => {
-        if (examSectionType(sec) !== 'info' || Array.isArray(sec.steps)) return;
-        const steps = examInfoSteps(sec).map(st => ({ title: st.title || '', body: st.body || '', tasks: [...(st.tasks || [])] }));
-        sec.steps = steps.length ? steps : [examBlankStep()];
-        delete sec.body;
-        delete sec.tasks;
+        if (examIsSubmit(sec) || Array.isArray(sec.items)) return;
+        sec.items = examSectionItems(sec).map(it => ({ ...JSON.parse(JSON.stringify(it)), collapsed: Boolean(it.collapsed) }));
+        ['type', 'steps', 'questions', 'body', 'tasks'].forEach(k => delete sec[k]);
       });
       const content = templateData.content;
-      const submits = content.filter(sec => examSectionType(sec) === 'submit');
-      const rest = content.filter(sec => examSectionType(sec) !== 'submit');
+      const submits = content.filter(examIsSubmit);
+      const rest = content.filter(sec => !examIsSubmit(sec));
       const last = submits[0] || { ...examDefaultSubmitSection(), collapsed: false };
       if (submits.length === 1 && content[content.length - 1] === last) return;
       templateData.content = [...rest, last];
     }
+
+    /** All the text of an item, for the builder's filter. */
+    const examItemText = (it) => [it.title, it.body, it.prompt, ...(it.tasks || []), ...(it.options || []), ...(it.accepted || []), it.pattern, it.capture].filter(Boolean).join(' ');
 
     function renderExamBuilder() {
       const container = document.getElementById('sectionsContainer');
@@ -6459,35 +6655,33 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       updateMetadataCharCounters();
       const term = globalSearchQuery.toLowerCase().trim();
       const last = templateData.content.length - 1;
-      let number = 0;
       container.innerHTML = templateData.content.map((section, sIdx) => {
-        const type = examSectionType(section);
-        const secMatches = !term || [section.title, section.body, ...(section.steps || []).flatMap(st => [st.title, st.body, ...(st.tasks || [])])].join(' ').toLowerCase().includes(term);
-        const cards = (section.questions || []).map((q, qIdx) => {
-          number += 1;
-          const hit = !term || secMatches || [q.prompt, ...(q.options || []), ...(q.accepted || [])].join(' ').toLowerCase().includes(term);
-          return hit ? examQuestionCardHtml(q, sIdx, qIdx, number) : '';
-        }).join('');
+        const submit = examIsSubmit(section);
+        const items = section.items || [];
+        const labels = examItemLabels(items);
+        const secMatches = !term || [section.title, section.body].join(' ').toLowerCase().includes(term);
+        const cards = items.map((it, ii) => (!term || secMatches || examItemText(it).toLowerCase().includes(term))
+          ? examItemCardHtml(it, sIdx, ii, labels[ii], items.length)
+          : '').join('');
         const hidden = term && !secMatches && !cards;
-        const inner = type === 'questions'
-          ? `
+        const inner = submit
+          ? examSubmitBodyHtml(section, sIdx)
+          : `
               <div class="space-y-3.5">${cards}</div>
               <div class="flex flex-wrap items-center gap-1.5">
-                <span class="text-[11px] text-slate-400 mr-1">Add question:</span>
-                ${EXAM_TYPES.map(t => `
-                  <button data-action="exam-add-q" data-sec-idx="${sIdx}" data-q-type="${t}" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 dark:hover:border-white/[0.2] rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[t]}"></span>${EXAM_TYPE_LABELS[t]}
+                <span class="text-[11px] text-slate-400 mr-1">Add:</span>
+                ${EXAM_ITEM_TYPE_NAMES.map(t => `
+                  <button data-action="exam-add-item" data-sec-idx="${sIdx}" data-item-type="${t}" ${items.length >= EXAM_LIMITS.itemsPerSection ? 'disabled' : ''} class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 dark:hover:border-white/[0.2] rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5 disabled:opacity-40">
+                    <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[t]}"></span>${EXAM_ITEM_TYPES[t]}
                   </button>`).join('')}
-              </div>`
-          : type === 'info' ? examInfoStepsHtml(section, sIdx) : examSectionBodyHtml(section, sIdx);
+              </div>`;
         const addRow = sIdx === last - 1 ? `
           <div class="flex flex-wrap items-center gap-1.5 px-1">
-            <span class="text-[11px] text-slate-400 mr-1">Add a part before the submit step:</span>
-            <button data-action="exam-add-section" data-sec-type="info" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Informational</button>
-            <button data-action="exam-add-section" data-sec-type="questions" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Questions</button>
+            <button data-action="exam-add-section" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Add part</button>
+            <span class="text-[11px] text-slate-400">before the submit step</span>
           </div>` : '';
         return `
-          <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border ${type === 'submit' ? 'border-dashed border-violet-300/80 dark:border-violet-500/30' : 'border-slate-200/80 dark:border-white/[0.07]'} rounded-xl shadow-2xs overflow-hidden transition-all">
+          <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border ${submit ? 'border-dashed border-violet-300/80 dark:border-violet-500/30' : 'border-slate-200/80 dark:border-white/[0.07]'} rounded-xl shadow-2xs overflow-hidden transition-all">
             ${examSectionHeaderHtml(section, sIdx)}
             <div id="section-body-${sIdx}" class="${section.collapsed ? 'hidden' : 'p-4 sm:p-5 space-y-4'}">${inner}</div>
           </div>${addRow}`;
@@ -6502,38 +6696,38 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const list = document.getElementById('outlineList');
       const countEl = document.getElementById('outlineStepCount');
       if (!list) return;
-      let number = 0;
-      list.innerHTML = templateData.content.map((sec, sIdx) => `
+      list.innerHTML = templateData.content.map((sec, sIdx) => {
+        const items = sec.items || [];
+        const labels = examItemLabels(items);
+        return `
         <div class="pt-2.5 pb-1 px-1 flex items-center space-x-1.5">
-          <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">${examSectionType(sec) === 'submit' ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
+          <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500">${examIsSubmit(sec) ? '<i class="ph ph-flag"></i>' : String(sIdx + 1).padStart(2, '0')}</span>
           <button onclick="jumpToQuestion(${sIdx}, null)" class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate hover:text-brand-600 text-left">${escapeHtml(sec.title || 'Untitled')}</button>
-          ${examSectionType(sec) === 'info' ? '<i class="ph ph-check-square text-[11px] text-amber-500"></i>' : ''}
           ${sec.minutes ? `<span class="ml-auto text-[10px] font-mono text-slate-400">${formatSectionTime(sec.minutes)}</span>` : ''}
         </div>
         <div class="border-l border-slate-200/80 dark:border-white/[0.07] ml-2.5 pl-2 space-y-0.5">
-          ${(sec.questions || []).map((q, qIdx) => {
-            number += 1;
-            return `
-              <button onclick="jumpToQuestion(${sIdx}, ${qIdx})" class="w-full text-left px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.05] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 truncate flex items-center space-x-2 transition">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0 ${EXAM_TYPE_DOT[q.type]}"></span>
-                <span class="text-[10px] font-mono text-slate-400 shrink-0">Q${number}</span>
-                <span class="truncate flex-1 text-[11px]">${escapeHtml((q.prompt || '(no prompt)').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').slice(0, 60))}</span>
-              </button>`;
-          }).join('')}
-        </div>`).join('');
+          ${items.map((it, ii) => `
+              <button onclick="jumpToQuestion(${sIdx}, ${ii})" class="w-full text-left px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.05] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 truncate flex items-center space-x-2 transition">
+                ${examIsQuestion(it) ? `<span class="w-1.5 h-1.5 rounded-full shrink-0 ${EXAM_TYPE_DOT[it.type]}"></span>` : `<i class="ph ${it.type === 'checklist' ? 'ph-check-square text-amber-500' : 'ph-info text-slate-400'} text-[11px] shrink-0"></i>`}
+                <span class="text-[10px] font-mono text-slate-400 shrink-0">${labels[ii]}</span>
+                <span class="truncate flex-1 text-[11px]">${escapeHtml((examIsQuestion(it) ? it.prompt || '(no prompt)' : it.title || it.body || EXAM_ITEM_TYPES[it.type]).replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').slice(0, 60))}</span>
+              </button>`).join('')}
+        </div>`;
+      }).join('');
       if (countEl) countEl.textContent = `${examQuestionCount()} questions`;
     }
 
-    function jumpToQuestion(sIdx, qIdx) {
+    /** Open a part (and one of its items, by index) in the builder. */
+    function jumpToQuestion(sIdx, ii) {
       switchView('builder');
       const sec = templateData.content[sIdx];
       if (sec) {
         sec.collapsed = false;
-        if (qIdx !== null && sec.questions && sec.questions[qIdx]) sec.questions[qIdx].collapsed = false;
+        if (ii !== null && sec.items && sec.items[ii]) sec.items[ii].collapsed = false;
       }
       renderBuilder();
       requestAnimationFrame(() => {
-        const el = (qIdx !== null && document.getElementById(`q-card-${sIdx}-${qIdx}`)) || document.getElementById(`section-card-${sIdx}`);
+        const el = (ii !== null && document.getElementById(`q-card-${sIdx}-${ii}`)) || document.getElementById(`section-card-${sIdx}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           el.classList.add('highlight-jump');
@@ -6543,31 +6737,35 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     }
 
     /** Add a part just before the submit section (which always stays last). */
-    function addExamSection(type = 'questions') {
+    function addExamSection() {
       const content = templateData.content;
-      const at = content.findIndex(sec => examSectionType(sec) === 'submit');
+      const at = content.findIndex(examIsSubmit);
       const where = at < 0 ? content.length : at;
-      const part = type === 'info'
-        ? { type: 'info', title: `Part ${where + 1}`, minutes: null, steps: [examBlankStep()], questions: [], collapsed: false }
-        : { type: 'questions', title: `Part ${where + 1}`, minutes: null, collapsed: false, questions: [{ ...examBlankQuestion('single'), collapsed: false }] };
-      content.splice(where, 0, part);
+      content.splice(where, 0, { title: `Part ${where + 1}`, minutes: null, collapsed: false, items: [{ ...examBlankQuestion('single'), collapsed: false }] });
       if (at < 0) content.push({ ...examDefaultSubmitSection(), collapsed: false });
       pushHistorySnapshot(true);
       renderBuilder();
       scheduleAutoSave();
     }
 
-    /** Change a question's type, keeping what still makes sense. */
-    function convertExamQuestion(q, type) {
-      if (q.type === type) return q;
-      const next = { ...examBlankQuestion(type), prompt: q.prompt, points: q.points, collapsed: q.collapsed };
-      if (EXAM_HAS_OPTIONS(type) && EXAM_HAS_OPTIONS(q.type)) {
-        next.options = [...q.options];
-        if (type === 'single') next.correct = Array.isArray(q.correct) ? (q.correct[0] ?? 0) : (q.correct ?? 0);
-        else next.correct = Array.isArray(q.correct) ? [...q.correct] : (q.correct === null ? [] : [q.correct]);
+    /** Change an item's type, keeping what still makes sense: the prompt and
+        points between questions (the options and answers between choice
+        types), title, text and checklist between steps, and the text either
+        way between a step and a question. */
+    function convertExamItem(it, type) {
+      if (it.type === type) return it;
+      const text = examIsQuestion(it) ? it.prompt : it.body;
+      if (!examIsQuestion({ type })) {
+        const next = { ...examBlankItem(type), title: it.title || '', body: text || '', collapsed: it.collapsed };
+        if (type === 'checklist' && (it.tasks || []).length) next.tasks = [...it.tasks];
+        return next;
       }
-      if (type === 'short' && q.type === 'short') next.accepted = [...q.accepted];
-      if (type === 'short' && q.capture) next.capture = q.capture;
+      const next = { ...examBlankQuestion(type), prompt: text || '', points: examIsQuestion(it) ? it.points : 1, collapsed: it.collapsed };
+      if (EXAM_HAS_OPTIONS(type) && EXAM_HAS_OPTIONS(it.type)) {
+        next.options = [...it.options];
+        if (type === 'single') next.correct = Array.isArray(it.correct) ? (it.correct[0] ?? 0) : (it.correct ?? 0);
+        else next.correct = Array.isArray(it.correct) ? [...it.correct] : (it.correct === null ? [] : [it.correct]);
+      }
       return next;
     }
 
@@ -6578,144 +6776,125 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       scheduleAutoSave();
     }
 
+    /** Refresh a short answer's grading note and badge in place (re-rendering
+        while the author types would swallow their next click). */
+    function examRefreshShortNote(q, sIdx, ii) {
+      const note = document.getElementById(`q-accepted-note-${sIdx}-${ii}`);
+      if (note) note.textContent = examAcceptedNote(q);
+      const badge = document.getElementById(`q-grading-${sIdx}-${ii}`);
+      if (badge) badge.innerHTML = examGradingBadge(q);
+    }
+
     function examHandleClick(action, target, sIdx) {
-      if (action === 'exam-add-section') return addExamSection(target.dataset.secType || 'questions');
-      const qIdx = target.dataset.qIdx !== undefined ? parseInt(target.dataset.qIdx, 10) : null;
+      if (action === 'exam-add-section') return addExamSection();
       const sec = templateData.content[sIdx];
-      if (!sec) return;
-      const stIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
-      if (action === 'exam-add-step') {
-        sec.steps = sec.steps || [];
-        if (sec.steps.length >= EXAM_LIMITS.steps) return;
-        sec.steps.push(examBlankStep());
+      if (!sec || !Array.isArray(sec.items)) return;
+      const items = sec.items;
+      if (action === 'exam-add-item') {
+        if (items.length >= EXAM_LIMITS.itemsPerSection) return showToast('Too many questions and steps in this part.', 'error');
+        items.push({ ...examBlankItem(target.dataset.itemType || 'single'), collapsed: false });
         examCommit();
-        requestAnimationFrame(() => document.querySelector(`#exam-step-${sIdx}-${sec.steps.length - 1} [data-action="exam-step-title"]`)?.focus());
+        const ii = items.length - 1;
+        requestAnimationFrame(() => document.querySelector(`#q-card-${sIdx}-${ii} textarea, #q-card-${sIdx}-${ii} input[type="text"]`)?.focus());
         return;
       }
-      const step = stIdx !== null ? sec.steps?.[stIdx] : null;
-      if (step && action === 'exam-del-step') {
-        if (sec.steps.length <= 1) return;
-        sec.steps.splice(stIdx, 1);
+      const ii = parseInt(target.dataset.itemIdx, 10);
+      const it = items[ii];
+      if (!it) return;
+      if (action === 'exam-toggle-item') { it.collapsed = !it.collapsed; renderBuilder(); scheduleAutoSave(); }
+      else if (action === 'exam-del-item') {
+        if (items.length <= 1) return showToast('A part needs at least one question or step.', 'error');
+        items.splice(ii, 1);
         examCommit();
-        return;
-      }
-      if (step && (action === 'exam-move-step-up' || action === 'exam-move-step-down')) {
-        const to = stIdx + (action === 'exam-move-step-up' ? -1 : 1);
-        if (to < 0 || to >= sec.steps.length) return;
-        sec.steps.splice(to, 0, sec.steps.splice(stIdx, 1)[0]);
+        showToast('Deleted (Ctrl+Z to undo)', 'info');
+      } else if (action === 'exam-dup-item') {
+        if (items.length >= EXAM_LIMITS.itemsPerSection) return;
+        const copy = JSON.parse(JSON.stringify(it));
+        delete copy.capture; // a saved name must stay unique
+        items.splice(ii + 1, 0, copy);
         examCommit();
-        return;
-      }
-      if (step && action === 'exam-add-task') {
-        step.tasks = step.tasks || [];
-        if (step.tasks.length >= EXAM_LIMITS.tasks) return;
-        step.tasks.push('');
+      } else if (action === 'exam-move-item-up' || action === 'exam-move-item-down') {
+        const to = ii + (action === 'exam-move-item-up' ? -1 : 1);
+        if (to < 0 || to >= items.length) return;
+        items.splice(to, 0, items.splice(ii, 1)[0]);
+        examCommit();
+      } else if (action === 'exam-add-task') {
+        it.tasks = it.tasks || [];
+        if (it.tasks.length >= EXAM_LIMITS.tasks) return;
+        it.tasks.push('');
         examCommit();
         requestAnimationFrame(() => {
-          const inputs = document.querySelectorAll(`#exam-step-${sIdx}-${stIdx} [data-action="exam-task"]`);
+          const inputs = document.querySelectorAll(`#q-card-${sIdx}-${ii} [data-action="exam-task"]`);
           inputs[inputs.length - 1]?.focus();
         });
-        return;
-      }
-      if (step && action === 'exam-del-task') {
-        step.tasks.splice(parseInt(target.dataset.taskIdx, 10), 1);
-        examCommit();
-        return;
-      }
-      const qs = sec.questions;
-      if (action === 'exam-add-q') {
-        if (qs.length >= EXAM_LIMITS.questionsPerSection) return showToast('Too many questions in this part.', 'error');
-        qs.push({ ...examBlankQuestion(target.dataset.qType || 'single'), collapsed: false });
-        examCommit();
-        requestAnimationFrame(() => document.getElementById(`q-prompt-${sIdx}-${qs.length - 1}`)?.focus());
-        return;
-      }
-      const q = qs[qIdx];
-      if (!q) return;
-      if (action === 'exam-toggle-q') { q.collapsed = !q.collapsed; renderBuilder(); scheduleAutoSave(); }
-      else if (action === 'exam-del-q') {
-        qs.splice(qIdx, 1);
-        examCommit();
-        showToast('Question deleted (Ctrl+Z to undo)', 'info');
-      } else if (action === 'exam-dup-q') {
-        qs.splice(qIdx + 1, 0, JSON.parse(JSON.stringify(q)));
-        examCommit();
-      } else if (action === 'exam-move-q-up' || action === 'exam-move-q-down') {
-        const to = qIdx + (action === 'exam-move-q-up' ? -1 : 1);
-        if (to < 0 || to >= qs.length) return;
-        qs.splice(to, 0, qs.splice(qIdx, 1)[0]);
+      } else if (action === 'exam-del-task') {
+        it.tasks.splice(parseInt(target.dataset.taskIdx, 10), 1);
         examCommit();
       } else if (action === 'exam-q-add-option') {
-        if (q.options.length >= EXAM_LIMITS.options) return;
-        q.options.push('');
+        if (it.options.length >= EXAM_LIMITS.options) return;
+        it.options.push('');
         examCommit();
         requestAnimationFrame(() => {
-          const inputs = document.querySelectorAll(`#q-card-${sIdx}-${qIdx} [data-action="exam-q-option"]`);
+          const inputs = document.querySelectorAll(`#q-card-${sIdx}-${ii} [data-action="exam-q-option"]`);
           inputs[inputs.length - 1]?.focus();
         });
       } else if (action === 'exam-q-del-option') {
         const oi = parseInt(target.dataset.optIdx, 10);
-        if (q.options.length <= 2) return;
-        q.options.splice(oi, 1);
-        if (q.type === 'multiple') q.correct = q.correct.filter(i => i !== oi).map(i => (i > oi ? i - 1 : i));
-        else if (q.correct === oi) q.correct = 0;
-        else if (q.correct > oi) q.correct -= 1;
+        if (it.options.length <= 2) return;
+        it.options.splice(oi, 1);
+        if (it.type === 'multiple') it.correct = it.correct.filter(i => i !== oi).map(i => (i > oi ? i - 1 : i));
+        else if (it.correct === oi) it.correct = 0;
+        else if (it.correct > oi) it.correct -= 1;
         examCommit();
       }
     }
 
     function examHandleInput(action, target, sIdx) {
       const sec = templateData.content[sIdx];
-      if (action === 'exam-sec-body' && sec) { sec.body = target.value; examCommit(false); return; }
-      const step = sec?.steps?.[parseInt(target.dataset.stepIdx, 10)];
-      if (action === 'exam-step-title' && step) { step.title = target.value; examCommit(false); return; }
-      if (action === 'exam-step-body' && step) { step.body = target.value; examCommit(false); return; }
-      if (action === 'exam-task' && step) { step.tasks[parseInt(target.dataset.taskIdx, 10)] = target.value; examCommit(false); return; }
-      const qIdx = parseInt(target.dataset.qIdx, 10);
-      const q = templateData.content[sIdx]?.questions?.[qIdx];
-      if (!q) return;
-      if (action === 'exam-q-prompt') { q.prompt = target.value; examCommit(false); }
-      else if (action === 'exam-q-option') { q.options[parseInt(target.dataset.optIdx, 10)] = target.value; examCommit(false); }
-      else if (action === 'exam-q-accepted') {
-        q.accepted = examSplitPipes(target.value);
-        // Updated in place: re-rendering here would swallow the author's next click.
-        const note = document.getElementById(`q-accepted-note-${sIdx}-${qIdx}`);
-        if (note) note.textContent = examAcceptedNote(q);
-        const badge = document.getElementById(`q-grading-${sIdx}-${qIdx}`);
-        if (badge) badge.innerHTML = examGradingBadge(q);
-        examCommit(false);
-      }
-      else if (action === 'exam-q-capture') {
-        const name = target.value.trim();
-        if (name) q.capture = name;
-        else delete q.capture;
-        examCommit(false);
-      }
+      if (!sec) return;
+      if (action === 'exam-sec-body') { sec.body = target.value; examCommit(false); return; }
+      const ii = parseInt(target.dataset.itemIdx, 10);
+      const it = sec.items?.[ii];
+      if (!it) return;
+      const optional = (key) => {
+        if (target.value.trim()) it[key] = key === 'capture' ? target.value.trim() : target.value;
+        else delete it[key];
+      };
+      if (action === 'exam-item-title') it.title = target.value;
+      else if (action === 'exam-item-body') it.body = target.value;
+      else if (action === 'exam-task') it.tasks[parseInt(target.dataset.taskIdx, 10)] = target.value;
+      else if (action === 'exam-q-prompt') it.prompt = target.value;
+      else if (action === 'exam-q-option') it.options[parseInt(target.dataset.optIdx, 10)] = target.value;
+      else if (action === 'exam-q-accepted') { it.accepted = examSplitPipes(target.value); examRefreshShortNote(it, sIdx, ii); }
+      else if (action === 'exam-q-pattern') { it.pattern = target.value; examRefreshShortNote(it, sIdx, ii); }
+      else if (action === 'exam-q-placeholder') optional('placeholder');
+      else if (action === 'exam-q-capture') optional('capture');
       else if (action === 'exam-q-points') {
         const n = Number(target.value);
-        q.points = Number.isFinite(n) ? Math.min(Math.max(n, 0), EXAM_LIMITS.maxPoints) : 1;
-        examCommit(false);
-      }
+        it.points = Number.isFinite(n) ? Math.min(Math.max(n, 0), EXAM_LIMITS.maxPoints) : 1;
+      } else return;
+      examCommit(false);
     }
 
     function examHandleChange(action, target, sIdx) {
-      if (action === 'exam-sec-review') {
-        const sec = templateData.content[sIdx];
-        if (sec) { sec.review = target.checked; examCommit(false); }
-        return;
-      }
-      const qIdx = parseInt(target.dataset.qIdx, 10);
-      const qs = templateData.content[sIdx]?.questions;
-      const q = qs?.[qIdx];
-      if (!q) return;
-      if (action === 'exam-q-type') { qs[qIdx] = convertExamQuestion(q, target.value); examCommit(); }
-      else if (action === 'exam-q-correct') {
-        const oi = parseInt(target.dataset.optIdx, 10);
-        if (q.type === 'multiple') {
-          q.correct = target.checked ? [...new Set([...q.correct, oi])].sort((a, b) => a - b) : q.correct.filter(i => i !== oi);
-        } else q.correct = oi;
+      const sec = templateData.content[sIdx];
+      if (!sec) return;
+      if (action === 'exam-sec-review') { sec.review = target.checked; examCommit(false); return; }
+      const ii = parseInt(target.dataset.itemIdx, 10);
+      const it = sec.items?.[ii];
+      if (!it) return;
+      if (action === 'exam-item-type') { sec.items[ii] = convertExamItem(it, target.value); examCommit(); }
+      else if (action === 'exam-q-match') {
+        if (target.value === 'pattern') Object.assign(it, { match: 'pattern', pattern: it.pattern || '', accepted: [] });
+        else { delete it.match; delete it.pattern; }
         examCommit();
-      } else if (action === 'exam-q-tf') { q.correct = target.value === 'true'; examCommit(false); }
+      } else if (action === 'exam-q-correct') {
+        const oi = parseInt(target.dataset.optIdx, 10);
+        if (it.type === 'multiple') {
+          it.correct = target.checked ? [...new Set([...it.correct, oi])].sort((a, b) => a - b) : it.correct.filter(i => i !== oi);
+        } else it.correct = oi;
+        examCommit();
+      } else if (action === 'exam-q-tf') { it.correct = target.value === 'true'; examCommit(false); }
     }
 
     // ---- Preview: the exam as a participant sees it, with a self-check ----
@@ -6731,11 +6910,14 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const seat = parseInt(document.getElementById('previewSeat')?.value || '7', 10) || 1;
       const firstName = document.getElementById('previewFirstName')?.value || 'Mary-Jane';
       const lastName = document.getElementById('previewLastName')?.value || "O'Neil";
+      const exam = examNormalise(templateData);
+      const byKey = new Map();
+      exam.content.forEach((sec, si) => examSectionLayout(sec, si).forEach(at => { if (at.key) byKey.set(at.key, at.item); }));
       const saved = {};
-      examCaptures(templateData).forEach(c => {
+      examCaptures(exam).forEach(c => {
         if (c.name in saved) return;
-        const a = examPreviewState.answers[`${c.si}.${c.qi}`];
-        saved[c.name] = typeof a === 'string' && a.trim() ? a.trim() : `[answer to ${c.where}]`;
+        const v = examCapturedValue(byKey.get(c.key), examPreviewState.answers[c.key]);
+        saved[c.name] = v || `[answer to ${c.where}]`;
       });
       return { seat, firstName, lastName, ctx: buildEvaluatedContext(seat, firstName, lastName, saved) };
     }
@@ -6746,6 +6928,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       if (!container) return;
       const st = examPreviewState;
       const { seat, firstName, lastName, ctx } = examPreviewContext();
+      const md = (text) => parseMarkdownSafe(resolveMarkdownImages(text || '', ctx));
       let number = 0;
       let score = 0;
       let auto = 0;
@@ -6755,107 +6938,105 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         : v === false
           ? '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Incorrect</span>'
           : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Marked by hand</span>';
+
+      const questionHtml = (raw, key) => {
+        number += 1;
+        // As this seat sees it: accepted answers may use {{ PLACEHOLDERS }}.
+        const q = examNormaliseQuestion(raw);
+        q.accepted = q.accepted.map(x => substitutePlaceholders(x, ctx)).filter(x => x.trim());
+        const a = st.answers[key];
+        const answered = !(a === undefined || a === null || a === '' || (Array.isArray(a) && !a.length));
+        const g = examGrade(q, a);
+        if (g === null) manual += Number(q.points) || 0;
+        else { auto += Number(q.points) || 0; if (g) score += Number(q.points) || 0; }
+        let input = '';
+        if (q.type === 'single' || q.type === 'multiple') {
+          input = q.options.map((o, oi) => {
+            const chosen = q.type === 'multiple' ? Array.isArray(a) && a.includes(oi) : a === oi;
+            const isKey = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
+            const next = q.type === 'multiple'
+              ? `examPreviewSet('${key}', (examPreviewState.answers['${key}'] || []).filter(i => i !== ${oi}).concat(this.checked ? [${oi}] : []), ${st.checked})`
+              : `examPreviewSet('${key}', ${oi}, ${st.checked})`;
+            return `
+              <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border ${st.showKey && isKey ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200">
+                <input type="${q.type === 'multiple' ? 'checkbox' : 'radio'}" name="pv-${key}" ${chosen ? 'checked' : ''} onchange="${next}">
+                <span class="font-mono text-[11px] text-slate-400">${examLetter(oi)}</span>
+                <span class="prose-preview">${md(o)}</span>
+              </label>`;
+          }).join('');
+        } else if (q.type === 'truefalse') {
+          input = [true, false].map(v => `
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${st.showKey && q.correct === v ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200 mr-2">
+              <input type="radio" name="pv-${key}" ${a === v ? 'checked' : ''} onchange="examPreviewSet('${key}', ${v}, ${st.checked})"> ${v ? 'True' : 'False'}
+            </label>`).join('');
+        } else if (q.type === 'short') {
+          input = `<input type="text" value="${escapeHtml(a || '')}" oninput="examPreviewSet('${key}', this.value, false)" ${q.capture ? 'onchange="renderExamPreview()"' : ''} placeholder="${escapeHtml(q.placeholder || 'Type your answer')}"
+            class="w-full sm:w-80 text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">`;
+        } else {
+          input = `<textarea rows="3" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
+            class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">${escapeHtml(a || '')}</textarea>`;
+        }
+        const keyNote = !st.showKey ? ''
+          : q.type === 'truefalse' ? `Answer: ${q.correct ? 'True' : 'False'}`
+          : q.type === 'short' && q.match === 'pattern' ? `Pattern: ${q.pattern}${examMaskExample(q.pattern) ? ` (e.g. ${examMaskExample(q.pattern)})` : ''}`
+          : q.type === 'short' ? (q.accepted.length ? `Accepted: ${q.accepted.join(' | ')}` : 'Marked by hand')
+          : q.type === 'long' ? 'Marked by hand' : '';
+        return `
+          <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-mono font-semibold text-slate-500">Question ${number} · ${q.points} pt${q.points === 1 ? '' : 's'}</span>
+              ${st.checked ? (answered ? verdictHtml(g) : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">Unanswered</span>') : ''}
+            </div>
+            <div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${md(q.prompt)}</div>
+            <div class="${q.type === 'single' || q.type === 'multiple' ? 'space-y-1.5' : ''}">${input}</div>
+            ${keyNote ? `<p class="text-[11px] text-emerald-700 dark:text-emerald-400">${escapeHtml(keyNote)}</p>` : ''}
+          </div>`;
+      };
+
+      const stepHtml = (step, tasks) => {
+        const title = (step.title || '').trim();
+        return `
+          <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
+            ${title ? `<p class="text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(substitutePlaceholders(title, ctx))}</p>` : ''}
+            ${(step.body || '').trim() ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${md(step.body)}</div>` : ''}
+            ${tasks.length ? `<p class="text-[11px] font-semibold text-slate-500">Tick each item once it is done</p>` : ''}
+            ${tasks.map(t => `
+              <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer text-xs text-slate-700 dark:text-slate-200">
+                <input type="checkbox" ${st.answers[t.key] ? 'checked' : ''} onchange="examPreviewSet('${t.key}', this.checked, false)">
+                <span class="prose-preview">${md(t.text)}</span>
+              </label>`).join('')}
+            ${!title && !(step.body || '').trim() && !tasks.length ? '<p class="text-xs text-slate-400">No instructions yet.</p>' : ''}
+          </div>`;
+      };
+
       const sectionsHtml = templateData.content.map((sec, sIdx) => {
-        const qsHtml = (sec.questions || []).map((raw, qIdx) => {
-          number += 1;
-          // As this seat sees it: accepted answers may use {{ PLACEHOLDERS }}.
-          const q = examNormaliseQuestion(raw);
-          q.accepted = q.accepted.map(x => substitutePlaceholders(x, ctx)).filter(x => x.trim());
-          const key = `${sIdx}.${qIdx}`;
-          const a = st.answers[key];
-          const answered = !(a === undefined || a === null || a === '' || (Array.isArray(a) && !a.length));
-          const g = examGrade(q, a);
-          if (g === null) manual += Number(q.points) || 0;
-          else { auto += Number(q.points) || 0; if (g) score += Number(q.points) || 0; }
-          let input = '';
-          if (q.type === 'single' || q.type === 'multiple') {
-            input = q.options.map((o, oi) => {
-              const chosen = q.type === 'multiple' ? Array.isArray(a) && a.includes(oi) : a === oi;
-              const isKey = q.type === 'multiple' ? q.correct.includes(oi) : q.correct === oi;
-              const next = q.type === 'multiple'
-                ? `examPreviewSet('${key}', (examPreviewState.answers['${key}'] || []).filter(i => i !== ${oi}).concat(this.checked ? [${oi}] : []), ${st.checked})`
-                : `examPreviewSet('${key}', ${oi}, ${st.checked})`;
-              return `
-                <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border ${st.showKey && isKey ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200">
-                  <input type="${q.type === 'multiple' ? 'checkbox' : 'radio'}" name="pv-${key}" ${chosen ? 'checked' : ''} onchange="${next}">
-                  <span class="font-mono text-[11px] text-slate-400">${examLetter(oi)}</span>
-                  <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(o, ctx))}</span>
-                </label>`;
-            }).join('');
-          } else if (q.type === 'truefalse') {
-            input = [true, false].map(v => `
-              <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${st.showKey && q.correct === v ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-500/[0.08]' : 'border-slate-200 dark:border-white/[0.08]'} cursor-pointer text-xs text-slate-700 dark:text-slate-200 mr-2">
-                <input type="radio" name="pv-${key}" ${a === v ? 'checked' : ''} onchange="examPreviewSet('${key}', ${v}, ${st.checked})"> ${v ? 'True' : 'False'}
-              </label>`).join('');
-          } else if (q.type === 'short') {
-            input = `<input type="text" value="${escapeHtml(a || '')}" oninput="examPreviewSet('${key}', this.value, false)" ${q.capture ? 'onchange="renderExamPreview()"' : ''} placeholder="Your answer"
-              class="w-full sm:w-80 text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">`;
-          } else {
-            input = `<textarea rows="3" oninput="examPreviewSet('${key}', this.value, false)" placeholder="Your answer"
-              class="w-full text-xs bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500">${escapeHtml(a || '')}</textarea>`;
-          }
-          const keyNote = st.showKey
-            ? (q.type === 'truefalse' ? `Answer: ${q.correct ? 'True' : 'False'}`
-              : q.type === 'short' ? (q.accepted.length ? `Accepted: ${q.accepted.join(' | ')}` : 'Marked by hand')
-              : q.type === 'long' ? 'Marked by hand' : '')
-            : '';
-          return `
-            <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] font-mono font-semibold text-slate-500">Question ${number} · ${q.points} pt${q.points === 1 ? '' : 's'}</span>
-                ${st.checked ? (answered ? verdictHtml(g) : '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">Unanswered</span>') : ''}
-              </div>
-              <div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(q.prompt || '', ctx))}</div>
-              <div class="${q.type === 'single' || q.type === 'multiple' ? 'space-y-1.5' : ''}">${input}</div>
-              ${keyNote ? `<p class="text-[11px] text-emerald-700 dark:text-emerald-400">${escapeHtml(keyNote)}</p>` : ''}
+        const submit = examIsSubmit(sec);
+        let inner;
+        if (submit) {
+          inner = `
+            <div class="bg-white dark:bg-surface-900 border border-dashed border-violet-300/80 dark:border-violet-500/30 rounded-xl p-4 space-y-3">
+              ${(sec.body || '').trim() ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${md(sec.body)}</div>` : ''}
+              <p class="text-xs text-slate-500">${sec.review !== false ? 'Participants see how many questions they answered, with links to anything left, then:' : 'Participants see only:'}</p>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-xs font-medium"><i class="ph ph-flag"></i> Submit</span>
             </div>`;
-        }).join('');
-        const type = examSectionType(sec);
-        let inner = qsHtml || '<p class="text-xs text-slate-400">No questions yet.</p>';
-        if (type !== 'questions') {
-          const bodyHtml = (sec.body || '').trim()
-            ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(sec.body, ctx))}</div>`
-            : '';
-          if (type === 'info') {
-            // Checklist items are numbered across the steps, as in vLabs.
-            let ti = 0;
-            const steps = sec.steps || [];
-            inner = steps.map((step, stIdx) => {
-              const tasks = (step.tasks || []).filter(t => String(t).trim());
-              const stepBody = (step.body || '').trim()
-                ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(step.body, ctx))}</div>`
-                : '';
-              return `
-              <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
-                ${steps.length > 1 || step.title ? `<p class="text-[11px] font-mono font-semibold text-slate-500">Step ${stIdx + 1} of ${steps.length}${step.title ? ` · ${escapeHtml(substitutePlaceholders(step.title, ctx))}` : ''}</p>` : ''}
-                ${stepBody}
-                ${tasks.length ? `<p class="text-[11px] font-semibold text-slate-500">Tick each item once it is done</p>` : ''}
-                ${tasks.map(t => {
-                  const key = `${sIdx}.t${ti++}`;
-                  return `
-                    <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer text-xs text-slate-700 dark:text-slate-200">
-                      <input type="checkbox" ${st.answers[key] ? 'checked' : ''} onchange="examPreviewSet('${key}', this.checked, false)">
-                      <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(t, ctx))}</span>
-                    </label>`;
-                }).join('')}
-                ${!stepBody && !tasks.length ? '<p class="text-xs text-slate-400">No instructions or checklist yet.</p>' : ''}
-              </div>`;
-            }).join('') || '<p class="text-xs text-slate-400">No steps yet.</p>';
-          } else {
-            inner = `
-              <div class="bg-white dark:bg-surface-900 border border-dashed border-violet-300/80 dark:border-violet-500/30 rounded-xl p-4 space-y-3">
-                ${bodyHtml}
-                <p class="text-xs text-slate-500">${sec.review !== false ? 'Participants see how many questions they answered, with links to anything left, then:' : 'Participants see only:'}</p>
-                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-xs font-medium"><i class="ph ph-flag"></i> Submit</span>
-              </div>`;
-          }
+        } else {
+          // Keys as in vLabs: questions count per part, ticks across the part;
+          // every step starts a new page and the questions after it join it.
+          const layout = examSectionLayout(sec, sIdx);
+          const pages = examSectionPages(sec.items);
+          inner = pages.map((page, pi) => `
+            ${pages.length > 1 ? `<p class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Page ${pi + 1} of ${pages.length}</p>` : ''}
+            ${page.map(ii => {
+              const at = layout[ii];
+              return 'qi' in at ? questionHtml(at.item, at.key) : stepHtml(at.item, at.tasks.filter(t => String(t.text).trim()));
+            }).join('')}`).join('') || '<p class="text-xs text-slate-400">No questions or steps yet.</p>';
         }
         return `
           <div class="space-y-3">
             <div class="flex items-center gap-2">
-              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${type === 'submit' ? '<i class="ph ph-flag"></i>' : sIdx + 1}</span>
+              <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-white/[0.07] text-slate-600 dark:text-slate-300">${submit ? '<i class="ph ph-flag"></i>' : sIdx + 1}</span>
               <h3 class="text-sm font-semibold text-slate-900 dark:text-white">${escapeHtml(substitutePlaceholders(sec.title || `Part ${sIdx + 1}`, ctx))}</h3>
-              ${sec.minutes && type !== 'submit' ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${formatSectionTime(sec.minutes)}</span>` : ''}
+              ${sec.minutes && !submit ? `<span class="text-[10px] font-mono text-slate-400"><i class="ph ph-timer"></i> ${formatSectionTime(sec.minutes)}</span>` : ''}
             </div>
             ${inner}
           </div>`;
@@ -6875,7 +7056,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
               </span>`).join('')}
           </span>
           <span class="text-slate-500">${examQuestionCount()} questions · ${examTotalPoints()} points</span>
-          <span class="text-slate-400">· participants see one part at a time; the next unlocks once every question is answered (or every checklist item ticked), and nothing is reviewable after submitting.</span>
+          <span class="text-slate-400">· participants see one part at a time, a page at a time; the next part unlocks once every question is answered and every checklist item ticked, and nothing is reviewable after submitting.</span>
           <span class="ml-auto flex items-center gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none bg-slate-50 dark:bg-surface-850 px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.07]">
               <input type="checkbox" ${st.showKey ? 'checked' : ''} onchange="examPreviewState.showKey = this.checked; renderExamPreview()"> Show answer key
@@ -6889,6 +7070,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     }
 
     // ---- Validation and images -------------------------------------------
+    /** "Section 2 · step 1" / "Section 2 · question 3" for an item's layout entry. */
+    const examWhere = (sIdx, at) => `Section ${sIdx + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
+
     function extractExamImageRefs() {
       const refs = [];
       const scan = (text, locLabel, sIdx, stIdx) => {
@@ -6901,14 +7085,16 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       };
       templateData.content.forEach((sec, sIdx) => {
         scan(sec.body, `Section ${sIdx + 1}`, sIdx, 0);
-        (sec.steps || []).forEach((step, stIdx) => {
-          scan(step.body, `Section ${sIdx + 1} · step ${stIdx + 1}`, sIdx, 0);
-          (step.tasks || []).forEach((t, ti) => scan(t, `Section ${sIdx + 1} · step ${stIdx + 1} checklist item ${ti + 1}`, sIdx, 0));
-        });
-        (sec.questions || []).forEach((q, qIdx) => {
-          const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
-          scan(q.prompt, `${at} prompt`, sIdx, qIdx);
-          (q.options || []).forEach((o, oi) => scan(o, `${at} option ${examLetter(oi)}`, sIdx, qIdx));
+        examSectionLayout(sec, sIdx).forEach(at => {
+          const where = examWhere(sIdx, at);
+          const it = at.item;
+          if ('qi' in at) {
+            scan(it.prompt, `${where} prompt`, sIdx, at.ii);
+            (it.options || []).forEach((o, oi) => scan(o, `${where} option ${examLetter(oi)}`, sIdx, at.ii));
+          } else {
+            scan(it.body, where, sIdx, at.ii);
+            (it.tasks || []).forEach((t, ti) => scan(t, `${where} checklist item ${ti + 1}`, sIdx, at.ii));
+          }
         });
       });
       return refs;
@@ -6924,53 +7110,51 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       }
       const declared = collectVariableIssues(addError);
       const secs = templateData.content || [];
-      const parts = secs.filter(sec => examSectionType(sec) !== 'submit');
+      const parts = secs.filter(sec => !examIsSubmit(sec));
       if (!parts.length) addError('Structure', 'At least one section is required', { view: 'builder' });
       if (secs.length > EXAM_LIMITS.sections) addError('Structure', `Too many sections (${secs.length} / ${EXAM_LIMITS.sections} max)`, { view: 'builder' });
-      if (secs.filter(sec => examSectionType(sec) === 'submit').length !== 1 || examSectionType(secs[secs.length - 1]) !== 'submit') {
+      if (secs.filter(examIsSubmit).length !== 1 || !examIsSubmit(secs[secs.length - 1])) {
         addWarning('Structure', 'The exam should end with exactly one submit section (it is added on export)', { view: 'builder' });
       }
-      let count = 0;
+      let questions = 0;
+      let steps = 0;
       secs.forEach((sec, sIdx) => {
         const loc = `Section ${sIdx + 1}`;
-        const type = examSectionType(sec);
         if (!(sec.title || '').trim()) addError(loc, `Section ${sIdx + 1} needs a title`, { sIdx, stIdx: 0 });
         if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
           addError(loc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
         }
         if ((sec.body || '').length > EXAM_LIMITS.body) addError(loc, `Text exceeds ${EXAM_LIMITS.body} characters`, { sIdx, stIdx: 0 });
-        if (type === 'submit') return;
-        if (type === 'info') {
-          const steps = sec.steps || [];
-          if (!steps.length) addError(loc, `Section ${sIdx + 1} needs instructions or a checklist`, { sIdx, stIdx: 0 });
-          if (steps.length > EXAM_LIMITS.steps) addError(loc, `Too many steps (${steps.length} / ${EXAM_LIMITS.steps} max)`, { sIdx, stIdx: 0 });
-          steps.forEach((step, stIdx) => {
-            const at = steps.length === 1 ? loc : `${loc} · step ${stIdx + 1}`;
-            const tasks = (step.tasks || []).filter(t => String(t).trim());
-            if (!(step.body || '').trim() && !tasks.length) addError(at, `${at} needs instructions or a checklist`, { sIdx, stIdx: 0 });
-            if ((step.body || '').length > EXAM_LIMITS.body) addError(at, `Text exceeds ${EXAM_LIMITS.body} characters`, { sIdx, stIdx: 0 });
-            if ((step.tasks || []).length !== tasks.length) addWarning(at, `${at} has an empty checklist item (left out on export)`, { sIdx, stIdx: 0 });
-            if (tasks.length > EXAM_LIMITS.tasks) addError(at, `Too many checklist items (${tasks.length} / ${EXAM_LIMITS.tasks} max)`, { sIdx, stIdx: 0 });
-          });
-          return;
-        }
-        const qs = sec.questions || [];
-        if (!qs.length) addError(loc, `Section ${sIdx + 1} has no questions`, { sIdx, stIdx: 0 });
-        if (qs.length > EXAM_LIMITS.questionsPerSection) addError(loc, `Too many questions (${qs.length} / ${EXAM_LIMITS.questionsPerSection} max)`, { sIdx, stIdx: 0 });
-        qs.forEach((raw, qIdx) => {
-          count += 1;
-          const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
-          if ((raw.prompt || '').length > EXAM_LIMITS.prompt) addError(at, `Prompt exceeds ${EXAM_LIMITS.prompt} characters`, { sIdx, stIdx: qIdx });
+        if (examIsSubmit(sec)) return;
+        const items = sec.items || [];
+        if (!items.length) addError(loc, `Section ${sIdx + 1} has no questions or steps`, { sIdx, stIdx: 0 });
+        if (items.length > EXAM_LIMITS.itemsPerSection) addError(loc, `Section ${sIdx + 1} has too many questions and steps (max ${EXAM_LIMITS.itemsPerSection})`, { sIdx, stIdx: 0 });
+        examSectionLayout(sec, sIdx).forEach(at => {
+          const where = examWhere(sIdx, at);
+          const pos = { sIdx, stIdx: at.ii };
+          const raw = at.item;
+          if (!('qi' in at)) {
+            steps += 1;
+            const it = examNormaliseItem(raw);
+            if ((raw.body || '').length > EXAM_LIMITS.body) addError(where, `Text exceeds ${EXAM_LIMITS.body} characters`, pos);
+            examStepErrors(it, where).forEach(msg => addError(where, msg, pos));
+            if (it.type === 'checklist') {
+              if ((raw.tasks || []).length !== it.tasks.length) addWarning(where, `${where} has an empty checklist item (left out on export)`, pos);
+              if ((raw.tasks || []).length > EXAM_LIMITS.tasks) addError(where, `${where} has too many checklist items (max ${EXAM_LIMITS.tasks})`, pos);
+            }
+            return;
+          }
+          questions += 1;
+          if ((raw.prompt || '').length > EXAM_LIMITS.prompt) addError(where, `Prompt exceeds ${EXAM_LIMITS.prompt} characters`, pos);
           const q = examNormaliseQuestion(raw);
-          examQuestionErrors(q, at).forEach(msg => addError(at, msg, { sIdx, stIdx: qIdx }));
-          if (q.points === 0) addWarning(at, `${at} is worth 0 points`, { sIdx, stIdx: qIdx });
+          examQuestionErrors(q, where).forEach(msg => addError(where, msg, pos));
+          if (q.points === 0) addWarning(where, `${where} is worth 0 points`, pos);
           if (EXAM_HAS_OPTIONS(q.type)) {
             const seen = q.options.filter(Boolean).map(o => o.toLowerCase());
-            if (new Set(seen).size !== seen.length) addWarning(at, `${at} has two identical options`, { sIdx, stIdx: qIdx });
+            if (new Set(seen).size !== seen.length) addWarning(where, `${where} has two identical options`, pos);
           }
         });
       });
-      if (parts.length && !count && !parts.some(sec => examSectionType(sec) === 'info')) addError('Structure', 'The exam has no questions', { view: 'builder' });
       const lib = templateData.images || [];
       extractExamImageRefs().forEach(ref => {
         if (!lib.some(img => (img.name || '').toLowerCase() === ref.fileName.toLowerCase())) {
@@ -6985,9 +7169,10 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       examUnknownPlaceholders(norm).forEach(({ name, where, early }) => addError(where, early
         ? `{{ ${name} }} is used in ${where} before the question that saves it (saved answers are available from the following section onward)`
         : `Unknown placeholder {{ ${name} }} in ${where}`, { view: 'builder' }));
-      return `Checked ${parts.length} part(s), ${count} question(s), ${declared.size} variable(s) and ${examCaptures(norm).length} saved answer(s): types, correct answers, checklists, points, time allocations, placeholders and image assets.`;
+      return `Checked ${parts.length} part(s), ${questions} question(s), ${steps} step(s), ${declared.size} variable(s) and ${examCaptures(norm).length} saved answer(s): types, correct answers and patterns, checklists, points, time allocations, placeholders and image assets.`;
     }
 
+    /** The exam as vLabs stores it (what its importer reads and its server saves). */
     function generateExamCanonicalJson() {
       const exam = examNormalise(templateData);
       return JSON.stringify({
@@ -6998,9 +7183,9 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         content: exam.content.map(({ minutes, ...sec }) => ({
           ...sec,
           title: sec.title.trim(),
+          ...(minutes ? { minutes } : {}),
           ...('body' in sec ? { body: sec.body.trim() } : {}),
-          ...(sec.steps ? { steps: sec.steps.map(st => ({ ...st, body: st.body.trim() })) } : {}),
-          ...(minutes ? { minutes } : {})
+          ...(sec.items ? { items: sec.items.map(it => ('prompt' in it ? { ...it, prompt: it.prompt.trim() } : { ...it, body: it.body.trim() })) } : {})
         }))
       }, null, 2);
     }
