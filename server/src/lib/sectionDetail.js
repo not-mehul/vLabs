@@ -1,5 +1,5 @@
 import { allocatedSeconds, sectionAverages, timeStatus } from './sectionTiming.js';
-import { stepHasCheckpoint, checkpointMode } from './templating.js';
+import { stepHasCheckpoint, checkpointMode } from '../../../shared/templating.js';
 
 /**
  * The monitor's section drawer (labs and exams): who is on a section, who has

@@ -63,9 +63,7 @@
  *   export → import are lossless.
  */
 
-import { normaliseTemplate } from '../../../shared/template-schema.js';
-// Re-exported for backwards compatibility with earlier imports of this module.
-export { downloadFile, readTextFile } from './files.js';
+import { normaliseTemplate } from './template-schema.js';
 
 /* ------------------------------- Escaping -------------------------------- */
 

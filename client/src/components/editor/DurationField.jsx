@@ -6,7 +6,7 @@ const part = (v) => {
 /**
  * A session's length typed as hours and minutes, stored as whole minutes
  * (the launcher). Minutes past 59 carry into the hours. Section time
- * allocations in templates are plain minutes (MinutesField).
+ * allocations in templates are plain minutes (set in Template Studio).
  */
 export default function DurationField({ value, onChange, label = 'Runs for', max }) {
   const total = Number(value) || 0;

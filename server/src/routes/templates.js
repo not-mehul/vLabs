@@ -2,8 +2,8 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
-import { validateTemplatePayload } from '../lib/validateTemplate.js';
-import { validateExamPayload } from '../lib/validateExam.js';
+import { validateTemplatePayload } from '../../../shared/validate-template.js';
+import { validateExamPayload } from '../../../shared/validate-exam.js';
 import {
   listQuestions,
   totalPoints,
@@ -17,7 +17,7 @@ import {
   injectVariables,
   injectImages,
   FUNCTION_NAMES,
-} from '../lib/templating.js';
+} from '../../../shared/templating.js';
 import { maskExample } from '../../../shared/template-schema.js';
 import { imageNames, imageUrlMap } from '../lib/images.js';
 import { examContext, examForSeat } from '../lib/examSeat.js';
@@ -75,7 +75,7 @@ const kindOf = (row) => (row.kind === 'exam' ? 'exam' : 'lab');
 
 /**
  * Validate a create/update payload for the given kind. Labs go through the
- * lab validator (unchanged); exams through their own (lib/validateExam.js).
+ * lab validator (unchanged); exams through their own (shared/validate-exam.js).
  */
 function validateFor(kind, payload) {
   return kind === 'exam'

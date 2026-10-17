@@ -6,8 +6,11 @@ import {
   findUnknownPlaceholders,
   findMissingImages,
   compileMask,
-} from '../../../shared/template-schema.js';
+} from './template-schema.js';
 import { resolveVariables, RESERVED_NAMES, FUNCTION_NAMES } from './templating.js';
+
+/** UTF-8 size of a string (Node and browsers: the Studio runs this file too). */
+export const utf8Bytes = (s) => new TextEncoder().encode(s).length;
 
 const SAMPLE_WHO = { firstName: 'Sample', lastName: 'Participant' };
 
@@ -41,7 +44,7 @@ export function validateTemplatePayload(payload, opts = {}) {
   // gives a readable message well before it.
   let serialised = 0;
   try {
-    serialised = Buffer.byteLength(JSON.stringify(payload ?? null), 'utf8');
+    serialised = utf8Bytes(JSON.stringify(payload ?? null));
   } catch {
     errors.push('Template payload is not serialisable');
   }

@@ -8,15 +8,14 @@ participants, and complete example templates for different kinds of courses.
 
 Applies to vLabs **1.10.0**.
 
-> **Where labs are written.** Labs are authored in **vLabs Template Studio**
-> (`docs/vlabs_template_studio.html`, a standalone page — open it in a
-> browser) and imported into the portal under **Templates → Import** as
-> the Studio's `.zip` package (template + images), `.md` or `.json`. Import
-> is the main route. The portal can also build a lab from scratch
-> (**Templates → New lab**) and change any lab's structure: add, remove and
-> reorder sections and steps, change step types, and add hints, solutions,
-> checkpoints and variables. The format described below is unchanged and is
-> what both read.
+> **Where labs are written.** Labs are written in **vLabs Template Studio**.
+> In the portal it is the template editor: **Templates → New lab**, or open
+> any lab, and **Save** stores a new version. The same Studio works offline
+> as one file (**Templates → Offline Studio**, or
+> `docs/vlabs_template_studio.html`); bring its `.zip` package (template +
+> images), `.md` or `.json` in under **Templates → Import**. Both check a lab
+> with the rules below before you save. The format described below is what
+> both read and write.
 >
 > **Exams** are a separate template kind with their own format — see
 > [EXAM_GUIDE.md](EXAM_GUIDE.md). The Studio writes those too (**New → New
@@ -58,12 +57,11 @@ Applies to vLabs **1.10.0**.
 
 1. You write a **template**: a title, optional description, a list of
    **variables** (formulas), and ordered **sections** of ordered **steps**.
-2. You write it in **vLabs Template Studio** and import it in the portal
-   (**Templates → Import**) as a `.zip` package, `.md` or `.json`. The
-   portal shows a live warning for unknown placeholders, has a **Preview**
-   that renders the manual for any seat number, lets you edit the lab, and
-   keeps a change history with revert. (**Templates → New lab** starts one
-   in the portal instead.)
+2. You write it in **vLabs Template Studio**, in the portal or offline
+   (then import it under **Templates → Import** as a `.zip` package, `.md`
+   or `.json`). The Studio flags unknown placeholders as you type, previews
+   the manual for any seat number, and the portal keeps a change history
+   with revert.
 3. **Saving validates** the whole template. If any rule in this guide is
    broken the save is refused and every problem is listed with its location
    ("Section 2 · step 3 checkpoint answer"). Nothing partial is stored.
@@ -600,8 +598,8 @@ take. Any of these sets the same value:
 
 - Markdown: a `> minutes: N` line directly under the section's `#` heading.
 - JSON: `"minutes": N` on the section object (§18).
-- Template Studio: the minutes box in the section's header bar.
-- Portal: **Time allocated (minutes)** under each section in the lab editor.
+- Template Studio (in the portal or offline): the minutes box in the
+  section's header bar.
 
 Whole minutes from 1 to 600. Leave it empty for no allocation. (Hours and
 minutes are only for a whole session's length, set when you launch it.)

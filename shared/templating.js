@@ -25,7 +25,7 @@ import {
   compileMask,
   matchMask,
   imageRefName,
-} from '../../../shared/template-schema.js';
+} from './template-schema.js';
 
 /**
  * Context key under which the image name → URL map rides along with the
@@ -385,7 +385,7 @@ export function resolveVariables(variables, seatId, who = {}) {
  * Replace {{ NAME }} tokens in a string with values from the context.
  * Unknown placeholders are left visibly marked so authoring mistakes surface
  * rather than silently vanishing. (Templates are also rejected at save time
- * when they reference unknown placeholders — see validateTemplate.js.)
+ * when they reference unknown placeholders — see validate-template.js.)
  */
 export function injectVariables(text, context) {
   if (typeof text !== 'string') return text;

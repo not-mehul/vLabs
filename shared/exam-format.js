@@ -1,6 +1,6 @@
 /**
  * Markdown import/export for EXAM templates. Separate from the lab Markdown
- * format (client/src/lib/templateFormat.js), which is unchanged.
+ * format (shared/template-format.js), which is unchanged.
  *
  *   ---
  *   kind: exam
