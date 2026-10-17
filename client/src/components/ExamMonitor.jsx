@@ -561,76 +561,83 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
     setSection(null);
     open(value);
   };
+  // Questions only ever need the instructor when someone has to mark them;
+  // an exam that marks itself shows its scores on the participants instead.
+  const hasManual = data.questions.some((q) => q.manual);
 
   return (
     <>
       <SectionFlow data={data} doneLabel="Submitted" onSelect={setSection} />
 
-      <div className="panel">
-        <div className="panel__head">
-          <h2 className="panel__title">Questions</h2>
-          <span className="muted small">Click a question to see and mark every response to it</span>
-        </div>
-        <div className="table-wrap">
-          <table className="table table--clickable">
-            <thead>
-              <tr>
-                <th className="col--seat">Q</th>
-                <th>Question</th>
-                <th className="col--md">Type</th>
-                <th className="col--sm">Points</th>
-                <th>Answered</th>
-                <th>Correct</th>
-                <th>To mark</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.questions.map((q) => (
-                <tr
-                  key={q.key}
-                  tabIndex={0}
-                  className={question === q.key ? 'row--selected' : ''}
-                  onClick={() => setQuestion(q.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setQuestion(q.key);
-                    }
-                  }}
-                  aria-label={`Open responses to question ${q.number}`}
-                >
-                  <td className="col--seat">
-                    <span className="seat-num">{q.number}</span>
-                  </td>
-                  <td>
-                    <span className="table__primary">{excerpt(q.prompt)}</span>
-                    <span className="muted small section-cell__title">{q.section_title}</span>
-                  </td>
-                  <td className="col--md muted">{q.type_label}</td>
-                  <td className="col--sm">{q.points}</td>
-                  <td>
-                    {q.answered}
-                    <span className="muted">/{data.participants.length}</span>
-                  </td>
-                  <td>
-                    {q.graded === 0 ? (
-                      <span className="muted">—</span>
-                    ) : (
-                      <div className="progress-cell">
-                        <div className="minibar" aria-hidden="true">
-                          <div className="minibar__fill" style={{ width: `${q.correct_pct}%` }} />
-                        </div>
-                        <span className="muted small">{q.correct_pct}%</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className={q.pending ? 'text-warn' : 'muted'}>{q.pending || '—'}</td>
+      {hasManual && (
+        <div className="panel">
+          <div className="panel__head">
+            <h2 className="panel__title">Questions</h2>
+            <span className="muted small">
+              Click a question to see and mark every response to it
+            </span>
+          </div>
+          <div className="table-wrap">
+            <table className="table table--clickable">
+              <thead>
+                <tr>
+                  <th className="col--seat">Q</th>
+                  <th>Question</th>
+                  <th className="col--md">Type</th>
+                  <th className="col--sm">Points</th>
+                  <th>Answered</th>
+                  <th>Correct</th>
+                  <th>To mark</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.questions.map((q) => (
+                  <tr
+                    key={q.key}
+                    tabIndex={0}
+                    className={question === q.key ? 'row--selected' : ''}
+                    onClick={() => setQuestion(q.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setQuestion(q.key);
+                      }
+                    }}
+                    aria-label={`Open responses to question ${q.number}`}
+                  >
+                    <td className="col--seat">
+                      <span className="seat-num">{q.number}</span>
+                    </td>
+                    <td>
+                      <span className="table__primary">{excerpt(q.prompt)}</span>
+                      <span className="muted small section-cell__title">{q.section_title}</span>
+                    </td>
+                    <td className="col--md muted">{q.type_label}</td>
+                    <td className="col--sm">{q.points}</td>
+                    <td>
+                      {q.answered}
+                      <span className="muted">/{data.participants.length}</span>
+                    </td>
+                    <td>
+                      {q.graded === 0 ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <div className="progress-cell">
+                          <div className="minibar" aria-hidden="true">
+                            <div className="minibar__fill" style={{ width: `${q.correct_pct}%` }} />
+                          </div>
+                          <span className="muted small">{q.correct_pct}%</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className={q.pending ? 'text-warn' : 'muted'}>{q.pending || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="panel">
         <div className="panel__head">

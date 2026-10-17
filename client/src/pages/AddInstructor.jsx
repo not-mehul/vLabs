@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 import Icon from '../components/Icon.jsx';
-import { NewInstructorFields, TemporaryPassword } from './Instructors.jsx';
+import { NewInstructorFields, TemporaryPassword } from '../components/admin/InstructorAccounts.jsx';
 
 /**
  * Add an instructor without signing in first. Reached only by URL

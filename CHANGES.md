@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.13.1). The first section is the original code
+Newest entry at the bottom (1.14.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -790,3 +790,33 @@ sessions are read in either shape.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.14.0 — one page per exam section
+
+- **Each exam section is one page.** A section's steps and questions are
+  now shown one below the other on a single page, and **Next** moves to the
+  next section. Steps no longer start a new page, so there is no more
+  _Page 1 of 3_, **Next page** or **Previous page**. Links in the review
+  open the section and scroll to the question or the first box left to tick.
+- The Template Studio's participant preview and the exam guide match.
+
+### Instructor portal
+
+- **Session monitor controls** sit in one bar under the stats: time left
+  with **+30 min**, then **Start break** on its own, and on the right a
+  single **Download** menu (Results CSV, Answer key, Answer log, JSON for
+  exams; Participants CSV, Attempts CSV, JSON for labs) followed by **End
+  session** (or **Delete** once it has ended).
+- The exam monitor's **Questions** table only appears when the exam has
+  hand-marked questions; otherwise there is nothing to mark there.
+- **Clicking a row opens it** in Sessions and Templates; the separate view
+  and edit buttons are gone (export, delete and archive stay on the row).
+- **Admin** replaces the Account and Instructors pages: your password and
+  the instructor accounts on one page. The old addresses redirect to it.
+- Password fields (sign in, Admin, adding an instructor) have a **show
+  password** toggle.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration; templates and running
+sessions are unchanged.

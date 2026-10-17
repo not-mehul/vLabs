@@ -46,7 +46,7 @@ if (isProd && config.seedPasswordIsDefault && needsBootstrapInstructor()) {
   fatal([
     'refusing to create the bootstrap instructor with the default password in production.',
     'Set SEED_INSTRUCTOR_PASSWORD to a strong value for the first start, then change it',
-    'from the portal (Account → Change password).',
+    'from the portal (Admin → Your password).',
   ]);
 }
 
@@ -99,7 +99,7 @@ const server = app.listen(config.port, config.host, () => {
   if (onDefaultPassword.length) {
     console.warn(
       `  ${YELLOW}Note: ${onDefaultPassword.join(', ')} still use${onDefaultPassword.length === 1 ? 's' : ''} the default password.\n` +
-        `  Change it from the portal (Account → Change password).${RESET}`,
+        `  Change it from the portal (Admin → Your password).${RESET}`,
     );
   }
   if (seedPasswordChanged) {

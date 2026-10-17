@@ -88,7 +88,7 @@ Participant registration (the default landing page) is in
 | **Rate limiting & anti-scraping** — identity-keyed limiters, failed-join brute-force cap, progressive delivery                                                                                                                                                                                                            | `server/src/middleware/rateLimit.js`                                                                 |
 | **Live analytics** — "where everyone is" section flow, per-seat section/progress/time/status, click-through detail with answers, wrong attempts, hints and time per section; CSV/JSON exports carry all of it                                                                                                             | `server/src/routes/sessions.js`, `client/src/pages/SessionMonitor.jsx`                               |
 | **Image library** — upload PNG/JPEG/GIF/WebP once, reference by file name from any template (`![alt](rack.png)`), served offline-safe under random ids                                                                                                                                                                    | `server/src/lib/images.js`, `routes/images.js`, editor Settings → Images                             |
-| **Instructor accounts** — add / reset / remove instructors in the portal (or from the unlinked `/instructor/add` page, authorised by an existing instructor); password change with revocation of older tokens                                                                                                             | `server/src/routes/auth.js`, `client/src/pages/Instructors.jsx`, `AddInstructor.jsx`, `Account.jsx`  |
+| **Instructor accounts** — add / reset / remove instructors in the portal (or from the unlinked `/instructor/add` page, authorised by an existing instructor); password change with revocation of older tokens                                                                                                             | `server/src/routes/auth.js`, `client/src/pages/Admin.jsx`, `components/admin/`, `AddInstructor.jsx`  |
 
 ## Architecture
 
@@ -151,7 +151,7 @@ username: instructor
 password: labmanual123
 ```
 
-The portal shows a banner until this password is changed (**Account → Change
+The portal shows a banner until this password is changed (**Admin → Your
 password**). In production the server refuses to _create_ the bootstrap account
 with the default password at all.
 
@@ -652,7 +652,7 @@ Per the spec's deployment section:
    **Exit** at the end of a lab).
 4. **First run:** `install.sh` generates `SEED_INSTRUCTOR_PASSWORD` (printed
    once and kept in `/etc/vlabs/vlabs.env`); sign in, then change it from
-   **Account**. The env var is unused after the account exists. More
+   **Admin**. The env var is unused after the account exists. More
    instructors: `sudo deploy/pi/vlabs-cli.sh instructors create <name>`.
 5. **Logs** go to the journal, one line per API request plus lifecycle/audit
    events (`LOG_FORMAT=pretty` on the Pi for humans, `json` if you ship them).
@@ -707,7 +707,7 @@ vLabs/
     ├── tests/                 # template format unit tests (node:test)
     └── src/
         ├── pages/             # Join (default), Lab, Dashboard, Templates,
-        │                      #   TemplateEditor, SessionMonitor, InstructorLogin, Account
+        │                      #   TemplateEditor, SessionMonitor, InstructorLogin, Admin
         ├── components/        # StepCard, HintBox, SolutionBox, Checkpoint, Markdown,
         │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
         ├── hooks/             # instructor API helper, countdown

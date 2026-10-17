@@ -2021,12 +2021,6 @@ select.field__input {
   align-items: flex-end;
   gap: 0.4rem;
 }
-.monitor-head__actions {
-  margin-left: auto;
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
 .stat-row {
   display: flex;
   gap: 1.25rem;
@@ -2214,16 +2208,6 @@ select.field__input {
   .stat {
     border-right: none;
     padding-right: 0;
-  }
-  .monitor-head__actions {
-    grid-column: 1 / -1;
-    margin-left: 0;
-    flex-wrap: wrap;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border);
-  }
-  .monitor-head__actions .btn {
-    flex: 1 1 auto;
   }
 }
 

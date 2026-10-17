@@ -11,7 +11,6 @@ import {
   examUnlockedSection,
   isExamSectionComplete,
   listTasks,
-  sectionPages,
   capturedValue,
   describeExpected,
 } from '../../shared/exam-schema.js';
@@ -244,8 +243,6 @@ Leave the cables in place.
   );
   assert.deepEqual(bench.items[1].tasks, ['Switch cabled', 'Instructor checked it']);
   assert.match(bench.items[1].body, /not an item \(fenced\)/);
-  assert.deepEqual(sectionPages(bench.items), [[0], [1, 2], [3]], 'questions join the step above');
-  assert.deepEqual(sectionPages(exam.content[0].items), [[0]]);
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam, 'round-trips');
   assert.deepEqual(examErrors(exam), []);
   assert.deepEqual(

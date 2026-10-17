@@ -13,8 +13,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Templates = lazy(() => import('./pages/Templates.jsx'));
 const TemplateEditor = lazy(() => import('./pages/TemplateEditor.jsx'));
 const SessionMonitor = lazy(() => import('./pages/SessionMonitor.jsx'));
-const Account = lazy(() => import('./pages/Account.jsx'));
-const Instructors = lazy(() => import('./pages/Instructors.jsx'));
+const Admin = lazy(() => import('./pages/Admin.jsx'));
 const AddInstructor = lazy(() => import('./pages/AddInstructor.jsx'));
 
 /** Gate instructor-only routes behind a token. */
@@ -75,20 +74,18 @@ export default function App() {
           }
         />
         <Route
-          path="/instructor/account"
+          path="/instructor/admin"
           element={
             <RequireInstructor>
-              <Account />
+              <Admin />
             </RequireInstructor>
           }
         />
+        {/* Before 1.14.0 these were two pages; both are on Admin now. */}
+        <Route path="/instructor/account" element={<Navigate to="/instructor/admin" replace />} />
         <Route
           path="/instructor/instructors"
-          element={
-            <RequireInstructor>
-              <Instructors />
-            </RequireInstructor>
-          }
+          element={<Navigate to="/instructor/admin" replace />}
         />
 
         <Route path="*" element={<Navigate to="/" replace />} />

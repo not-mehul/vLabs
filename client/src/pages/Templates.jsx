@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { formatDateTime } from '../lib/datetime.js';
+import { rowLink, stopRowClick } from '../lib/rowLink.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
@@ -138,7 +139,7 @@ export default function Templates() {
           </p>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table--clickable">
               <thead>
                 <tr>
                   <th>Title</th>
@@ -157,7 +158,12 @@ export default function Templates() {
                 {visible.map((t) => {
                   const archived = Boolean(t.archived_at);
                   return (
-                    <tr key={t.id} className={archived ? 'row--archived' : ''}>
+                    <tr
+                      key={t.id}
+                      className={archived ? 'row--archived' : ''}
+                      {...rowLink(navigate, `/instructor/templates/${t.id}`)}
+                      aria-label={`Open ${t.title}`}
+                    >
                       <td>
                         <div className="table__primary">
                           <span className={`kind kind--${t.kind || 'lab'}`}>
@@ -185,15 +191,7 @@ export default function Templates() {
                       </td>
                       <td className="muted col--lg">{formatDateTime(t.updated_at)}</td>
                       <td className="muted col--lg">{t.updated_by || '—'}</td>
-                      <td className="table__actions">
-                        <button
-                          className="btn btn--sm btn--icon btn--ghost"
-                          onClick={() => navigate(`/instructor/templates/${t.id}`)}
-                          title="Edit template"
-                          aria-label={`Edit ${t.title}`}
-                        >
-                          <Icon name="edit" size={16} />
-                        </button>
+                      <td className="table__actions" {...stopRowClick}>
                         {archived ? (
                           <>
                             <button
