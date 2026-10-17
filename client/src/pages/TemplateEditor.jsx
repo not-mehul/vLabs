@@ -168,17 +168,34 @@ export default function TemplateEditor() {
           const r = await call((t) => api.uploadImage(t, file));
           notes.push(`uploaded ${r.name}`);
         } catch (err) {
-          if (err.code === 'IMAGE_EXISTS') clashes.push(file);
+          if (err.code === 'IMAGE_EXISTS') clashes.push({ file, existing: err.existing });
           else notes.push(`${file.name}: ${err.message}`);
         }
       }
+      // The library is shared: say which other templates a replacement changes.
+      const others = new Map();
+      for (const c of clashes) {
+        for (const t of c.existing?.templates || []) {
+          if (t.id !== record?.id) others.set(t.id, t.title);
+        }
+      }
+      const affects = others.size
+        ? `\n\nThis also changes ${others.size === 1 ? 'another template' : `${others.size} other templates`} that use${others.size === 1 ? 's' : ''} ${clashes.length === 1 ? 'it' : 'them'}:\n${[
+            ...others.values(),
+          ]
+            .slice(0, 8)
+            .map((t) => `• ${t}`)
+            .join(
+              '\n',
+            )}${others.size > 8 ? `\n… and ${others.size - 8} more` : ''}\n\nTo keep theirs, cancel and rename your file first.`
+        : '';
       if (
         clashes.length &&
         window.confirm(
-          `${clashes.length} image(s) already exist in the library (${clashes.map((f) => f.name).join(', ')}).\n\nReplace them? This updates every template that uses them.`,
+          `${clashes.length} image(s) already exist in the library (${clashes.map((c) => c.file.name).join(', ')}).\n\nReplace them?${affects}`,
         )
       ) {
-        for (const file of clashes) {
+        for (const { file } of clashes) {
           try {
             await call((t) => api.uploadImage(t, file, { replace: true }));
             notes.push(`replaced ${file.name}`);
@@ -187,7 +204,7 @@ export default function TemplateEditor() {
           }
         }
       } else if (clashes.length) {
-        notes.push(`kept existing ${clashes.map((f) => f.name).join(', ')}`);
+        notes.push(`kept existing ${clashes.map((c) => c.file.name).join(', ')}`);
       }
       const imgs = await loadImages();
       const failed = notes.some((n) => n.includes(': '));
@@ -197,7 +214,7 @@ export default function TemplateEditor() {
         tone: failed ? 'error' : 'success',
       });
     },
-    [call, loadImages, post],
+    [call, loadImages, post, record],
   );
 
   const deleteImage = useCallback(

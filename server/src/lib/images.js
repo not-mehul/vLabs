@@ -108,7 +108,13 @@ export function saveImage({ name, data, replace = false, instructorId = null }) 
   if (existing && !replace) {
     const err = httpErr(409, `An image named "${existing.name}" already exists`);
     err.code = 'IMAGE_EXISTS';
-    err.existing = { id: existing.id, name: existing.name, url: imageUrl(existing) };
+    err.existing = {
+      id: existing.id,
+      name: existing.name,
+      url: imageUrl(existing),
+      // Replacing it changes every one of these (the library is shared).
+      templates: imageReferences(existing.name).templates,
+    };
     throw err;
   }
   const id = crypto.randomBytes(16).toString('base64url');
