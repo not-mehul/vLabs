@@ -103,17 +103,39 @@ const doc = {
   ],
 };
 
-test('examResultsToCsv: fixed columns then response/result/points/marker per question', () => {
+test('examResultsToCsv: fixed columns then response/result/points/marker/comment per question', () => {
   const [header, row] = examResultsToCsv(doc).trim().split('\n');
   assert.ok(header.startsWith('number,name,first_name,last_name,submitted'));
   assert.ok(
     header.endsWith(
-      'q1_response,q1_result,q1_points,q1_marked_by,q2_response,q2_result,q2_points,q2_marked_by',
+      'q1_response,q1_result,q1_points,q1_marked_by,q1_comment,' +
+        'q2_response,q2_result,q2_points,q2_marked_by,q2_comment',
     ),
   );
   assert.match(row, /,yes,/, 'booleans as yes/no');
-  assert.match(row, /,B,correct,2,,/);
-  assert.match(row, /"Because, ""reasons""",needs marking,0,$/);
+  assert.match(row, /,B,correct,2,,,/);
+  assert.match(row, /"Because, ""reasons""",needs marking,0,,$/);
+
+  const marked = {
+    ...doc,
+    participants: doc.participants.map((p) => ({
+      ...p,
+      responses: [
+        p.responses[0],
+        {
+          ...p.responses[1],
+          pending: false,
+          correct: false,
+          partial: true,
+          points_awarded: 2.5,
+          marked_by: 'instructor',
+          comment: 'Good start',
+        },
+      ],
+    })),
+  };
+  const [, markedRow] = examResultsToCsv(marked).trim().split('\n');
+  assert.match(markedRow, /,partial,2\.5,instructor,Good start$/);
 });
 
 test('examKeyToCsv neutralises formula injection; examLogToCsv lists changes', () => {
@@ -149,6 +171,16 @@ test('exam schema: normalising, validation, grading and the public view', () => 
     'unanswered auto question scores 0',
   );
   assert.equal(isManualQuestion({ type: 'short', accepted: [] }), true);
+  // Partial marks: some of the points, halves allowed; full marks count as correct.
+  const long = { type: 'long', points: 5 };
+  const half = gradeResponse(long, 'essay', undefined, 2.5);
+  assert.equal(half.points_awarded, 2.5);
+  assert.equal(half.partial, true);
+  assert.equal(half.correct, false);
+  assert.equal(half.pending, false);
+  assert.equal(gradeResponse(long, 'essay', undefined, 5).correct, true);
+  assert.equal(gradeResponse(long, 'essay', undefined, 7).pending, true, 'out of range: ignored');
+  assert.equal(gradeResponse(long, 'essay', undefined, 1.3).pending, true, 'not a half step');
   const pub = publicQuestion(single);
   assert.equal('correct' in pub, false);
   assert.deepEqual(pub.options, ['a', 'b']);

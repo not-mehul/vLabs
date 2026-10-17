@@ -45,6 +45,7 @@ import {
   sectionItems,
   isQuestion,
   isSubmitSection,
+  isValidMarkPoints,
 } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
@@ -626,9 +627,13 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
 
 /**
  * PUT /api/sessions/:id/participants/:pid/marks/:key — EXAM sessions only.
- * Body: { correct: true | false | null }. Marks one response correct or
- * incorrect by hand (overriding the automatic verdict), or clears the mark
- * with null. Allowed during and after the session.
+ * Body (any of): { correct: true | false | null, points: N | null,
+ * comment: string | null }. `correct` marks the response correct or incorrect
+ * by hand (overriding the automatic verdict); `points` gives part of the
+ * question's points instead (0 … its points, halves allowed); null clears
+ * either and falls back to the automatic verdict. `comment` is the marker's
+ * note (empty or null removes it); participants never see it. Allowed during
+ * and after the session.
  */
 router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   const row = ownedOr404(req);
@@ -639,19 +644,56 @@ router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   const content = JSON.parse(row.content);
   const key = String(req.params.key);
   if (!listQuestions(content).some((x) => x.key === key)) throw httpError(404, 'Unknown question');
-  const verdict = req.body?.correct;
-  if (verdict !== true && verdict !== false && verdict !== null) {
-    throw httpError(400, 'correct must be true, false or null');
+  const body = req.body || {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  if (!has('correct') && !has('points') && !has('comment')) {
+    throw httpError(400, 'Give correct, points or comment');
   }
+  const question = listQuestions(content).find((x) => x.key === key).q;
   const grades = parseObject(p.grades);
-  if (verdict === null) delete grades[key];
-  else grades[key] = { correct: verdict ? 1 : 0, by: req.instructor.username, at: nowIso() };
+  const mark = { ...(grades[key] || {}) };
+  if (has('correct')) {
+    const verdict = body.correct;
+    if (verdict !== true && verdict !== false && verdict !== null) {
+      throw httpError(400, 'correct must be true, false or null');
+    }
+    delete mark.points;
+    if (verdict === null) delete mark.correct;
+    else mark.correct = verdict ? 1 : 0;
+  }
+  if (has('points')) {
+    const points = body.points;
+    if (points !== null && !isValidMarkPoints(points, question.points)) {
+      throw httpError(
+        400,
+        `points must be from 0 to ${question.points}, in steps of 0.5 (or null)`,
+      );
+    }
+    delete mark.correct;
+    if (points === null) delete mark.points;
+    else mark.points = points;
+  }
+  if (has('comment')) {
+    if (body.comment !== null && typeof body.comment !== 'string') {
+      throw httpError(400, 'comment must be text or null');
+    }
+    const comment = body.comment === null ? '' : body.comment.trim();
+    if (comment.length > 1000) throw httpError(400, 'A comment can be at most 1000 characters');
+    if (comment) mark.comment = comment;
+    else delete mark.comment;
+  }
+  if ('correct' in mark || 'points' in mark || 'comment' in mark) {
+    grades[key] = { ...mark, by: req.instructor.username, at: nowIso() };
+  } else {
+    delete grades[key];
+  }
   q.setGrades.run(JSON.stringify(grades), p.id);
   log.info('exam.marked', {
     session: row.id,
     participant: p.id,
     question: key,
-    correct: verdict,
+    correct: grades[key]?.correct ?? null,
+    points: grades[key]?.points ?? null,
     instructor: req.instructor.id,
   });
   const fresh = q.participant.get(p.id, row.id);
@@ -1166,8 +1208,10 @@ function examExport(row) {
         auto: g.auto,
         override: g.override,
         correct: g.correct,
+        partial: g.partial,
         pending: g.pending,
         points_awarded: g.points_awarded,
+        comment: g.comment,
         marked_by: g.marked_by,
         marked_at: g.marked_at,
       })),

@@ -16,10 +16,17 @@ const TYPE_LABEL = {
   long: 'Long answer',
 };
 
-/** Correct / incorrect / needs marking / unanswered badge for one response. */
+/** Correct / partial / incorrect / needs marking / unanswered badge for one response. */
 function Verdict({ r }) {
   if (!r.answered) return <span className="verdict verdict--none">Unanswered</span>;
   if (r.pending) return <span className="verdict verdict--pending">Needs marking</span>;
+  if (r.partial) {
+    return (
+      <span className="verdict verdict--partial">
+        Partial · {r.points_awarded}/{r.points} pts
+      </span>
+    );
+  }
   return r.correct ? (
     <span className="verdict verdict--ok">
       <Icon name="check" size={12} /> Correct
@@ -33,50 +40,114 @@ function Verdict({ r }) {
 
 /**
  * Manual marking: mark a response correct or incorrect (overriding the
- * automatic verdict), or clear the mark to fall back to it.
+ * automatic verdict), give part of the points, or clear the mark to fall back
+ * to it; plus a marker's comment, never shown to the participant.
+ * `onMark(body)` sends { correct } / { points } / { comment }.
  */
 function MarkControls({ r, onMark, busy }) {
+  const marked = r.override !== null || r.marked_points !== null;
+  const [points, setPoints] = useState('');
+  const [comment, setComment] = useState(r.comment || '');
+  useEffect(() => setComment(r.comment || ''), [r.comment]);
+  const max = r.points;
+  const givePoints = (e) => {
+    e.preventDefault();
+    const n = Number(points);
+    if (points === '' || Number.isNaN(n)) return;
+    onMark({ points: n });
+    setPoints('');
+  };
   return (
-    <div className="mark" role="group" aria-label="Mark this response">
-      <button
-        type="button"
-        className={`btn btn--xs ${r.override === true ? 'btn--success' : 'btn--ghost'}`}
-        onClick={() => onMark(true)}
-        disabled={busy}
-        aria-pressed={r.override === true}
-      >
-        <Icon name="check" size={12} /> Correct
-      </button>
-      <button
-        type="button"
-        className={`btn btn--xs ${r.override === false ? 'btn--danger' : 'btn--ghost'}`}
-        onClick={() => onMark(false)}
-        disabled={busy}
-        aria-pressed={r.override === false}
-      >
-        <Icon name="close" size={12} /> Incorrect
-      </button>
-      {r.override !== null && (
+    <div className="mark-block">
+      <div className="mark" role="group" aria-label="Mark this response">
         <button
           type="button"
-          className="btn btn--xs btn--ghost"
-          onClick={() => onMark(null)}
+          className={`btn btn--xs ${r.override === true ? 'btn--success' : 'btn--ghost'}`}
+          onClick={() => onMark({ correct: true })}
           disabled={busy}
-          title={
-            r.auto === null
-              ? 'Remove the mark'
-              : `Remove the mark (automatic verdict: ${r.auto ? 'correct' : 'incorrect'})`
-          }
+          aria-pressed={r.override === true}
         >
-          <Icon name="undo" size={12} /> Clear
+          <Icon name="check" size={12} /> Correct
         </button>
-      )}
-      {r.marked_by && (
-        <span className="muted small">
-          marked by {r.marked_by}
-          {r.marked_at ? ` · ${formatDateTime(r.marked_at)}` : ''}
-        </span>
-      )}
+        <button
+          type="button"
+          className={`btn btn--xs ${r.override === false ? 'btn--danger' : 'btn--ghost'}`}
+          onClick={() => onMark({ correct: false })}
+          disabled={busy}
+          aria-pressed={r.override === false}
+        >
+          <Icon name="close" size={12} /> Incorrect
+        </button>
+        {max > 0 && (
+          <form className="mark__points" onSubmit={givePoints}>
+            <input
+              type="number"
+              min={0}
+              max={max}
+              step={0.5}
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              placeholder={r.marked_points !== null ? String(r.marked_points) : 'pts'}
+              aria-label={`Points out of ${max}`}
+              disabled={busy}
+            />
+            <span className="muted small">/ {max}</span>
+            <button
+              type="submit"
+              className="btn btn--xs btn--ghost"
+              disabled={busy || points === ''}
+            >
+              Give
+            </button>
+          </form>
+        )}
+        {marked && (
+          <button
+            type="button"
+            className="btn btn--xs btn--ghost"
+            onClick={() => onMark({ correct: null })}
+            disabled={busy}
+            title={
+              r.auto === null
+                ? 'Remove the mark'
+                : `Remove the mark (automatic verdict: ${r.auto ? 'correct' : 'incorrect'})`
+            }
+          >
+            <Icon name="undo" size={12} /> Clear
+          </button>
+        )}
+        {r.marked_by && (
+          <span className="muted small">
+            marked by {r.marked_by}
+            {r.marked_at ? ` · ${formatDateTime(r.marked_at)}` : ''}
+          </span>
+        )}
+      </div>
+      <details className="mark__comment" open={Boolean(r.comment)}>
+        <summary className="muted small">{r.comment ? 'Marker comment' : 'Add a comment'}</summary>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onMark({ comment });
+          }}
+        >
+          <textarea
+            rows={2}
+            maxLength={1000}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="For your records and the results export; participants never see it"
+            disabled={busy}
+          />
+          <button
+            type="submit"
+            className="btn btn--xs btn--ghost"
+            disabled={busy || comment.trim() === (r.comment || '')}
+          >
+            Save comment
+          </button>
+        </form>
+      </details>
     </div>
   );
 }
@@ -166,10 +237,10 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
   const [busy, setBusy] = useState('');
   const [filter, setFilter] = useState('all');
 
-  async function mark(key, correct) {
+  async function mark(key, body) {
     setBusy(key);
     try {
-      await call((t) => api.markResponse(t, sessionId, participantId, key, correct));
+      await call((t) => api.markResponse(t, sessionId, participantId, key, body));
       await reload();
       onChanged();
     } finally {
@@ -467,10 +538,10 @@ function QuestionDrawer({ sessionId, questionKey, onClose, onChanged }) {
   const { d, error, reload } = usePolled(loader);
   const [busy, setBusy] = useState(null);
 
-  async function mark(pid, correct) {
+  async function mark(pid, body) {
     setBusy(pid);
     try {
-      await call((t) => api.markResponse(t, sessionId, pid, questionKey, correct));
+      await call((t) => api.markResponse(t, sessionId, pid, questionKey, body));
       await reload();
       onChanged();
     } finally {

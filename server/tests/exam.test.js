@@ -333,6 +333,58 @@ test('manual marks override or complete grading; clearing restores the automatic
   assert.equal(byQ.data.responses.find((r) => r.name === 'Ada Lovelace').correct, true);
 });
 
+test('hand marks can give part of the points and carry a marker comment', async () => {
+  const detail = await call(`/api/sessions/${sessionId}`, { token });
+  const a = detail.data.participants.find((p) => p.name === 'Ada Lovelace');
+  const mark = (key, body) =>
+    call(`/api/sessions/${sessionId}/participants/${a.id}/marks/${key}`, {
+      method: 'PUT',
+      token,
+      body,
+    });
+
+  assert.equal((await mark('1.2', {})).status, 400, 'nothing to change');
+  assert.equal((await mark('1.2', { points: 6 })).status, 400, 'more than the question is worth');
+  assert.equal((await mark('1.2', { points: -1 })).status, 400);
+  assert.equal((await mark('1.2', { points: 2.3 })).status, 400, 'halves only');
+  assert.equal((await mark('1.2', { points: '2' })).status, 400);
+  assert.equal((await mark('1.2', { comment: 42 })).status, 400);
+  assert.equal((await mark('1.2', { comment: 'x'.repeat(1001) })).status, 400);
+
+  const partial = await mark('1.2', { points: 2.5 });
+  assert.equal(partial.status, 200);
+  assert.equal(partial.data.partial, true);
+  assert.equal(partial.data.correct, false);
+  assert.equal(partial.data.pending, false);
+  assert.equal(partial.data.marked_points, 2.5);
+  assert.equal(partial.data.points_awarded, 2.5);
+  let pd = await call(`/api/sessions/${sessionId}/participants/${a.id}`, { token });
+  assert.equal(pd.data.score, 2 + 1 + 1 + 1 + 2.5, 'the score adds the partial points');
+
+  // A comment rides along without changing the mark; a full mark replaces the points.
+  const noted = await mark('1.2', { comment: '  Good start, missing the ACL  ' });
+  assert.equal(noted.data.comment, 'Good start, missing the ACL');
+  assert.equal(noted.data.points_awarded, 2.5);
+  const full = await mark('1.2', { correct: true });
+  assert.equal(full.data.points_awarded, 5);
+  assert.equal(full.data.marked_points, null);
+  assert.equal(full.data.comment, 'Good start, missing the ACL');
+
+  // A comment alone on an auto-graded question keeps the automatic verdict.
+  const auto = await mark('0.0', { comment: 'Changed their mind once' });
+  assert.equal(auto.data.correct, true);
+  assert.equal(auto.data.override, null);
+  const cleared = await mark('0.0', { comment: '' });
+  assert.equal(cleared.data.comment, null);
+  assert.equal(cleared.data.marked_by, null, 'nothing left, so the mark is gone');
+
+  pd = await call(`/api/sessions/${sessionId}/participants/${a.id}`, { token });
+  assert.equal(pd.data.score, 2 + 1 + 1 + 1 + 5);
+  const exported = await call(`/api/sessions/${sessionId}/export`, { token });
+  const ea = exported.data.participants.find((p) => p.name === 'Ada Lovelace');
+  assert.equal(ea.responses.find((r) => r.key === '1.2').comment, 'Good start, missing the ACL');
+});
+
 test('the export carries questions, expected answers, responses, marks and the answer log', async () => {
   const res = await call(`/api/sessions/${sessionId}/export`, { token });
   assert.equal(res.status, 200);

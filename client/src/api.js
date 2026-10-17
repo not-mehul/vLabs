@@ -203,10 +203,11 @@ export const api = {
   getParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { token }),
   /** Exam sessions: mark a response correct / incorrect (null clears the mark). */
-  markResponse: (token, sessionId, participantId, key, correct) =>
+  /** Exams: mark a response by hand. body: { correct } | { points } | { comment } (null clears). */
+  markResponse: (token, sessionId, participantId, key, body) =>
     request(`/sessions/${sessionId}/participants/${participantId}/marks/${key}`, {
       method: 'PUT',
-      body: { correct },
+      body,
       token,
     }),
   /** Exam sessions: every participant's response to one question. */

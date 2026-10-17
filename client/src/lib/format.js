@@ -155,13 +155,21 @@ export function attemptsToCsv(doc) {
 }
 
 const verdictText = (r) =>
-  !r.answered ? 'unanswered' : r.pending ? 'needs marking' : r.correct ? 'correct' : 'incorrect';
+  !r.answered
+    ? 'unanswered'
+    : r.pending
+      ? 'needs marking'
+      : r.correct
+        ? 'correct'
+        : r.partial
+          ? 'partial'
+          : 'incorrect';
 
 /**
  * EXAM sessions: one row per participant. Fixed columns, then for every
- * question `q<N>_response`, `q<N>_result` (correct / incorrect / needs marking
- * / unanswered), `q<N>_points` and `q<N>_marked_by` (set when an instructor
- * marked it by hand). A `time_s<N>_<title>` column per section (seconds, breaks
+ * question `q<N>_response`, `q<N>_result` (correct / partial / incorrect /
+ * needs marking / unanswered), `q<N>_points`, `q<N>_marked_by` (set when an
+ * instructor marked it by hand) and `q<N>_comment` (the marker's note). A `time_s<N>_<title>` column per section (seconds, breaks
  * excluded) sits between the fixed and per-question columns.
  */
 export function examResultsToCsv(doc) {
@@ -194,6 +202,7 @@ export function examResultsToCsv(doc) {
       `q${q.number}_result`,
       `q${q.number}_points`,
       `q${q.number}_marked_by`,
+      `q${q.number}_comment`,
     ]),
   ];
   const rows = (doc?.participants || []).map((p) => {
@@ -203,8 +212,8 @@ export function examResultsToCsv(doc) {
       ...sections.map((_, i) => p.section_seconds?.[i] ?? 0),
       ...questions.flatMap((q) => {
         const r = byKey.get(q.key);
-        if (!r) return ['', '', '', ''];
-        return [r.response, verdictText(r), r.points_awarded, r.marked_by || ''];
+        if (!r) return ['', '', '', '', ''];
+        return [r.response, verdictText(r), r.points_awarded, r.marked_by || '', r.comment || ''];
       }),
     ];
   });
