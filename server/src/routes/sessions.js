@@ -81,19 +81,23 @@ const q = {
   byId: db.prepare('SELECT * FROM sessions WHERE id = ?'),
   // LEFT JOIN: the master template may have been archived or deleted since;
   // the session's own copy is authoritative for content and title.
+  // Any instructor may READ any session (shared monitors, read-only); only
+  // the instructor who launched it may change it (ownedOr404).
   detail: db.prepare(
     `SELECT s.*, t.version AS latest_template_version, t.archived_at AS template_archived_at,
-            t.title AS latest_template_title
+            t.title AS latest_template_title, i.username AS owner_username
        FROM sessions s LEFT JOIN templates t ON t.id = s.template_id
-      WHERE s.id = ? AND s.instructor_id = ?`,
+       LEFT JOIN instructors i ON i.id = s.instructor_id
+      WHERE s.id = ?`,
   ),
   list: db.prepare(
     `SELECT s.id, s.room_code, s.title, s.kind, s.template_id, s.template_title, s.template_version,
-            s.is_active, s.expires_at, s.created_at, s.ended_at,
-            t.version AS latest_template_version,
+            s.is_active, s.expires_at, s.created_at, s.ended_at, s.instructor_id,
+            t.version AS latest_template_version, i.username AS owner_username,
             (SELECT COUNT(*) FROM participants p WHERE p.session_id = s.id) AS participant_count
        FROM sessions s LEFT JOIN templates t ON t.id = s.template_id
-      WHERE s.instructor_id = ?
+       LEFT JOIN instructors i ON i.id = s.instructor_id
+      WHERE (? = 1 OR s.instructor_id = ?)
       ORDER BY s.created_at DESC`,
   ),
   participants: db.prepare('SELECT * FROM participants WHERE session_id = ? ORDER BY seat_number'),
@@ -174,9 +178,23 @@ function idParam(req) {
 /** A session's per-seat variable formulas (exams resolve them per participant). */
 const variablesOf = (row) => parseArray(row.variables);
 
-function ownedOr404(req) {
-  const row = q.detail.get(idParam(req), req.instructor.id);
+/** Any session, for reading (every instructor can open any monitor), or 404. */
+function viewableOr404(req) {
+  const row = q.detail.get(idParam(req));
   if (!row) throw httpError(404, 'Session not found');
+  return row;
+}
+
+/** A session the caller launched, for changing it; 403 for someone else's. */
+function ownedOr404(req) {
+  const row = viewableOr404(req);
+  if (row.instructor_id !== req.instructor.id) {
+    throw httpError(
+      403,
+      `Only ${row.owner_username || 'the instructor who launched it'} can change this session`,
+      'NOT_SESSION_OWNER',
+    );
+  }
   return row;
 }
 
@@ -402,9 +420,12 @@ function participantDetail(p, sections, breaks = []) {
 }
 
 /** Common session summary fields. */
-function summarise(row) {
+function summarise(row, viewerId) {
   return {
     id: row.id,
+    owner: row.owner_username ?? null,
+    // False on a colleague's session: the monitor is read-only.
+    can_manage: row.instructor_id === viewerId,
     room_code: row.room_code,
     title: row.title,
     kind: isExam(row) ? 'exam' : 'lab',
@@ -469,22 +490,28 @@ router.post(
       seatSource,
     );
 
-    const row = q.detail.get(info.lastInsertRowid, req.instructor.id);
+    const row = q.detail.get(info.lastInsertRowid);
     log.info('session.created', {
       session: row.id,
       template: template.id,
       instructor: req.instructor.id,
       seat_source: seatSource,
     });
-    res.status(201).json(summarise(row));
+    res.status(201).json(summarise(row, req.instructor.id));
   }),
 );
 
 /** GET /api/sessions — list this instructor's sessions with live counts. */
 router.get('/', (req, res) => {
   sweepExpiredSessions();
-  const rows = q.list.all(req.instructor.id);
-  res.json(rows.map((r) => ({ ...summarise(r), participant_count: r.participant_count })));
+  const all = req.query.scope === 'all' ? 1 : 0;
+  const rows = q.list.all(all, req.instructor.id);
+  res.json(
+    rows.map((r) => ({
+      ...summarise(r, req.instructor.id),
+      participant_count: r.participant_count,
+    })),
+  );
 });
 
 /**
@@ -493,7 +520,7 @@ router.get('/', (req, res) => {
  * revealed, time per section, captured values.
  */
 router.get('/:id/participants/:pid', (req, res) => {
-  const row = ownedOr404(req);
+  const row = viewableOr404(req);
   const pid = Number(req.params.pid);
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
@@ -761,7 +788,7 @@ router.post('/:id/participants/:pid/reopen', (req, res) => {
 
 /** GET /api/sessions/:id/questions/:key — EXAM sessions: every response to one question. */
 router.get('/:id/questions/:key', (req, res) => {
-  const row = ownedOr404(req);
+  const row = viewableOr404(req);
   if (!isExam(row)) throw httpError(409, 'Only exam sessions have questions');
   const out = examQuestionResponses(
     q.participants.all(row.id),
@@ -780,7 +807,7 @@ router.get('/:id/questions/:key', (req, res) => {
  * results (exams).
  */
 router.get('/:id/sections/:index', (req, res) => {
-  const row = ownedOr404(req);
+  const row = viewableOr404(req);
   const index = Number(req.params.index);
   const content = JSON.parse(row.content);
   if (!Number.isInteger(index) || index < 0 || index >= content.length) {
@@ -812,7 +839,7 @@ router.get('/:id/sections/:index', (req, res) => {
 });
 
 /** Monitor data for an EXAM session. */
-function examSessionDetail(row) {
+function examSessionDetail(row, viewerId) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
   const variables = variablesOf(row);
@@ -822,7 +849,7 @@ function examSessionDetail(row) {
     lab_seat: labSeatOf(labSeats, p),
   }));
   return {
-    ...summarise(row),
+    ...summarise(row, viewerId),
     ...breakView(row),
     seat_source: seatSourceSummary(row),
     template_exists: row.latest_template_version != null,
@@ -846,8 +873,8 @@ function examSessionDetail(row) {
 
 /** GET /api/sessions/:id — detail + live analytics dashboard data. */
 router.get('/:id', (req, res) => {
-  const row = ownedOr404(req);
-  if (isExam(row)) return res.json(examSessionDetail(row));
+  const row = viewableOr404(req);
+  if (isExam(row)) return res.json(examSessionDetail(row, req.instructor.id));
   const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
   const breaks = breaksOf(row);
@@ -868,7 +895,7 @@ router.get('/:id', (req, res) => {
   const completeCount = participants.filter((p) => p.complete).length;
 
   res.json({
-    ...summarise(row),
+    ...summarise(row, req.instructor.id),
     ...breakView(row),
     capture_names: captureNamesOf(sections),
     seat_source: seatSourceSummary(row),
@@ -990,7 +1017,7 @@ router.delete('/:id', (req, res) => {
  * the session carries its own copy.
  */
 router.get('/:id/export', (req, res) => {
-  const row = ownedOr404(req);
+  const row = viewableOr404(req);
   if (isExam(row)) return res.json(examExport(row));
   const sections = JSON.parse(row.content);
   const captureNames = captureNamesOf(sections);
