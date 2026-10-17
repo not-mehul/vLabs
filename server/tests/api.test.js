@@ -585,6 +585,14 @@ test('image library: upload is sniffed, served publicly by id, replace/delete ru
   // References + delete refusal while a template uses it.
   const refs = await call(`/api/images/${rep.data.id}/references`, { token: instructorToken });
   assert.ok(refs.data.templates.some((t) => t.id === withImg.data.id));
+  // Uploading the same name again says which templates a replace would change.
+  const clash = await upload('Rack-Diagram.png', PNG_1X1);
+  assert.equal(clash.status, 409);
+  assert.equal(clash.data.existing.id, rep.data.id);
+  assert.deepEqual(
+    clash.data.existing.templates.map((t) => t.title),
+    ['Img ok'],
+  );
   const del = await call(`/api/images/${rep.data.id}`, {
     method: 'DELETE',
     token: instructorToken,
@@ -915,8 +923,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 11: stable ids)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 11);
+test('database schema version is recorded (migration 12: legacy exam sections rewritten)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 12);
   const sessionCols = db
     .prepare('PRAGMA table_info(sessions)')
     .all()

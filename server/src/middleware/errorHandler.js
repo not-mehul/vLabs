@@ -30,6 +30,9 @@ export function errorHandler(err, req, res, next) {
   };
   if (err.code && status < 500) body.code = err.code;
   if (Array.isArray(err.details) && status < 500) body.details = err.details;
+  // The image already in the library on a 409 IMAGE_EXISTS (the editor asks
+  // before replacing it, naming the templates that use it).
+  if (err.existing && status < 500) body.existing = err.existing;
   res.status(status).json(body);
 }
 

@@ -92,7 +92,7 @@ export function validateTemplatePayload(payload, opts = {}) {
       const alts = Array.isArray(st?.checkpoint?.answers) ? st.checkpoint.answers.length : 0;
       if (alts > LIMITS.altAnswers) {
         errors.push(
-          `Section ${si + 1} · step ${i + 1} has too many alternative answers (max ${LIMITS.altAnswers})`,
+          `Section ${si + 1} · step ${i + 1} has too many accepted answers (max ${LIMITS.acceptedAnswers}, the answer included)`,
         );
       }
     });

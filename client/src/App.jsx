@@ -14,7 +14,6 @@ const Templates = lazy(() => import('./pages/Templates.jsx'));
 const TemplateEditor = lazy(() => import('./pages/TemplateEditor.jsx'));
 const SessionMonitor = lazy(() => import('./pages/SessionMonitor.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
-const AddInstructor = lazy(() => import('./pages/AddInstructor.jsx'));
 
 /** Gate instructor-only routes behind a token. */
 function RequireInstructor({ children }) {
@@ -40,7 +39,6 @@ export default function App() {
         <Route path="/instructor/login" element={<InstructorLogin />} />
         {/* Unlinked: reached by URL or the discreet link under the sign-in
             form. An existing instructor's credentials authorise the account. */}
-        <Route path="/instructor/add" element={<AddInstructor />} />
         <Route
           path="/instructor"
           element={

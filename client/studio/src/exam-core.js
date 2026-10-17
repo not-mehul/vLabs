@@ -29,7 +29,6 @@ const examNormaliseItem = normaliseItem;
 const examDefaultSubmitSection = defaultSubmitSection;
 const examBlankQuestion = blankQuestion;
 const examBlankItem = blankItem;
-const examSectionItems = sectionItems;
 const examNormalise = normaliseExam;
 const examSectionLayout = sectionLayout;
 const examCaptures = sharedExamCaptures;

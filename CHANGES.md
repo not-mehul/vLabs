@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.17.0). The first section is the original code
+Newest entry at the bottom (1.18.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -985,3 +985,35 @@ builds the Studio; CI checks that the committed offline file is current.
 `deploy/pi/update.sh` as usual. Migrations 10 (optional flags from titles)
 and 11 (ids on every template, and on sessions running a template's
 current version) run on start.
+
+## 1.18.0 — clean-up
+
+- **Replacing an image names the templates it changes.** Uploading an image
+  whose name is already in the library now lists the other templates that
+  use it before you confirm, so you can cancel and rename your file instead
+  of changing someone else's lab.
+- **One way to write accepted answers.** A lab checkpoint's accepted
+  answers now go on their own `> accept: a | b` line, the same line an
+  exam's short answer uses; `> pattern:`, `> placeholder:`, `> capture:`,
+  `> minutes:` and `> optional:` were already shared. Exports and the
+  Studio's examples write the new form. Files with the one-line
+  `> checkpoint: prompt :: a | b` form still import.
+- **Same limits for the same things.** Labs and exams both allow 100
+  sections (exams allowed 50) and 20 accepted answers (a lab checkpoint
+  allowed its answer and 10 alternatives; now its answer and 19).
+- **The unlinked add-instructor page is gone.** `/instructor/add`, which
+  created an account on any instructor's password without signing in, is
+  removed, and `POST /auth/instructors` now needs a signed-in instructor.
+  Add instructors from **Admin → Add an instructor** or with the Pi's
+  `vlabs-cli.sh`.
+- **Exams from before 1.12.0 are rewritten on upgrade.** Exam sections saved
+  in the old shape (typed *questions* and *info* sections) are rewritten as
+  sections of items, in templates and running sessions, with every answer
+  and tick kept. The app reads only the current shape from now on, and
+  Markdown or JSON files exported before 1.12.0 no longer import (export
+  them again from 1.12.0 or later first).
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. Migration 12 (old exam sections rewritten)
+runs on start.

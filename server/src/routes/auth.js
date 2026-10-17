@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import db, { checkpoint } from '../db/index.js';
 import config from '../config.js';
-import { signInstructorToken, verifyInstructorToken, bearer } from '../lib/tokens.js';
+import { signInstructorToken } from '../lib/tokens.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
@@ -171,44 +171,10 @@ router.put(
 /*  Instructor accounts                                                       */
 /* -------------------------------------------------------------------------- */
 /*
- * There are no roles: every instructor may manage accounts. Creating an
- * account is authorised EITHER by an instructor bearer token (the portal's
- * Instructors page) OR by an existing instructor's username + password in the
- * body (`authorize`) — the latter backs the unlinked page reachable from the
- * sign-in screen, so a colleague can be added without first opening a portal
- * session. Either way an existing account vouches for the new one.
+ * Any signed-in instructor may add an account (Admin → Add an instructor, or
+ * the Pi's command-line tool); only the admin resets or removes other
+ * accounts (requireAdmin).
  */
-
-/** Resolve the acting instructor from a bearer token or inline credentials. */
-async function actingInstructor(req) {
-  const token = bearer(req);
-  if (token) {
-    let claims;
-    try {
-      claims = verifyInstructorToken(token);
-    } catch {
-      throw httpError(401, 'Invalid or expired token');
-    }
-    const row = q.byId.get(Number(claims.sub));
-    if (!row || (claims.tv ?? 0) !== (row.token_version ?? 0)) {
-      throw httpError(401, 'Session expired — please sign in again', 'TOKEN_REVOKED');
-    }
-    return row;
-  }
-  const auth = req.body?.authorize || {};
-  if (!auth.username || !auth.password) {
-    throw httpError(401, "Sign in, or enter an existing instructor's username and password");
-  }
-  const row = await checkCredentials(auth.username, auth.password);
-  if (!row) {
-    log.warn('auth.instructor.create.denied', {
-      username: String(auth.username).slice(0, 64),
-      ip: req.ip,
-    });
-    throw httpError(401, 'The authorising username or password is incorrect');
-  }
-  return row;
-}
 
 /** GET /api/auth/instructors — every account with its session counts. */
 router.get('/instructors', requireInstructor, (req, res) => {
@@ -230,15 +196,15 @@ router.get('/instructors', requireInstructor, (req, res) => {
 
 /**
  * POST /api/auth/instructors
- * Body: { username, password?, authorize?: { username, password } }
+ * Body: { username, password? }
  * Creates an instructor. With no password a temporary one is generated and
  * returned ONCE. The new account is asked to change it at first sign-in.
  */
 router.post(
   '/instructors',
-  loginLimiter,
+  requireInstructor,
   asyncHandler(async (req, res) => {
-    const actor = await actingInstructor(req);
+    const actor = req.instructor;
     const username = String(req.body?.username ?? '').trim();
     if (!USERNAME_RE.test(username)) {
       throw httpError(

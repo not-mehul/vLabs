@@ -169,10 +169,8 @@ matters to you.
 1. Open the address on your laptop → _Instructor sign in_ → `instructor` +
    the password printed by the installer (also in `/etc/vlabs/vlabs.env`).
 2. **Admin → Your password** (the banner nags until you do).
-3. Extra instructors: **Admin** in the portal, or the unlinked page
-   `https://vlabs.local/instructor/add` (also a faint link under the sign-in
-   form), where an existing instructor's credentials authorise the new
-   account. Anyone can add an account, but only the **admin** account (the
+3. Extra instructors: **Admin → Add an instructor** in the portal. Anyone
+   signed in can add an account, but only the **admin** account (the
    bootstrap `instructor`, or the oldest account if that one is gone) can
    reset another instructor's password or remove an account. CLI fallback
    (e.g. if everyone is locked out):

@@ -2231,8 +2231,8 @@ function runFullValidation(showToasts = true) {
   const sections = templateData.content || [];
   if (sections.length === 0) {
     addError("Structure", "At least one section is required", { view: 'builder' });
-  } else if (sections.length > 100) {
-    addError("Structure", `Too many sections (${sections.length} / 100 max)`, { view: 'builder' });
+  } else if (sections.length > LIMITS.sections) {
+    addError("Structure", `Too many sections (${sections.length} / ${LIMITS.sections} max)`, { view: 'builder' });
   }
 
   const activeCapturedVarNames = new Set();
@@ -2343,8 +2343,8 @@ function runFullValidation(showToasts = true) {
             validateTextPlaceholders(cp.answer, `${cpLoc} answer`, sIdx, stIdx);
 
             const alts = cp.answers || [];
-            if (alts.length > 10) {
-              addError(cpLoc, `Too many alternative answers (${alts.length} / 10 max)`, { sIdx, stIdx });
+            if (alts.length > LIMITS.altAnswers) {
+              addError(cpLoc, `Too many accepted answers (${alts.length + 1} / ${LIMITS.acceptedAnswers} max, the answer included)`, { sIdx, stIdx });
             }
             alts.forEach((alt, aIdx) => {
               if ((alt || '').length > 200) {
@@ -3066,7 +3066,8 @@ Imperative instructions for one action. State what success looks like.
 
 > hint: The question a stuck person asks :: The nudge that gets them moving.
 
-> checkpoint: What value proves it was done? :: {{ SEAT_TAG }} | S{{ SEAT_ID }}
+> checkpoint: What value proves it was done?
+> accept: {{ SEAT_TAG }} | S{{ SEAT_ID }}
 > placeholder: e.g. S07
 
 # Section 3 · Second task
@@ -3082,7 +3083,8 @@ Where to find it and in what notation.
 ## [computer] Use it
 Attach the label **{{ ASSET }}** and re-enter the tag to confirm.
 
-> checkpoint: Confirm the asset tag :: {{ ASSET }}
+> checkpoint: Confirm the asset tag
+> accept: {{ ASSET }}
 
 # Section 4 · Wrap up
 > optional: true
@@ -3131,7 +3133,8 @@ Count the link LEDs lit on the patch panel for your pod (ports {{ POD }}1–{{ P
 > hint: No LED at all? :: Reseat both ends; an unlit port means no electrical link yet.
 > A solid amber LED means 100 Mb/s, green means 1 Gb/s.
 
-> checkpoint: How many amber LEDs are lit on your port? :: 0 | 1
+> checkpoint: How many amber LEDs are lit on your port?
+> accept: 0 | 1
 > placeholder: 0 or 1
 
 # Section 3 · Configuration
@@ -3166,7 +3169,8 @@ Then read your own address back and enter it below.
 > Your host address is built from your seat number: \`10.0.0.\` + (100 + {{ SEAT_ID }}) = **{{ HOST_IP }}**.
 > If ping fails, check the gateway is \`{{ GATEWAY_IP }}\` and the mask is \`{{ SUBNET }}\`.
 
-> checkpoint: Enter the IPv4 address shown on your workstation :: {{ HOST_IP }} | {{ HOST_CIDR }}
+> checkpoint: Enter the IPv4 address shown on your workstation
+> accept: {{ HOST_IP }} | {{ HOST_CIDR }}
 > placeholder: e.g. 10.0.0.1XX
 
 # Section 4 · Wrap up
@@ -3222,13 +3226,15 @@ The console shows the MAC it discovered. It must read **{{ MAC }}** — if it do
 
 > hint: Claim fails with "already claimed" :: The camera was used in a previous class. Ask the instructor to release serial {{ SERIAL }}.
 
-> checkpoint: Type the device name exactly as you entered it in the console :: {{ DEVICE_NAME }}
+> checkpoint: Type the device name exactly as you entered it in the console
+> accept: {{ DEVICE_NAME }}
 > placeholder: cam-…
 
 ## [computer] Confirm the identity
 To prove you are looking at your own device, re-enter the serial the console shows on the device page.
 
-> checkpoint: Serial shown on the console device page :: {{ SERIAL }}
+> checkpoint: Serial shown on the console device page
+> accept: {{ SERIAL }}
 > placeholder: the serial you recorded earlier
 
 # Section 3 · Verify
@@ -3320,7 +3326,8 @@ Push \`{{ BRANCH }}\` and open a pull request titled \`{{ TICKET }}: add {{ USER
 ## [computer] Confirm the commit is in the PR
 Open the PR's **Commits** tab. The hash listed must be the one you recorded. Enter it again to confirm.
 
-> checkpoint: Short hash shown in the PR's Commits tab :: {{ COMMIT }}
+> checkpoint: Short hash shown in the PR's Commits tab
+> accept: {{ COMMIT }}
 
 # Section 4 · Done
 

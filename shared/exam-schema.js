@@ -64,11 +64,8 @@
  * nobody approves it), or one of the question types. The participant sees
  * each section as one page, its items one below the other.
  *
- * Sections saved before 1.12.0 had a type instead: `questions` sections held
- * `questions`, `info` sections held `steps` of `{ title, body, tasks }` (and
- * 1.9.0 ones `body` / `tasks` on the section). sectionItems reads all of them
- * as items, keeping every answer key the same, so old templates, imports and
- * running sessions keep working.
+ * (Sections saved before 1.12.0 had a type instead of items; migration 12,
+ * server/src/lib/legacyExam.js, rewrote them, so only `items` is read.)
  *
  * Answer keys
  * -----------
@@ -103,10 +100,11 @@ import {
 } from './template-schema.js';
 
 export const EXAM_LIMITS = Object.freeze({
-  sections: 50,
+  // Sections and accepted answers are the same concepts as in labs.
+  sections: LIMITS.sections,
   itemsPerSection: 200,
   options: 12,
-  accepted: 20,
+  accepted: LIMITS.acceptedAnswers,
   title: 200,
   description: 1000,
   sectionTitle: 200,
@@ -407,28 +405,10 @@ export function blankSection(n = 1) {
   return { title: `Section ${n}`, minutes: null, items: [blankQuestion()] };
 }
 
-/**
- * The items of a stored section, whatever version saved it (see the header):
- * `items` as is; a 1.10/1.11 `info` section's steps (or a 1.9.0 one's body and
- * tasks) as Checklist items, or Informational when a step has no checklist;
- * a `questions` section's questions.
- */
+/** The items of a section (none for the submit section or a malformed one). */
 export function sectionItems(sec) {
   if (!sec || typeof sec !== 'object' || isSubmitSection(sec)) return [];
-  if (Array.isArray(sec.items)) return sec.items;
-  if (sec.type === 'info') {
-    const steps = Array.isArray(sec.steps)
-      ? sec.steps
-      : sec.body || (Array.isArray(sec.tasks) && sec.tasks.length)
-        ? [{ title: '', body: sec.body, tasks: sec.tasks }]
-        : [];
-    return steps.map((st) => {
-      const tasks = Array.isArray(st?.tasks) ? st.tasks.filter((t) => String(t ?? '').trim()) : [];
-      const step = { title: st?.title ?? '', body: st?.body ?? '' };
-      return tasks.length ? { type: 'checklist', ...step, tasks } : { type: 'info', ...step };
-    });
-  }
-  return Array.isArray(sec.questions) ? sec.questions : [];
+  return Array.isArray(sec.items) ? sec.items : [];
 }
 
 /** Normalise one section into canonical shape. Never throws. */

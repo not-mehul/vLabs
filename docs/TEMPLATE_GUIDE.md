@@ -152,7 +152,8 @@ Body of the step. **Markdown** works. You are on port {{ PORT_NUM }}.
 > A multi-line walkthrough, revealed once every hint is opened.
 > - bullets work
 
-> checkpoint: Enter your host IP :: {{ HOST_IP }} | {{ HOST_IP }}/24
+> checkpoint: Enter your host IP
+> accept: {{ HOST_IP }} | {{ HOST_IP }}/24
 > placeholder: e.g. 10.0.0.1XX
 
 ## [computer] Read the serial
@@ -183,13 +184,13 @@ Write **{{ SERIAL }}** on the label and attach it.
 | Body | Plain lines under `##` | Everything that is not a directive. Markdown. Fenced code (``` or ~~~) is copied verbatim — `#` and `>` inside a fence are not interpreted. |
 | Hint | `> hint: Label :: Text` | Further `> …` lines continue the text until a blank line or another directive. Label defaults to "Hint" if empty. |
 | Solution | `> solution:` then `> …` lines | Text after the colon on the same line is allowed as the first line. Ends at a blank line or non-quoted line. |
-| Exact checkpoint | `> checkpoint: Prompt :: answer \| alt1 \| alt2` | `::` separates prompt from answers, `\|` separates alternatives. |
-| Pattern checkpoint | `> checkpoint: Prompt` **then** `> pattern: MASK` | No `::` part. `> pattern:` switches the checkpoint to pattern mode even if an answer was given (the answer is dropped). |
+| Exact checkpoint | `> checkpoint: Prompt` **then** `> accept: answer \| alt1 \| alt2` | The first accepted answer is the answer, the rest are alternatives; `\|` separates them. The same `> accept:` line as an exam's short answer. The older one-line form `> checkpoint: Prompt :: answer \| alt1` is still read. |
+| Pattern checkpoint | `> checkpoint: Prompt` **then** `> pattern: MASK` | No `> accept:` line. `> pattern:` switches the checkpoint to pattern mode even if an answer was given (the answer is dropped). |
 | Capture | `> capture: NAME` | On either kind of checkpoint. Must follow the `> checkpoint:` line. |
 | Input placeholder | `> placeholder: text` | Grey example text in the answer box. Must follow the `> checkpoint:` line (ignored otherwise). |
 | Link | `[text](https://…)` | Opens in a new tab. Placeholders allowed in the URL. See §12. |
 | Image | `![alt](file-name.png "title")` | File name of a library image (upload in Settings → Images). See §12. |
-| Literal `::` | `\::` | In hint labels/text, prompts and answers. |
+| Literal `::` | `\::` | In hint labels/text and prompts. |
 | Literal `\|` | `\|` | In answers. |
 
 ### 3.3 Ordering rules inside a step
@@ -399,11 +400,14 @@ resolved per participant, so `{{ HOST_IP }}` is a different expected value
 on every seat.
 
 ```markdown
-> checkpoint: Enter your assigned host IP :: {{ HOST_IP }} | {{ HOST_IP }}/24
+> checkpoint: Enter your assigned host IP
+> accept: {{ HOST_IP }} | {{ HOST_IP }}/24
 > placeholder: e.g. 10.0.0.1XX
 ```
 
-- Up to 10 alternatives; duplicates and copies of the primary are dropped.
+- Up to 20 accepted answers in all (the answer and 19 alternatives), as
+  for an exam's short answer; duplicates and copies of the answer are
+  dropped.
 - Each answer ≤ 200 chars; a participant may type up to 500.
 - The expected answers are **never sent to the browser**. The server
   compares and answers `correct: true/false`. Wrong answers are rate-limited
@@ -780,7 +784,7 @@ Connect the cable as shown:
 | Sections | 100 |
 | Steps per section | 100 |
 | Hints per step | 20 |
-| Alternative answers per checkpoint | 10 |
+| Accepted answers per checkpoint (answer + alternatives) | 20 |
 | Title / section title / step title | 200 chars |
 | Description | 1000 chars |
 | Step body | 20 000 chars |
@@ -826,12 +830,12 @@ problems at once. Locations read `Section N · step M <field>`.
 | `… checkpoint: variable name "X" is reserved` | Built-in or helper name. |
 | `… checkpoint: "X" is already a declared variable` / `already captured by Section …` | Pick another name. |
 | `Image "x.png" referenced in … is not in the image library — upload it first` | Upload the file (same name, folders ignored) in Settings → Images, or fix the reference. |
-| `Too many variables / sections / steps / hints / alternative answers` | Over a structural limit (§13). |
+| `Too many variables / sections / steps / hints / accepted answers` | Over a structural limit (§13). |
 | `Template is too large` | Over 900 kB — usually an embedded image. |
 
 A checkpoint whose answer (exact) or mask (pattern) is empty is not an
 error: it is treated as **no checkpoint** and dropped. Watch for this when a
-`> checkpoint:` line is missing its `::` part and no `> pattern:` follows.
+`> checkpoint:` line has no `> accept:` or `> pattern:` line after it.
 
 ---
 
@@ -936,7 +940,8 @@ Count the link LEDs lit on the patch panel for your pod (ports {{ POD }}1–{{ P
 > hint: No LED at all? :: Reseat both ends; an unlit port means no electrical link yet.
 > A solid amber LED means 100 Mb/s, green means 1 Gb/s.
 
-> checkpoint: How many amber LEDs are lit on your port? :: 0 | 1
+> checkpoint: How many amber LEDs are lit on your port?
+> accept: 0 | 1
 > placeholder: 0 or 1
 
 # Section 3 · Configuration
@@ -971,7 +976,8 @@ Then read your own address back and enter it below.
 > Your host address is built from your seat number: `10.0.0.` + (100 + {{ SEAT_ID }}) = **{{ HOST_IP }}**.
 > If ping fails, check the gateway is `{{ GATEWAY_IP }}` and the mask is `{{ SUBNET }}`.
 
-> checkpoint: Enter the IPv4 address shown on your workstation :: {{ HOST_IP }} | {{ HOST_CIDR }}
+> checkpoint: Enter the IPv4 address shown on your workstation
+> accept: {{ HOST_IP }} | {{ HOST_CIDR }}
 > placeholder: e.g. 10.0.0.1XX
 
 # Section 4 · Wrap up
@@ -1034,13 +1040,15 @@ The console shows the MAC it discovered. It must read **{{ MAC }}** — if it do
 
 > hint: Claim fails with "already claimed" :: The camera was used in a previous class. Ask the instructor to release serial {{ SERIAL }}.
 
-> checkpoint: Type the device name exactly as you entered it in the console :: {{ DEVICE_NAME }}
+> checkpoint: Type the device name exactly as you entered it in the console
+> accept: {{ DEVICE_NAME }}
 > placeholder: cam-…
 
 ## [computer] Confirm the identity
 To prove you are looking at your own device, re-enter the serial the console shows on the device page.
 
-> checkpoint: Serial shown on the console device page :: {{ SERIAL }}
+> checkpoint: Serial shown on the console device page
+> accept: {{ SERIAL }}
 > placeholder: the serial you recorded earlier
 
 # Section 3 · Verify
@@ -1139,7 +1147,8 @@ Push `{{ BRANCH }}` and open a pull request titled `{{ TICKET }}: add {{ USERNAM
 ## [computer] Confirm the commit is in the PR
 Open the PR's **Commits** tab. The hash listed must be the one you recorded. Enter it again to confirm.
 
-> checkpoint: Short hash shown in the PR's Commits tab :: {{ COMMIT }}
+> checkpoint: Short hash shown in the PR's Commits tab
+> accept: {{ COMMIT }}
 
 # Section 4 · Done
 
@@ -1172,7 +1181,8 @@ Imperative instructions for one action. State what success looks like.
 
 > hint: The question a stuck person asks :: The nudge that gets them moving.
 
-> checkpoint: What value proves it was done? :: {{ SEAT_TAG }} | S{{ SEAT_ID }}
+> checkpoint: What value proves it was done?
+> accept: {{ SEAT_TAG }} | S{{ SEAT_ID }}
 > placeholder: e.g. S07
 
 # Section 3 · Second task
@@ -1188,7 +1198,8 @@ Where to find it and in what notation.
 ## [computer] Use it
 Attach the label **{{ ASSET }}** and re-enter the tag to confirm.
 
-> checkpoint: Confirm the asset tag :: {{ ASSET }}
+> checkpoint: Confirm the asset tag
+> accept: {{ ASSET }}
 
 # Section 4 · Wrap up
 > optional: true

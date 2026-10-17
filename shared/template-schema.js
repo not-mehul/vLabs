@@ -59,12 +59,18 @@
  */
 
 /** Upper bounds on authored structure and text sizes. */
+/** Accepted answers to a lab checkpoint (its answer included) or a short-answer question. */
+const ACCEPTED_ANSWERS = 20;
+
 export const LIMITS = Object.freeze({
   variables: 100,
+  /** Sections in a lab or an exam. */
   sections: 100,
   stepsPerSection: 100,
   hintsPerStep: 20,
-  altAnswers: 10,
+  acceptedAnswers: ACCEPTED_ANSWERS,
+  /** A checkpoint's alternatives: its accepted answers less the answer itself. */
+  altAnswers: ACCEPTED_ANSWERS - 1,
   title: 200,
   description: 1000,
   sectionTitle: 200,

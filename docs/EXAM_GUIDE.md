@@ -221,8 +221,8 @@ Check every part before you hand in. You cannot change your answers after.
 
 - `kind: exam` in the front matter marks the file as an exam. Exports always
   write it; on import it is optional (a file with a `## [type]` heading of a
-  question type or `[checklist]`, or a tagged `# [submit]` or `# [info]`
-  section, is recognised as an exam anyway; a `## [info]` item alone is not,
+  question type or `[checklist]`, or a `# [submit]` section, is recognised
+  as an exam anyway; a `## [info]` item alone is not,
   since labs use it too).
 - `# Title` starts a section and `## [type]` an item of it, of any type
   (§2). Text after the type is a step's title or the start of a question's
@@ -267,15 +267,11 @@ may add `"match": "pattern", "pattern": "MASK"`, `"placeholder"` and
 "review" }`, and `"variables": [{ "name", "expression" }]` sits at the top
 level.
 
-**Older files.** Exams written before 1.12.0 keep working, in Markdown, in
-JSON and in sessions already running: a `# [info] Title` section (aliases
-`[informational]`, `[checklist]`, `[tasks]`) reads its `##` headings as
-steps, and JSON sections with `"type": "questions"` (`"questions": […]`) or
-`"type": "info"` (`"steps": [{ "title", "body", "tasks" }]`, or 1.9.0's
-`"body"` and `"tasks"` on the section) are read as items: a step with
-checklist items as a Checklist, one without as Informational. Answers,
-ticks and exports keep their keys. Saving such an exam in the editor writes
-the new shape.
+**Older files.** Exams saved in vLabs before 1.12.0 (sections with a type
+instead of items) were rewritten in this shape by the 1.18.0 upgrade,
+answers and ticks included. Markdown or JSON files exported from those
+versions no longer import: export them again from 1.12.0 to 1.17.0, or
+rewrite their `# [info]` sections as ordinary `#` sections.
 
 ## 4. During the exam
 
