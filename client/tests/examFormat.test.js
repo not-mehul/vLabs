@@ -188,7 +188,7 @@ test('Studio imports: labs and exams are told apart (JSON kind, Markdown types)'
   assert.throws(() => parseExamMarkdown('---\nkind: lab\n---\n# S\n'), /is a lab/);
 });
 
-test('info sections: instructions and a checklist the participant ticks off', () => {
+test('informational sections: steps of instructions and checklists the participant ticks off', () => {
   const md = `---
 title: Bench exam
 ---
@@ -214,10 +214,15 @@ Cable the switch, then call your instructor over.
   const info = exam.content[1];
   assert.equal(info.type, 'info');
   assert.equal(info.minutes, 15);
-  assert.deepEqual(info.tasks, ['Switch cabled', 'Instructor checked it']);
-  assert.match(info.body, /^Cable the switch/);
-  assert.match(info.body, /## Wiring/);
-  assert.match(info.body, /not an item \(fenced\)/);
+  assert.equal(info.steps.length, 2, 'text before the first ## is an untitled first step');
+  assert.deepEqual(info.steps[0], {
+    title: '',
+    body: 'Cable the switch, then call your instructor over.',
+    tasks: [],
+  });
+  assert.equal(info.steps[1].title, 'Wiring');
+  assert.deepEqual(info.steps[1].tasks, ['Switch cabled', 'Instructor checked it']);
+  assert.match(info.steps[1].body, /not an item \(fenced\)/);
   assert.deepEqual(info.questions, []);
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam, 'round-trips');
   assert.deepEqual(examErrors(exam), []);
@@ -238,6 +243,27 @@ Cable the switch, then call your instructor over.
   );
   assert.equal(examUnlockedSection(last.content, { '0.0': true }), 1);
   assert.equal(examUnlockedSection(last.content, { '0.0': true, '1.t0': true }), 2);
+  // Unticking re-locks what follows, even past the high-water mark…
+  assert.equal(examUnlockedSection(exam.content, { ...ticked, '1.t1': null }, 3), 1);
+  // …while clearing an answer does not.
+  assert.equal(examUnlockedSection(exam.content, { ...ticked, '0.0': null }, 3), 3);
+
+  // Untitled later steps and titles that start with a tag survive a round trip.
+  const steps = parseExamMarkdown(
+    '# [informational] I\n## [step]\n- [ ] a\n## [weird] Title\nText\n## [step] [x] odd\n- [ ] b\n',
+  );
+  assert.deepEqual(
+    steps.content[0].steps.map((st) => st.title),
+    ['', '[weird] Title', '[x] odd'],
+  );
+  assert.deepEqual(parseExamMarkdown(examToMarkdown(steps)), steps);
+  assert.deepEqual(
+    listTasks(steps.content).map((t) => [t.key, t.sti]),
+    [
+      ['0.t0', 0],
+      ['0.t1', 2],
+    ],
+  );
 
   assert.throws(
     () => parseExamMarkdown('# [info] I\n## [single] Not here\n- [x] a\n'),
@@ -249,11 +275,39 @@ Cable the switch, then call your instructor over.
   ]);
   assert.deepEqual(
     examErrors(
-      normaliseExam({ title: 'T', content: [{ type: 'info', title: 'I', tasks: ['a'] }] }),
+      normaliseExam({
+        title: 'T',
+        content: [{ type: 'info', title: 'I', steps: [{ tasks: ['a'] }] }],
+      }),
     ),
     [],
     'an exam can be checklists only',
   );
+  assert.deepEqual(
+    examErrors(
+      normaliseExam({
+        title: 'T',
+        content: [{ type: 'info', title: 'I', steps: [{ tasks: ['a'] }, { title: 'Empty' }] }],
+      }),
+    ),
+    ['Section 1 · step 2 needs instructions or a checklist'],
+  );
+});
+
+test('informational sections saved by 1.9.0 (body and tasks, no steps) still work', () => {
+  const legacy = [
+    { type: 'info', title: 'Bench', body: 'Do it.', tasks: ['a', 'b'], questions: [] },
+    { type: 'submit', title: 'Submit', body: '', review: true, questions: [] },
+  ];
+  assert.deepEqual(normaliseExam({ title: 'T', content: legacy }).content[0].steps, [
+    { title: '', body: 'Do it.', tasks: ['a', 'b'] },
+  ]);
+  assert.deepEqual(
+    listTasks(legacy).map((t) => t.key),
+    ['0.t0', '0.t1'],
+  );
+  assert.equal(examUnlockedSection(legacy, { '0.t0': true }), 0);
+  assert.equal(examUnlockedSection(legacy, { '0.t0': true, '0.t1': true }), 1);
 });
 
 test('every exam ends with exactly one submit section', () => {

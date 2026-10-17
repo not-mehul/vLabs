@@ -354,7 +354,13 @@ test('the exam Markdown format round-trips and rejects unknown types', async () 
     exam.content.map((s) => s.type),
     ['questions', 'questions', 'info', 'submit'],
   );
-  assert.equal(exam.content[2].tasks.length, 2);
+  assert.deepEqual(
+    exam.content[2].steps.map((st) => [st.title, st.tasks.length]),
+    [
+      ['Cable the bench', 2],
+      ['Instructor check', 1],
+    ],
+  );
   assert.equal(exam.content[0].questions[1].type, 'multiple');
   assert.deepEqual(exam.content[0].questions[1].correct, [0, 2]);
   assert.deepEqual(parseExamMarkdown(examToMarkdown(exam)), exam);
@@ -513,7 +519,7 @@ test('section drawer for exams: timing plus that section’s question results', 
   assert.ok(second.data.questions.every((q) => q.section_index === 1));
 });
 
-test('checklist sections: the participant ticks every item to move on; nobody approves it', async () => {
+test('informational sections: the participant ticks every item to move on; nobody approves it', async () => {
   const tpl = await call('/api/templates', {
     method: 'POST',
     token,
@@ -526,8 +532,10 @@ test('checklist sections: the participant ticks every item to move on; nobody ap
           type: 'info',
           title: 'Bench check',
           minutes: 15,
-          body: 'Cable it, then call your instructor.',
-          tasks: ['Cabled', 'Instructor checked it'],
+          steps: [
+            { body: 'Cable it, then call your instructor.', tasks: ['Cabled'] },
+            { title: 'Check', body: '', tasks: ['Instructor checked it'] },
+          ],
         },
         { title: 'After', questions: [{ type: 'short', prompt: 'Port?', accepted: ['443'] }] },
         { type: 'submit', title: 'Hand in', review: false, body: 'Done?' },
@@ -562,10 +570,12 @@ test('checklist sections: the participant ticks every item to move on; nobody ap
   assert.equal(view.data.submit_section, 3);
   const info = view.data.sections[1];
   assert.equal(info.type, 'info');
-  assert.equal(info.body, 'Cable it, then call your instructor.');
+  assert.equal(info.steps[0].body, 'Cable it, then call your instructor.');
+  assert.equal(info.steps[1].title, 'Check');
   assert.deepEqual(
-    info.tasks.map((x) => x.key),
-    ['1.t0', '1.t1'],
+    info.steps.map((st) => st.tasks.map((x) => x.key)),
+    [['1.t0'], ['1.t1']],
+    'items are numbered across the steps',
   );
   assert.equal(view.data.question_count, 2, 'checklist items are not questions');
 
@@ -582,9 +592,14 @@ test('checklist sections: the participant ticks every item to move on; nobody ap
   assert.equal(view.data.answered_count, 1);
   assert.equal(view.data.sections[3].review, false);
   assert.equal(view.data.sections[3].body, 'Done?');
-  await put('1.t0', null);
+  assert.equal((await put('2.0', '443')).status, 200);
+  const untick = await put('1.t0', null);
+  assert.equal(untick.data.unlocked_section, 1, 'unticking locks what follows again');
   view = await call('/api/participant/exam', { token: t });
   assert.equal('1.t0' in view.data.answers, false, 'unticking removes it');
+  assert.equal(view.data.sections.length, 2, 'later sections are no longer sent');
+  assert.equal((await put('2.0', '80')).status, 403);
+  assert.equal((await put('1.t0', true)).data.unlocked_section, 3, 'ticking it again reopens them');
 
   const sub = await call('/api/participant/exam/submit', { method: 'POST', token: t });
   assert.equal(sub.status, 200);

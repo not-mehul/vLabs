@@ -11,7 +11,7 @@ import Icon from '../components/Icon.jsx';
 import LabPreview from '../components/editor/LabPreview.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
-import DurationField from '../components/editor/DurationField.jsx';
+import MinutesField from '../components/editor/MinutesField.jsx';
 import {
   normaliseTemplate,
   findUnknownPlaceholders,
@@ -725,7 +725,7 @@ export default function LabEditor({ id, initial }) {
                       max={LIMITS.sectionTitle}
                       onChange={(v) => setSec((s) => (s.title = v))}
                     />
-                    <DurationField
+                    <MinutesField
                       value={sec.minutes}
                       onChange={(v) => setSec((s) => (s.minutes = v))}
                     />

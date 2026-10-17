@@ -1041,6 +1041,44 @@ body.has-drawer {
   padding: 0;
   border: 0;
 }
+/* Steps of an informational section */
+.info-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.info-steps > .info-step {
+  align-self: stretch;
+  margin-top: 0.25rem;
+}
+.info-step__title.field__input {
+  flex: 1;
+  min-width: 10rem;
+}
+.preview__step-title {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.9rem;
+}
+.exam-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+.exam-steps__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.exam-steps__nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
 .exam-checklist__legend {
   display: inline-flex;
   align-items: center;
@@ -1535,7 +1573,21 @@ input.field__input--sm[type='number'] {
   margin: 0 0 0.35rem;
 }
 
-/* A length of time as hours + minutes (section allocations, session length) */
+/* Section time allocations, in minutes */
+.field--minutes .field__input {
+  width: 7.5rem;
+}
+.editor-section__head .field--minutes {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+.editor-section__head .field--minutes .field__input {
+  width: 5.5rem;
+}
+
+/* A session's length as hours + minutes (launcher) */
 .duration {
   display: inline-flex;
   align-items: center;
@@ -1547,15 +1599,6 @@ input.field__input--sm[type='number'] {
 .duration__unit {
   font-size: 0.78rem;
   color: var(--text-3);
-}
-.editor-section__head .field--duration {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0;
-}
-.editor-section__head .duration__input.field__input {
-  width: 3.75rem;
 }
 .create-session__row .field--duration {
   flex: none;

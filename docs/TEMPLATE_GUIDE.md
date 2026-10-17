@@ -6,7 +6,7 @@ template model, the authoring Markdown format, every rule the server enforces,
 the formula and pattern languages, how delivery and gating work for
 participants, and complete example templates for different kinds of courses.
 
-Applies to vLabs **1.9.0**.
+Applies to vLabs **1.10.0**.
 
 > **Where labs are written.** Labs are authored in **vLabs Template Studio**
 > (`docs/vlabs_template_studio.html`, a standalone page — open it in a
@@ -588,12 +588,11 @@ take. Any of these sets the same value:
 
 - Markdown: a `> minutes: N` line directly under the section's `#` heading.
 - JSON: `"minutes": N` on the section object (§18).
-- Template Studio: the **h** / **m** boxes in the section's header bar.
-- Portal: **Time allocated** (hours and minutes) under each section in the
-  lab editor.
+- Template Studio: the minutes box in the section's header bar.
+- Portal: **Time allocated (minutes)** under each section in the lab editor.
 
-The editors take hours and minutes and store whole minutes: 1 minute to 10
-hours (600). Leave both boxes empty for no allocation.
+Whole minutes from 1 to 600. Leave it empty for no allocation. (Hours and
+minutes are only for a whole session's length, set when you launch it.)
 
 **What it decides.** The session monitor compares each participant's time on
 their **furthest** section with that section's allocation:

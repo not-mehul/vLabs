@@ -56,8 +56,11 @@
  * code blocks are copied verbatim.
  *
  * A section heading may carry a section type: `# [info] Title` is an
- * instructions-and-checklist section (its text is the body, `- [ ]` lines are
- * the checklist the participant ticks off; no questions), `# [submit] Title`
+ * informational section (no questions): `## Step title` headings split it
+ * into steps shown one at a time (text before the first one is an untitled
+ * first step; `## [step] Title` is the same), each step's text is its
+ * instructions and its `- [ ]` lines the checklist the participant ticks off.
+ * `# [submit] Title`
  * the final submit section (its text is shown above the button; `> review:
  * false` leaves out the answered / unanswered summary). Without a tag a
  * section holds questions. An exam without a submit section gets the default
@@ -90,6 +93,7 @@ export const TYPE_ALIASES = Object.freeze({
 export const SECTION_ALIASES = Object.freeze({
   questions: 'questions',
   info: 'info',
+  informational: 'info',
   checklist: 'info',
   tasks: 'info',
   submit: 'submit',
@@ -167,12 +171,23 @@ export function parseExamMarkdown(text) {
 
   let section = null;
   let q = null;
+  let step = null;
   let body = [];
   let heading = '';
   let inFence = false;
 
   const flush = () => {
-    if (section && section.type !== 'questions') {
+    if (section?.type === 'info') {
+      const text = body.join('\n').trim();
+      body = [];
+      // An untitled first step only exists when it has something in it.
+      if (step && (step.explicit || text || step.tasks.length)) {
+        section.steps.push({ title: step.title, body: text, tasks: step.tasks });
+      }
+      step = null;
+      return;
+    }
+    if (section?.type === 'submit') {
       section.body = body.join('\n').trim();
       body = [];
       return;
@@ -197,8 +212,9 @@ export function parseExamMarkdown(text) {
         type: type || 'questions',
         title: type ? tag[2].trim() : rest,
         questions: [],
-        tasks: [],
+        steps: [],
       };
+      if (section.type === 'info') step = { title: '', tasks: [], explicit: false };
       exam.content.push(section);
       continue;
     }
@@ -211,6 +227,13 @@ export function parseExamMarkdown(text) {
             `Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`,
           );
         }
+        if (section.type === 'info' && /^##\s+/.test(line)) {
+          flush();
+          const rest = line.replace(/^##\s+/, '').trim();
+          const sm = /^\[step\]\s*(.*)$/i.exec(rest);
+          step = { title: sm ? sm[1].trim() : rest, tasks: [], explicit: true };
+          continue;
+        }
         const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
         if (mm) {
           if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
@@ -219,7 +242,7 @@ export function parseExamMarkdown(text) {
         }
         const task = OPTION_RE.exec(line);
         if (task && section.type === 'info') {
-          section.tasks.push(task[2].trim());
+          step.tasks.push(task[2].trim());
           continue;
         }
       }
@@ -285,11 +308,20 @@ export function examToMarkdown(input) {
     if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
     if (sec.type === 'submit' && !sec.review) out.push('> review: false');
     out.push('');
-    if (sec.type !== 'questions') {
+    if (sec.type === 'info') {
+      sec.steps.forEach((st, sti) => {
+        const empty = !st.body.trim() && !st.tasks.length;
+        if (st.title || sti > 0 || empty) {
+          const plain = st.title && !st.title.startsWith('[');
+          out.push(`## ${plain ? st.title : `[step] ${st.title}`.trim()}`, '');
+        }
+        if (st.body.trim()) out.push(st.body.trim(), '');
+        if (st.tasks.length) out.push(...st.tasks.map((t) => `- [ ] ${t}`), '');
+      });
+      continue;
+    }
+    if (sec.type === 'submit') {
       if (sec.body.trim()) out.push(sec.body.trim(), '');
-      if (sec.type === 'info' && sec.tasks.length) {
-        out.push(...sec.tasks.map((t) => `- [ ] ${t}`), '');
-      }
       continue;
     }
     for (const q of sec.questions) {
@@ -351,10 +383,18 @@ In two or three sentences, explain why networks are split into VLANs.
 # [info] Part 3 · Bench check
 > minutes: 10
 
-Cable your switch to the router as shown on the bench card, then raise your
-hand so your instructor can check it. Tick each item once it is done.
+## Cable the bench
+
+Cable your switch to the router as shown on the bench card. Tick each item
+once it is done.
 
 - [ ] Switch port Gi0/1 is cabled to the router
+- [ ] The link light is green on both ends
+
+## Instructor check
+
+Raise your hand so your instructor can check your bench.
+
 - [ ] My instructor has checked my bench
 
 # [submit] Review and submit

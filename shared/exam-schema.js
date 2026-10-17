@@ -17,10 +17,13 @@
  *     title: string,
  *     minutes: number | null,          // time allocated (1–600), null = none
  *                                      //   (always null on the submit section)
- *     body: string,                    // info / submit only: Markdown shown
- *                                      //   above the checklist / the submit button
- *     tasks: string[],                 // info only: requirements the participant
- *                                      //   ticks off before moving on
+ *     steps: [{                        // info only: pages shown one at a time
+ *       title: string,                 //   (may be empty for a single step)
+ *       body: string,                  //   Markdown instructions
+ *       tasks: string[],               //   checklist the participant ticks off
+ *     }],                              //   before the next step / section
+ *     body: string,                    // submit only: Markdown shown above the
+ *                                      //   submit button
  *     review: boolean,                 // submit only: list answered / unanswered
  *                                      //   before the button ("Review and submit")
  *                                      //   or just the button ("Submit")
@@ -43,9 +46,11 @@
  * Section types
  * -------------
  *   questions  the default: questions to answer
- *   info       instructions and a checklist the participant ticks off on their
- *              own (e.g. "cable the bench, then have your instructor check
- *              it"); nothing is graded and nobody approves it
+ *   info       "Informational": one or more steps of instructions, each with
+ *              a checklist the participant ticks off on their own (e.g.
+ *              "cable the bench, then have your instructor check it");
+ *              nothing is graded and nobody approves it. Sections saved by
+ *              1.9.0 carry `body` / `tasks` directly; infoSteps reads both.
  *   submit     the last section, always exactly one: where the participant
  *              hands the exam in. normaliseExam adds one when a template has
  *              none and moves it to the end.
@@ -80,6 +85,8 @@ export const EXAM_LIMITS = Object.freeze({
   longResponse: 10_000,
   maxPoints: 100,
   body: 20_000,
+  steps: 20,
+  stepTitle: 200,
   tasks: 30,
   task: 300,
   serialisedBytes: 900_000,
@@ -88,7 +95,7 @@ export const EXAM_LIMITS = Object.freeze({
 /** Section types (see the header comment) with their editor labels. */
 export const SECTION_TYPES = Object.freeze({
   questions: 'Questions',
-  info: 'Instructions & checklist',
+  info: 'Informational',
   submit: 'Submit',
 });
 export const SECTION_TYPE_NAMES = Object.freeze(Object.keys(SECTION_TYPES));
@@ -301,11 +308,38 @@ export function defaultSubmitSection() {
   };
 }
 
+/** A fresh step of an informational section. */
+export const blankStep = () => ({ title: '', body: '', tasks: [''] });
+
+/**
+ * The steps of an info section. Sections saved before steps existed (1.9.0)
+ * hold one step's `body` and `tasks` on the section itself.
+ */
+export function infoSteps(sec) {
+  if (Array.isArray(sec?.steps)) return sec.steps;
+  if (sec && (sec.body || (Array.isArray(sec.tasks) && sec.tasks.length))) {
+    return [{ title: '', body: sec.body || '', tasks: Array.isArray(sec.tasks) ? sec.tasks : [] }];
+  }
+  return [];
+}
+
+const normaliseStep = (raw) => {
+  const st = raw && typeof raw === 'object' ? raw : {};
+  return {
+    title: str(st.title, EXAM_LIMITS.stepTitle).trim(),
+    body: str(st.body, EXAM_LIMITS.body),
+    tasks: (Array.isArray(st.tasks) ? st.tasks : [])
+      .map((t) => str(t, EXAM_LIMITS.task).trim())
+      .filter(Boolean)
+      .slice(0, EXAM_LIMITS.tasks),
+  };
+};
+
 /** A fresh section of the given type in canonical shape. */
 export function blankSection(type = 'questions', n = 1) {
   if (type === 'submit') return defaultSubmitSection();
   if (type === 'info') {
-    return { type, title: `Section ${n}`, minutes: null, body: '', tasks: [''], questions: [] };
+    return { type, title: `Section ${n}`, minutes: null, steps: [blankStep()], questions: [] };
   }
   return { type: 'questions', title: `Section ${n}`, minutes: null, questions: [blankQuestion()] };
 }
@@ -330,11 +364,7 @@ export function normaliseSection(raw) {
       type,
       title,
       minutes: normaliseMinutes(s.minutes),
-      body: str(s.body, EXAM_LIMITS.body),
-      tasks: (Array.isArray(s.tasks) ? s.tasks : [])
-        .map((t) => str(t, EXAM_LIMITS.task).trim())
-        .filter(Boolean)
-        .slice(0, EXAM_LIMITS.tasks),
+      steps: infoSteps(s).slice(0, EXAM_LIMITS.steps).map(normaliseStep),
       questions: [],
     };
   }
@@ -382,9 +412,16 @@ export function examErrors(exam) {
     const type = sectionType(sec);
     if (type === 'submit') return;
     if (type === 'info') {
-      if (!sec.body.trim() && !sec.tasks.length) {
-        errors.push(`Section ${si + 1} needs instructions or a checklist`);
-      }
+      const steps = infoSteps(sec);
+      if (!steps.length) errors.push(`Section ${si + 1} needs instructions or a checklist`);
+      steps.forEach((st, sti) => {
+        if (st.body.trim() || st.tasks.length) return;
+        errors.push(
+          steps.length === 1
+            ? `Section ${si + 1} needs instructions or a checklist`
+            : `Section ${si + 1} · step ${sti + 1} needs instructions or a checklist`,
+        );
+      });
       return;
     }
     if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
@@ -404,15 +441,27 @@ export function examErrors(exam) {
 /** Stable key of a question: "<section>.<question>" (like lab checkpoints). */
 export const questionKey = (si, qi) => `${si}.${qi}`;
 
-/** Stable key of a checklist item in an info section: "<section>.t<item>". */
+/**
+ * Stable key of a checklist item in an info section: "<section>.t<item>",
+ * items numbered across the section's steps in reading order.
+ */
 export const taskKey = (si, ti) => `${si}.t${ti}`;
+
+/** The checklist items of an info section in reading order, with their step. */
+export function sectionTasks(sec) {
+  const out = [];
+  infoSteps(sec).forEach((st, sti) =>
+    (st.tasks || []).forEach((text) => out.push({ ti: out.length, sti, text })),
+  );
+  return out;
+}
 
 /** Every checklist item in reading order with its key and position. */
 export function listTasks(content) {
   const out = [];
   (Array.isArray(content) ? content : []).forEach((sec, si) => {
     if (sectionType(sec) !== 'info') return;
-    (sec.tasks || []).forEach((text, ti) => out.push({ key: taskKey(si, ti), si, ti, text }));
+    for (const t of sectionTasks(sec)) out.push({ key: taskKey(si, t.ti), si, ...t });
   });
   return out;
 }
@@ -504,7 +553,7 @@ export function isExamSectionComplete(content, si, answers) {
   const a = answers || {};
   const type = sectionType(sec);
   if (type === 'submit') return true;
-  if (type === 'info') return (sec.tasks || []).every((_, ti) => a[taskKey(si, ti)] === true);
+  if (type === 'info') return sectionTasks(sec).every(({ ti }) => a[taskKey(si, ti)] === true);
   return (sec?.questions || []).every((_, qi) => isAnswered(a[questionKey(si, qi)]));
 }
 
@@ -513,9 +562,10 @@ export function isExamSectionComplete(content, si, answers) {
  * question in all earlier sections has been answered and every checklist
  * ticked (the exam counterpart of a lab's checkpoints). After a questions
  * section the submit section opens straight away, so a participant can hand
- * in with questions left blank; a checklist must always be ticked. `reached` is the participant's stored
+ * in with questions left blank. `reached` is the participant's stored
  * high-water mark, so clearing an answer later never re-locks a section
- * already opened.
+ * already opened. A checklist is different: unticking an item locks every
+ * section after it again until it is ticked once more.
  */
 export function examUnlockedSection(content, answers, reached = 0) {
   const n = Array.isArray(content) ? content.length : 0;
@@ -526,5 +576,10 @@ export function examUnlockedSection(content, answers, reached = 0) {
   while (s < n - 1 && passable(s)) s += 1;
   s = Math.min(Math.max(s, reached || 0), Math.max(n - 1, 0));
   while (s < n - 1 && passable(s)) s += 1;
+  for (let i = 0; i < s; i += 1) {
+    if (sectionType(content[i]) === 'info' && !isExamSectionComplete(content, i, answers)) {
+      return i;
+    }
+  }
   return s;
 }

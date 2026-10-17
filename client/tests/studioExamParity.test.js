@@ -140,6 +140,7 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
       { minutes: 0, questions: 'nope' },
       { type: 'submit', title: 'Go', review: 'no', minutes: 9, questions: [{}] },
       { type: 'info', title: 'I', body: 7, tasks: [' a ', '', null, 'b'], questions: [{}] },
+      { type: 'info', title: 'J', steps: [{ title: 5, tasks: [' x '] }, null, 'y'], tasks: ['z'] },
       { type: 'submit', title: 'Dropped' },
     ],
   };

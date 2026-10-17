@@ -42,13 +42,23 @@ function withSubmitSection(res) {
   };
 }
 
+/** True when every checklist item of an informational step is ticked. */
+const stepDone = (st, answers) => (st?.tasks || []).every((t) => answers[t.key] === true);
+
 /** True when a section lets the participant move on (questions / checklist). */
 const sectionDone = (s, answers) =>
   s.type === 'info'
-    ? (s.tasks || []).every((t) => answers[t.key] === true)
+    ? (s.steps || []).every((st) => stepDone(st, answers))
     : s.type === 'submit'
       ? false
       : s.questions.every((q) => isAnswered(answers[q.key]));
+
+/** The step to open in an informational section: the first one not ticked off. */
+const firstOpenStep = (s, answers) => {
+  const steps = s?.steps || [];
+  const i = steps.findIndex((st) => !stepDone(st, answers));
+  return i >= 0 ? i : Math.max(steps.length - 1, 0);
+};
 
 /** Header badge for the autosave state of every answer together. */
 const SAVE_BADGE = {
@@ -61,7 +71,9 @@ const SAVE_BADGE = {
  * Participant exam, one section per page. Sections unlock like a lab's: the
  * next section opens once every question in this one is answered, or every
  * item on its checklist ticked (the server decides and only sends unlocked
- * sections); earlier sections stay open to revisit. The exam ends with its
+ * sections; unticking an item locks what follows again); earlier sections
+ * stay open to revisit. Informational sections show their steps one at a
+ * time, each step's checklist ticked before the next. The exam ends with its
  * submit section. Answers save as they are given, shown once in the header;
  * the participant is never told whether an answer is right. Submitting is
  * final — the exam is no longer shown afterwards, not even for review.
@@ -76,6 +88,7 @@ export default function Exam() {
   const [answers, setAnswers] = useState({});
   const [saveState, setSaveState] = useState({}); // key → saving | saved | error
   const [view, setView] = useState(0); // section index
+  const [stepOf, setStepOf] = useState({}); // section index → step shown (informational)
   const [error, setError] = useState('');
   const [ended, setEnded] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -175,9 +188,10 @@ export default function Exam() {
         const res = await api.saveAnswer(token, key, value);
         if (pending.current[key] === value) delete pending.current[key];
         setSaveState((s) => ({ ...s, [key]: 'saved' }));
-        // Answering the last open question of a section unlocks the next one:
-        // fetch it (the server only sends unlocked sections).
-        if (res && res.unlocked_section > unlockedRef.current) {
+        // Answering the last open question of a section unlocks the next one
+        // (fetch it: the server only sends unlocked sections); unticking a
+        // checklist item locks what follows again.
+        if (res && res.unlocked_section !== unlockedRef.current) {
           unlockedRef.current = res.unlocked_section;
           load();
         }
@@ -291,7 +305,13 @@ export default function Exam() {
   const displayName = (data ? `${data.first_name} ${data.last_name}` : name) || '';
   const sections = data?.sections || []; // unlocked sections only
   const totalSections = data?.total_sections ?? sections.length;
-  const unlocked = data?.unlocked_section ?? 0;
+  // An unticked checklist locks every section after it straight away (the
+  // server agrees once the untick is saved).
+  const openChecklist = sections.findIndex((s) => s.type === 'info' && !sectionDone(s, answers));
+  const unlocked =
+    openChecklist >= 0
+      ? Math.min(data?.unlocked_section ?? 0, openChecklist)
+      : (data?.unlocked_section ?? 0);
   const allQuestions = sections.flatMap((s) => s.questions);
   const answeredCount = allQuestions.filter((q) => isAnswered(answers[q.key])).length;
   const total = data?.question_count ?? allQuestions.length;
@@ -322,6 +342,17 @@ export default function Exam() {
   const section = sections[view];
   const sectionComplete = section ? sectionDone(section, answers) : false;
   const nextUnlocked = view < unlocked;
+  // Informational sections show their steps one at a time, like a lab.
+  const steps = section?.type === 'info' ? section.steps || [] : [];
+  const stepIndex = Math.min(stepOf[view] ?? firstOpenStep(section, answers), steps.length - 1);
+  const step = steps[stepIndex];
+  const multiStep = steps.length > 1;
+  const onLastStep = !multiStep || stepIndex === steps.length - 1;
+  const canNext = onLastStep ? nextUnlocked : stepDone(step, answers);
+  const showStep = (i) => {
+    setStepOf((m) => ({ ...m, [view]: i }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const nextSection = sections[view + 1];
   const unanswered = allQuestions.filter((q) => !isAnswered(answers[q.key]));
   const unticked = sections.filter((s) => s.type === 'info' && !sectionDone(s, answers));
@@ -336,6 +367,7 @@ export default function Exam() {
         : null;
 
   function jumpTo(si, anchor) {
+    setStepOf((m) => ({ ...m, [si]: undefined }));
     goTo(si);
     if (!anchor) return;
     setTimeout(
@@ -485,14 +517,22 @@ export default function Exam() {
               <h1 className="section-head__title">{section.title}</h1>
             </div>
             {section.type === 'info' ? (
-              <div className="panel exam-info">
-                {section.body && <Markdown>{section.body}</Markdown>}
-                {section.tasks.length > 0 && (
+              <div key={stepIndex} className="panel exam-info">
+                {multiStep && (
+                  <div className="exam-steps" aria-live="polite">
+                    <span>
+                      Step {stepIndex + 1} of {steps.length}
+                    </span>
+                  </div>
+                )}
+                {step?.title && <h2 className="exam-steps__title">{step.title}</h2>}
+                {step?.body && <Markdown>{step.body}</Markdown>}
+                {step?.tasks.length > 0 && (
                   <fieldset className="exam-checklist">
                     <legend className="exam-checklist__legend">
                       <Icon name="checklist" size={15} /> Tick each item once it is done
                     </legend>
-                    {section.tasks.map((t) => {
+                    {step.tasks.map((t) => {
                       const on = answers[t.key] === true;
                       return (
                         <label
@@ -503,9 +543,11 @@ export default function Exam() {
                           <input
                             type="checkbox"
                             checked={on}
-                            onChange={(e) =>
-                              change(t.key, e.target.checked ? true : null, { immediate: true })
-                            }
+                            onChange={(e) => {
+                              // Stay on this step: ticking its last item must not move on.
+                              setStepOf((m) => ({ ...m, [view]: stepIndex }));
+                              change(t.key, e.target.checked ? true : null, { immediate: true });
+                            }}
                           />
                           <span className="choice__text">
                             <Markdown>{t.text}</Markdown>
@@ -529,12 +571,15 @@ export default function Exam() {
             <div className="section-nav">
               <button
                 className="btn btn--ghost"
-                disabled={view === 0}
-                onClick={() => goTo(view - 1)}
+                disabled={view === 0 && stepIndex <= 0}
+                onClick={() =>
+                  multiStep && stepIndex > 0 ? showStep(stepIndex - 1) : goTo(view - 1)
+                }
               >
-                <Icon name="chevronLeft" size={16} /> Previous
+                <Icon name="chevronLeft" size={16} />{' '}
+                {multiStep && stepIndex > 0 ? 'Previous step' : 'Previous'}
               </button>
-              {!sectionComplete && !nextUnlocked && (
+              {!canNext && !(onLastStep && sectionComplete) && (
                 <span className="section-nav__hint" role="status">
                   <Icon name="lock" size={14} />{' '}
                   {section.type === 'info'
@@ -542,20 +587,31 @@ export default function Exam() {
                     : 'Answer every question to continue'}
                 </span>
               )}
-              {section.index < totalSections - 1 && (
+              {!onLastStep ? (
                 <button
                   className="btn btn--primary"
-                  disabled={!nextUnlocked}
-                  onClick={() => goTo(section.index + 1)}
-                  title={nextUnlocked ? '' : 'Finish this section first'}
+                  disabled={!canNext}
+                  onClick={() => showStep(stepIndex + 1)}
+                  title={canNext ? '' : 'Tick every item first'}
                 >
-                  {sectionComplete && !nextUnlocked
-                    ? 'Saving…'
-                    : nextSection?.type === 'submit'
-                      ? nextSection.title || 'Submit'
-                      : 'Next'}{' '}
-                  <Icon name="chevronRight" size={16} />
+                  Next step <Icon name="chevronRight" size={16} />
                 </button>
+              ) : (
+                section.index < totalSections - 1 && (
+                  <button
+                    className="btn btn--primary"
+                    disabled={!nextUnlocked}
+                    onClick={() => goTo(section.index + 1)}
+                    title={nextUnlocked ? '' : 'Finish this section first'}
+                  >
+                    {sectionComplete && !nextUnlocked
+                      ? 'Saving…'
+                      : nextSection?.type === 'submit'
+                        ? nextSection.title || 'Submit'
+                        : 'Next'}{' '}
+                    <Icon name="chevronRight" size={16} />
+                  </button>
+                )
               )}
             </div>
           </div>
@@ -620,11 +676,6 @@ export default function Exam() {
                   )}
                 </>
               )}
-              <p className="muted small">
-                Once submitted your answers are final: you will not be able to change them or see
-                the questions again. Your answers are saved as you go, so you can also leave this
-                page and come back before submitting.
-              </p>
               <div className="section-nav">
                 <button
                   className="btn btn--ghost"
@@ -635,7 +686,7 @@ export default function Exam() {
                 </button>
                 <button className="btn btn--primary" disabled={submitting} onClick={confirmSubmit}>
                   <Icon name="flag" size={16} />{' '}
-                  {submitting ? 'Submitting…' : unsaved ? 'Save & submit' : 'Submit exam'}
+                  {submitting ? 'Submitting…' : unsaved ? 'Save & submit' : 'Submit'}
                 </button>
               </div>
             </div>

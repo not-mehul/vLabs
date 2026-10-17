@@ -11,13 +11,14 @@ import ExamQuestion from '../components/ExamQuestion.jsx';
 import Markdown from '../components/Markdown.jsx';
 import ImageLibrary from '../components/editor/ImageLibrary.jsx';
 import ChangeHistory from '../components/editor/ChangeHistory.jsx';
-import DurationField from '../components/editor/DurationField.jsx';
+import MinutesField from '../components/editor/MinutesField.jsx';
 import {
   EXAM_LIMITS,
   QUESTION_TYPES,
   QUESTION_TYPE_NAMES,
   blankQuestion,
   blankSection,
+  blankStep,
   sectionType,
   SECTION_TYPES,
   normaliseExam,
@@ -106,7 +107,7 @@ function OptionsEditor({ q, onChange }) {
   );
 }
 
-/** The checklist of an info section: one line per item the participant ticks. */
+/** The checklist of an informational step: one line per item the participant ticks. */
 function TasksEditor({ tasks, onChange }) {
   return (
     <div className="opts-editor">
@@ -143,6 +144,81 @@ function TasksEditor({ tasks, onChange }) {
         onClick={() => onChange([...tasks, ''])}
       >
         <Icon name="plus" size={13} /> Add item
+      </button>
+    </div>
+  );
+}
+
+/** The steps of an informational section, shown to participants one at a time. */
+function InfoStepsEditor({ si, steps, onChange }) {
+  const setStep = (i, st) => onChange(steps.map((x, k) => (k === i ? st : x)));
+  return (
+    <div className="info-steps">
+      {steps.map((st, i) => (
+        <div className="qedit info-step" key={i}>
+          <div className="qedit__head">
+            <span className="qedit__num">Step {i + 1}</span>
+            <input
+              className="field__input info-step__title"
+              value={st.title}
+              maxLength={EXAM_LIMITS.stepTitle}
+              placeholder={steps.length === 1 ? 'Step title (optional)' : 'Step title'}
+              aria-label={`Section ${si + 1} step ${i + 1} title`}
+              onChange={(e) => setStep(i, { ...st, title: e.target.value })}
+            />
+            <span className="qedit__tools">
+              <button
+                type="button"
+                className="btn btn--xs btn--icon btn--ghost"
+                disabled={i === 0}
+                onClick={() => onChange(move(steps, i, -1))}
+                aria-label="Move step up"
+              >
+                <Icon name="arrowUp" size={13} />
+              </button>
+              <button
+                type="button"
+                className="btn btn--xs btn--icon btn--ghost"
+                disabled={i === steps.length - 1}
+                onClick={() => onChange(move(steps, i, 1))}
+                aria-label="Move step down"
+              >
+                <Icon name="arrowDown" size={13} />
+              </button>
+              <button
+                type="button"
+                className="btn btn--xs btn--icon btn--danger-ghost"
+                disabled={steps.length <= 1}
+                onClick={() => onChange(steps.filter((_, k) => k !== i))}
+                aria-label="Remove step"
+              >
+                <Icon name="trash" size={13} />
+              </button>
+            </span>
+          </div>
+          <label className="field field--compact">
+            <span className="field__label">
+              Instructions (Markdown; images by library file name)
+            </span>
+            <textarea
+              className="field__input"
+              rows={Math.min(12, Math.max(3, st.body.split('\n').length + 1))}
+              maxLength={EXAM_LIMITS.body}
+              value={st.body}
+              placeholder="e.g. Cable the switch to the router, then call your instructor over to check it."
+              onChange={(e) => setStep(i, { ...st, body: e.target.value })}
+            />
+          </label>
+          <TasksEditor tasks={st.tasks} onChange={(tasks) => setStep(i, { ...st, tasks })} />
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn btn--xs btn--ghost"
+        disabled={steps.length >= EXAM_LIMITS.steps}
+        onClick={() => onChange([...steps, blankStep()])}
+      >
+        <Icon name="plus" size={13} /> Add step
       </button>
     </div>
   );
@@ -313,18 +389,34 @@ function ExamPreview({ id, draft }) {
               <Markdown>{sec.body}</Markdown>
             </div>
           )}
-          {sec.type === 'info' && sec.tasks.length > 0 && (
-            <div className="exam-checklist">
-              {sec.tasks.map((t, ti) => (
-                <label key={ti} className="choice exam-checklist__item">
-                  <input type="checkbox" disabled />
-                  <span className="choice__text">
-                    <Markdown>{t}</Markdown>
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
+          {sec.type === 'info' &&
+            (sec.steps || []).map((st, sti) => (
+              <div key={sti} className="preview__step">
+                {(st.title || sec.steps.length > 1) && (
+                  <h4 className="preview__step-title">
+                    Step {sti + 1}
+                    {st.title ? ` · ${st.title}` : ''}
+                  </h4>
+                )}
+                {st.body && (
+                  <div className="panel">
+                    <Markdown>{st.body}</Markdown>
+                  </div>
+                )}
+                {st.tasks.length > 0 && (
+                  <div className="exam-checklist">
+                    {st.tasks.map((t, ti) => (
+                      <label key={ti} className="choice exam-checklist__item">
+                        <input type="checkbox" disabled />
+                        <span className="choice__text">
+                          <Markdown>{t}</Markdown>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           {sec.type === 'submit' && (
             <p className="muted small">
               {sec.review
@@ -631,8 +723,8 @@ export default function ExamEditor({ id, initial }) {
                   />
                   <span className={`tag tag--section-${type}`}>{SECTION_TYPES[type]}</span>
                   {!isSubmit && (
-                    <DurationField
-                      label="Time"
+                    <MinutesField
+                      label="Minutes"
                       value={sec.minutes}
                       onChange={(v) => setSection(si, { ...sec, minutes: v })}
                     />
@@ -673,32 +765,27 @@ export default function ExamEditor({ id, initial }) {
                   )}
                 </div>
 
-                {type !== 'questions' && (
+                {isSubmit && (
                   <label className="field field--compact">
                     <span className="field__label">
-                      {isSubmit
-                        ? 'Text above the submit button (Markdown, optional)'
-                        : 'Instructions (Markdown; images by library file name)'}
+                      Text above the submit button (Markdown, optional)
                     </span>
                     <textarea
                       className="field__input"
                       rows={Math.min(12, Math.max(3, sec.body.split('\n').length + 1))}
                       maxLength={EXAM_LIMITS.body}
                       value={sec.body}
-                      placeholder={
-                        isSubmit
-                          ? 'e.g. Check every part before you hand in.'
-                          : 'e.g. Cable the switch to the router, then call your instructor over to check it.'
-                      }
+                      placeholder="e.g. Check every part before you hand in."
                       onChange={(e) => setSection(si, { ...sec, body: e.target.value })}
                     />
                   </label>
                 )}
 
                 {type === 'info' && (
-                  <TasksEditor
-                    tasks={sec.tasks}
-                    onChange={(tasks) => setSection(si, { ...sec, tasks })}
+                  <InfoStepsEditor
+                    si={si}
+                    steps={sec.steps}
+                    onChange={(steps) => setSection(si, { ...sec, steps })}
                   />
                 )}
 
@@ -769,10 +856,7 @@ export default function ExamEditor({ id, initial }) {
                 {si === last - 1 && (
                   <div className="section-add">
                     <span className="muted small">Add a section before the submit step:</span>
-                    {[
-                      ['questions', 'Questions'],
-                      ['info', 'Instructions & checklist'],
-                    ].map(([t, label]) => (
+                    {['info', 'questions'].map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -789,7 +873,7 @@ export default function ExamEditor({ id, initial }) {
                           })
                         }
                       >
-                        <Icon name="plus" size={14} /> {label}
+                        <Icon name="plus" size={14} /> {SECTION_TYPES[t]}
                       </button>
                     ))}
                   </div>

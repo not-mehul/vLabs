@@ -112,8 +112,6 @@ function CreateSession({ templates, onCreated }) {
             label="Runs for"
             value={duration}
             max={MAX_MINUTES}
-            allowEmpty={false}
-            compact={false}
             onChange={(v) => {
               setDuration(v);
               setDurationTouched(true);
