@@ -71,6 +71,12 @@ if ! out="$(caddy validate --config "$new" --adapter caddyfile 2>&1)"; then
   rm -f "$new"
   exit 1
 fi
+# `caddy validate` opens the log writers, so running it as root creates
+# /var/log/caddy/vlabs-access.log owned by root (0600) on a fresh install. The
+# running Caddy (user caddy) then cannot open it and the reload fails with
+# "setting up custom log 'log0': opening log writer". Hand the logs back.
+install -d -m 0755 /var/log/caddy
+chown -R caddy:caddy /var/log/caddy
 # Only touch Caddy when something actually changed (the boot unit runs this
 # every boot; an unchanged reload is harmless but noisy in the journal).
 if ! cmp -s "$new" /etc/caddy/Caddyfile; then
