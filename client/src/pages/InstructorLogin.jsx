@@ -67,7 +67,6 @@ export default function InstructorLogin() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
       </div>
     </div>
   );

@@ -85,11 +85,6 @@
  * the button and `> review: false` leaves out the answered / unanswered
  * summary. An exam without one gets the default (see normaliseExam), and
  * exports always write it.
- *
- * Files written before 1.12.0 are read as they were: `# [info] Title` (alias
- * `[informational]`, `[checklist]`, `[tasks]`) starts a section whose `##`
- * headings are steps (unless tagged with a question type), each a Checklist
- * item when it has `- [ ]` lines and Informational otherwise.
  */
 
 import { normaliseExam, QUESTION_TYPES } from './exam-schema.js';
@@ -123,12 +118,8 @@ const STEP_ALIASES = Object.freeze({
   tasks: 'checklist',
 });
 
-/** Tags on `# [tag] Title` section headings (`info` ones are the pre-1.12 kind). */
+/** Tags on `# [tag] Title` section headings. */
 const SECTION_ALIASES = Object.freeze({
-  info: 'info',
-  informational: 'info',
-  checklist: 'info',
-  tasks: 'info',
   submit: 'submit',
   review: 'submit',
 });
@@ -217,7 +208,7 @@ export function parseExamMarkdown(text) {
     i += 1; // closing ---
   }
 
-  let section = null; // { title, minutes, items, legacy } or a submit section
+  let section = null; // { title, minutes, items } or a submit section
   let item = null; // the item being read; step items collect `tasks`
   let body = [];
   let inFence = false;
@@ -236,14 +227,12 @@ export function parseExamMarkdown(text) {
       return;
     }
     if (item.type === 'step') {
-      const { title, tasks, explicit } = item;
-      if (explicit || text || tasks.length) {
-        section.items.push(
-          tasks.length || item.checklist
-            ? { type: 'checklist', title, body: text, tasks }
-            : { type: 'info', title, body: text },
-        );
-      }
+      const { title, tasks } = item;
+      section.items.push(
+        tasks.length || item.checklist
+          ? { type: 'checklist', title, body: text, tasks }
+          : { type: 'info', title, body: text },
+      );
     } else {
       item.prompt = [item.heading.trim(), text].filter(Boolean).join('\n\n');
       delete item.heading;
@@ -261,13 +250,9 @@ export function parseExamMarkdown(text) {
       const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
       const kind = tag ? SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
       const title = kind ? tag[2].trim() : rest;
-      section =
-        kind === 'submit'
-          ? { type: 'submit', title, body: '' }
-          : { title, items: [], legacy: kind === 'info' };
+      section = kind === 'submit' ? { type: 'submit', title, body: '' } : { title, items: [] };
       exam.content.push(section);
-      // A pre-1.12 info section starts with an untitled step.
-      item = section.legacy ? { type: 'step', title: '', tasks: [], explicit: false } : null;
+      item = null;
       continue;
     }
     // Section settings, anywhere but inside a question (where they are text).
@@ -296,14 +281,11 @@ export function parseExamMarkdown(text) {
         section = { title: 'Section 1', items: [] };
         exam.content.push(section);
       }
-      // In a pre-1.12 info section any heading that is not a question is a
-      // step, a tag that is not a type included (it was part of the title).
-      if (STEP_ALIASES[raw] || (section.legacy && !TYPE_ALIASES[raw])) {
+      if (STEP_ALIASES[raw]) {
         item = {
           type: 'step',
-          title: STEP_ALIASES[raw] ? m[2].trim() : rest,
+          title: m[2].trim(),
           tasks: [],
-          explicit: true,
           checklist: STEP_ALIASES[raw] === 'checklist',
         };
         continue;

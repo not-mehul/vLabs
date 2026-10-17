@@ -47,7 +47,7 @@ const EXAM = {
   content: [
     {
       title: 'Part 1',
-      questions: [
+      items: [
         { type: 'single', prompt: 'Pick B', options: ['A', 'B', 'C'], correct: 1, points: 2 },
         { type: 'multiple', prompt: 'Pick A and C', options: ['A', 'B', 'C'], correct: [0, 2] },
         { type: 'truefalse', prompt: 'True?', correct: true },
@@ -55,7 +55,7 @@ const EXAM = {
     },
     {
       title: 'Part 2',
-      questions: [
+      items: [
         { type: 'short', prompt: 'Port?', accepted: ['443', 'tcp/443'] },
         { type: 'short', prompt: 'Your name?' },
         { type: 'long', prompt: 'Explain', points: 5 },
@@ -116,7 +116,7 @@ test('exam validation reports every authoring problem', async () => {
       content: [
         {
           title: 'S',
-          questions: [
+          items: [
             { type: 'single', prompt: 'x', options: ['only one'], correct: 0 },
             { type: 'multiple', prompt: 'y', options: ['a', 'b'], correct: [] },
             { type: 'truefalse', prompt: '' },
@@ -600,23 +600,26 @@ test('informational sections: the participant ticks every item to move on; nobod
       kind: 'exam',
       title: 'Bench exam',
       content: [
-        { title: 'Theory', questions: [{ type: 'truefalse', prompt: 'True?', correct: true }] },
+        { title: 'Theory', items: [{ type: 'truefalse', prompt: 'True?', correct: true }] },
         {
-          type: 'info',
           title: 'Bench check',
           minutes: 15,
-          steps: [
-            { body: 'Cable it, then call your instructor.', tasks: ['Cabled'] },
-            { title: 'Check', body: '', tasks: ['Instructor checked it'] },
+          items: [
+            {
+              type: 'checklist',
+              title: '',
+              body: 'Cable it, then call your instructor.',
+              tasks: ['Cabled'],
+            },
+            { type: 'checklist', title: 'Check', body: '', tasks: ['Instructor checked it'] },
           ],
         },
-        { title: 'After', questions: [{ type: 'short', prompt: 'Port?', accepted: ['443'] }] },
+        { title: 'After', items: [{ type: 'short', prompt: 'Port?', accepted: ['443'] }] },
         { type: 'submit', title: 'Hand in', review: false, body: 'Done?' },
       ],
     },
   });
   assert.equal(tpl.status, 201);
-  // Saved by 1.11 as typed sections; stored as sections of items.
   assert.deepEqual(
     tpl.data.content.map((s) => (s.items ? s.items.map((it) => it.type) : s.type)),
     [['truefalse'], ['checklist', 'checklist'], ['short'], 'submit'],
@@ -694,10 +697,10 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
     variables: [{ name: 'STORE', expression: '100 + seat' }],
     content: [
       {
-        type: 'info',
         title: 'Bench {{ SEAT_ID }}',
-        steps: [
+        items: [
           {
+            type: 'checklist',
             title: 'Hi {{ FIRST_NAME }}',
             body: 'Store {{ STORE }}',
             tasks: ['Ping store {{ STORE }}'],
@@ -706,14 +709,14 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
       },
       {
         title: 'Setup',
-        questions: [
+        items: [
           { type: 'short', prompt: 'Which store is yours?', accepted: ['{{ STORE }}'] },
           { type: 'short', prompt: 'Your router IP?', capture: 'ROUTER_IP' },
         ],
       },
       {
         title: 'Check {{ ROUTER_IP }}',
-        questions: [
+        items: [
           {
             type: 'single',
             prompt: 'Is {{ ROUTER_IP }} on store {{ STORE }}?',
@@ -734,7 +737,7 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
       ...body,
       content: [
         { ...body.content[1], title: 'Setup {{ ROUTER_IP }} {{ NOPE }}' },
-        { title: 'X', questions: [{ type: 'long', prompt: 'x', capture: 'LONG' }] },
+        { title: 'X', items: [{ type: 'long', prompt: 'x', capture: 'LONG' }] },
       ],
     },
   });
@@ -909,42 +912,6 @@ test('sections mix steps and questions; short answers match exactly or by a patt
   assert.equal(p.pending_count, 0);
   const q1 = detail.data.questions.find((x) => x.key === '0.1');
   assert.equal(q1.expected, 'fits XXXX.XXXX');
-
-  // A session launched before 1.12.0 keeps its typed sections and its answers.
-  const legacy = [
-    {
-      type: 'questions',
-      title: 'Old',
-      questions: [
-        { type: 'truefalse', prompt: 'T?', correct: true, points: 1, options: [], accepted: [] },
-      ],
-    },
-    {
-      type: 'info',
-      title: 'Old bench',
-      steps: [{ title: '', body: 'Do it', tasks: ['Done'] }],
-      questions: [],
-    },
-    { type: 'submit', title: 'Hand in', minutes: null, body: '', review: true, questions: [] },
-  ];
-  db.prepare('UPDATE sessions SET content = ? WHERE id = ?').run(
-    JSON.stringify(legacy),
-    sess.data.id,
-  );
-  const j2 = await call('/api/participant/join', {
-    method: 'POST',
-    body: { room_code: sess.data.room_code, first_name: 'Old', last_name: 'Timer' },
-  });
-  const t2 = j2.data.token;
-  const put2 = (key, value) =>
-    call('/api/participant/exam/answer', { method: 'PUT', token: t2, body: { key, value } });
-  assert.equal((await put2('0.0', true)).data.unlocked_section, 1);
-  view = await call('/api/participant/exam', { token: t2 });
-  assert.deepEqual(
-    view.data.sections[1].items.map((it) => [it.type, it.body, it.tasks.map((x) => x.key)]),
-    [['checklist', 'Do it', ['1.t0']]],
-  );
-  assert.equal((await put2('1.t0', true)).data.unlocked_section, 2);
 });
 
 test('a lab session runs for 8 hours unless told otherwise', async () => {
@@ -995,7 +962,7 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
       content: [
         {
           title: 'Store',
-          questions: [{ type: 'short', prompt: 'Store?', accepted: ['{{ STORE }}'] }],
+          items: [{ type: 'short', prompt: 'Store?', accepted: ['{{ STORE }}'] }],
         },
       ],
     },

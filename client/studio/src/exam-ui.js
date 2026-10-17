@@ -406,12 +406,10 @@ function examSubmitBodyHtml(section, sIdx) {
 }
 
 /** Keep exactly one submit section, last, and every other section as a list
-    of items (workspaces saved before 1.12 have typed sections). */
+    of items. */
 function ensureExamSubmitSection() {
   templateData.content.forEach(sec => {
-    if (examIsSubmit(sec) || Array.isArray(sec.items)) return;
-    sec.items = examSectionItems(sec).map(it => ({ ...JSON.parse(JSON.stringify(it)), collapsed: Boolean(it.collapsed) }));
-    ['type', 'steps', 'questions', 'body', 'tasks'].forEach(k => delete sec[k]);
+    if (!examIsSubmit(sec) && !Array.isArray(sec.items)) sec.items = [];
   });
   const content = templateData.content;
   const submits = content.filter(examIsSubmit);

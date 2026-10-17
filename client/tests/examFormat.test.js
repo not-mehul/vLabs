@@ -152,7 +152,7 @@ test('exam schema: normalising, validation, grading and the public view', () => 
     content: [
       {
         title: 'S',
-        questions: [
+        items: [
           { type: 'single', prompt: 'p', options: ['a', 'b'], correct: '1' },
           { type: 'short', prompt: 'q', accepted: [' x ', 'x', ''] },
           { type: 'mystery', prompt: 'r', options: ['a', 'b'], correct: 0 },
@@ -411,66 +411,6 @@ title: Patterns
   });
   assert.equal(empty.content[0].items[0].match, 'pattern');
   assert.deepEqual(examErrors(empty), ['Section 1 · question 1 pattern: Pattern is empty']);
-});
-
-test('sections saved before 1.12 (questions or info steps) still read the same', () => {
-  const legacy = [
-    {
-      type: 'questions',
-      title: 'Q',
-      questions: [{ type: 'truefalse', prompt: 'p', correct: true }],
-    },
-    { type: 'info', title: 'Bench', body: 'Do it.', tasks: ['a', 'b'], questions: [] },
-    {
-      type: 'info',
-      title: 'Steps',
-      steps: [
-        { title: 'One', body: 'Read.', tasks: [] },
-        { title: 'Two', body: '', tasks: ['c'] },
-      ],
-      questions: [],
-    },
-    { type: 'submit', title: 'Submit', body: '', review: true, questions: [] },
-  ];
-  const exam = normaliseExam({ title: 'T', content: legacy });
-  assert.deepEqual(
-    exam.content.slice(0, 3).map((s) => s.items.map((it) => it.type)),
-    [['truefalse'], ['checklist'], ['info', 'checklist']],
-  );
-  assert.deepEqual(exam.content[1].items[0], {
-    type: 'checklist',
-    title: '',
-    body: 'Do it.',
-    tasks: ['a', 'b'],
-  });
-  assert.deepEqual(exam.content[3], {
-    type: 'submit',
-    title: 'Submit',
-    minutes: null,
-    body: '',
-    review: true,
-  });
-  // The keys running sessions saved answers under are unchanged.
-  assert.deepEqual(
-    listTasks(legacy).map((t) => t.key),
-    ['1.t0', '1.t1', '2.t0'],
-  );
-  assert.equal(examUnlockedSection(legacy, { '0.0': true, '1.t0': true }), 1);
-  assert.equal(examUnlockedSection(legacy, { '0.0': true, '1.t0': true, '1.t1': true }), 2);
-
-  // Markdown from before 1.12: `# [info]` sections whose ## headings are steps.
-  const md = parseExamMarkdown(
-    '# [info] Bench\nIntro.\n## Wiring\n- [ ] cabled\n## [weird] Title\nText\n## [tf] Mixed in now\n> answer: true\n',
-  );
-  assert.deepEqual(
-    md.content[0].items.map((it) => [it.type, it.title ?? it.prompt]),
-    [
-      ['info', ''],
-      ['checklist', 'Wiring'],
-      ['info', '[weird] Title'],
-      ['truefalse', 'Mixed in now'],
-    ],
-  );
 });
 
 test('every exam ends with exactly one submit section', () => {

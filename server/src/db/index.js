@@ -5,6 +5,7 @@ import config from '../config.js';
 import { log } from '../lib/logger.js';
 import { flagLegacyOptionalSections } from '../../../shared/lab-progress.js';
 import { assignItemIds } from '../../../shared/template-schema.js';
+import { upgradeLegacyExamContent } from '../lib/legacyExam.js';
 
 // Ensure the directory holding the SQLite file exists.
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -463,6 +464,29 @@ const MIGRATIONS = [
           setTemplate.run(next, t.id);
           for (const s of sameSessions.all(t.id, t.version)) {
             if (s.content === t.content) setSession.run(next, s.id);
+          }
+        }
+      })();
+    },
+  },
+  {
+    version: 12,
+    name: 'exam sections from before 1.12.0 rewritten with items',
+    up() {
+      // Old shapes (`questions` / `info` sections) become `items`, keeping the
+      // order and so every saved answer key; templates also get item ids.
+      db.transaction(() => {
+        for (const table of ['templates', 'sessions']) {
+          const update = db.prepare(`UPDATE ${table} SET content = ? WHERE id = ?`);
+          const rows = db.prepare(`SELECT id, content FROM ${table} WHERE kind = 'exam'`).all();
+          for (const row of rows) {
+            const next = upgradeLegacyExamContent(row.content);
+            if (!next) continue;
+            const content =
+              table === 'templates'
+                ? JSON.stringify(assignItemIds(JSON.parse(next), (sec) => sec.items || []))
+                : next;
+            update.run(content, row.id);
           }
         }
       })();

@@ -42,7 +42,6 @@ import {
   normaliseQuestion,
   normaliseItem,
   normaliseExam,
-  sectionItems,
   sectionLayout,
   examCaptures as sharedExamCaptures,
   capturedValue,
