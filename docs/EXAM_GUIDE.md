@@ -102,7 +102,7 @@ A short answer is checked one of two ways, exactly like a lab checkpoint
   participants may leave out: `XXXX.XXXX.XXXX` accepts both `ABCD.1234.EFGH`
   and `abcd1234efgh`. Write `\.` to make a separator required. A mask needs
   at least one wildcard. Any answer that fits is correct (up to 200
-  characters, as in labs); the editor shows an example as you type.
+  characters, as in labs); the Studio shows an example as you type.
 
 Either kind can have a **placeholder**, the grey example shown in the empty
 box (`e.g. ABCD.1234.EFGH`), and can **save the answer** as a variable for
@@ -122,8 +122,8 @@ resolved: they are written as is.)
   `{{ LAST_NAME }}`, `{{ FULL_NAME }}`.
 - **Variables**: per-seat formulas declared once for the exam, exactly as in
   a lab (`STORE = 100 + seat`, `SUBNET = '10.' + seat + '.0.0'`, with the
-  same helper functions). Add them under **Variables** in the exam editor or
-  the Template Studio, or in the Markdown front matter.
+  same helper functions). Add them under **Variables** in the Template Studio,
+  or in the Markdown front matter.
 - **Saved answers**: a short-answer question can save the participant's
   answer as a variable (**Save the answer as a variable**, or
   `> capture: NAME` in Markdown). Every **later** section can then show it

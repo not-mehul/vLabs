@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.18.0). The first section is the original code
+Newest entry at the bottom (1.18.1). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -836,7 +836,11 @@ sessions are unchanged.
 
 `deploy/pi/update.sh` as usual. No migration.
 
-## 1.15.0 — Template Studio is the template editor
+## 1.15.0 — Template Studio is the template editor; exam progress, admin account
+
+Two change sets were merged as 1.15.0; both are listed here.
+
+### Template Studio
 
 - **vLabs Template Studio replaces the portal's lab and exam editors.**
   Opening a template, **New lab** or **New exam** edits it in the Studio
@@ -883,11 +887,7 @@ sessions are unchanged.
   Studio's buttons run through a small interpreter instead of inline
   handlers. `frame-ancestors` is now `'self'` so the portal can frame it.
 
-### Upgrading
-
-`deploy/pi/update.sh` as usual. No migration. `npm run build` (client) also
-builds the Studio; CI checks that the committed offline file is current.
-## 1.15.0 — exam progress, optional sections, unlock a checkpoint, admin account
+### Exams, checkpoints and accounts
 
 - **Exams track progress like labs.** The exam monitor gains a **Progress**
   column and an **Avg progress** figure. A section counts as completed once
@@ -895,8 +895,8 @@ builds the Studio; CI checks that the committed offline file is current.
   every checklist item. Before, a section only counted once they moved past
   it, and **Answered** (questions only) was the closest thing to progress.
   The submit section is no longer counted in the **Section** column (it read
-  *3 / 3* on the last questions section of a two-section exam; it now reads
-  *2 / 2*, and *Submit* on the submit section). Submitting completes only
+  _3 / 3_ on the last questions section of a two-section exam; it now reads
+  _2 / 2_, and _Submit_ on the submit section). Submitting completes only
   the submit section, and clearing an answer makes its section incomplete
   again (nothing locks).
 - **Fixed: optional sections showed as completed.** Once a participant
@@ -908,7 +908,7 @@ builds the Studio; CI checks that the committed offline file is current.
   of progress, as in labs.
 - **Unlock a checkpoint for a stuck participant** (labs). In the
   participant panel, the checkpoint they have reached has **Unlock for this
-  participant**. It is marked as cleared by you (*unlocked by instructor*),
+  participant**. It is marked as cleared by you (_unlocked by instructor_),
   their page moves on within about 15 seconds, and clearing the last one
   completes the lab as usual. A pattern checkpoint that saves the answer as
   a variable asks you for the value, since later steps show it.
@@ -921,21 +921,22 @@ builds the Studio; CI checks that the committed offline file is current.
 
 ### Upgrading
 
-`deploy/pi/update.sh` as usual. No migration.
+`deploy/pi/update.sh` as usual. No migration. `npm run build` (client) also
+builds the Studio; CI checks that the committed offline file is current.
 
 ## 1.16.0 — part marks, exams handed in at the end, lab seats, duplicate
 
 - **Part marks and marker comments** (exams). Next to **Correct /
   Incorrect** a points box gives part of a question's points (0 up to its
-  points, in halves); the response shows *Partial · 2.5/5 pts* and the score
+  points, in halves); the response shows _Partial · 2.5/5 pts_ and the score
   adds it. **Add a comment** keeps a marker's note on any response; it is in
   the export and the results CSV (`q<N>_comment`), never shown to
-  participants. The results CSV's result column can now read *partial*.
+  participants. The results CSV's result column can now read _partial_.
 - **Exams are handed in when the session ends.** **End session**, or the
   sweep about an hour after a session runs out, hands in every exam not yet
   submitted, as it stands: answers are kept and the section clock stops at
-  the end time. Before, those stayed *in progress* for good. The monitor
-  shows them as *Time up*; the export and results CSV have
+  the end time. Before, those stayed _in progress_ for good. The monitor
+  shows them as _Time up_; the export and results CSV have
   `auto_submitted`. The participant's closed screen says their answers were
   handed in.
 - **Seats from and Change seat for labs.** A lab can be launched with
@@ -945,7 +946,7 @@ builds the Studio; CI checks that the committed offline file is current.
   switch to the new seat at once (their page reloads on the next status
   poll) and cleared checkpoints stay cleared.
 - **Duplicate a template.** A copy button on the Templates page (labs and
-  exams, archived ones too) makes a new template titled *… (copy)* with
+  exams, archived ones too) makes a new template titled _… (copy)_ with
   the same content and variables and its own change history.
 
 ### Upgrading
@@ -959,13 +960,13 @@ builds the Studio; CI checks that the committed offline file is current.
   an **Optional** checkbox in the Studio (Markdown `> optional: true` under
   the `#` heading; JSON `"optional": true`). An optional section is left out
   of progress and isn't needed to finish, as before. Before, a title
-  containing *wrap up*, *bonus*, *optional*, *stretch* or *extra credit*
+  containing _wrap up_, _bonus_, _optional_, _stretch_ or _extra credit_
   made a section optional, so renaming one could quietly change progress.
   Upgrading ticks the box on every section those words used to mark, in
   templates and running sessions, so nothing changes on day one; after
   that only the box counts.
-- **Watch a colleague's session.** The Sessions page lists *Other
-  instructors' sessions*, and any instructor can open their monitor, read
+- **Watch a colleague's session.** The Sessions page lists _Other
+  instructors' sessions_, and any instructor can open their monitor, read
   only: no ending, extending, breaks, pushes, marking, seat changes or
   unlocks (the server answers `403 NOT_SESSION_OWNER`). A banner says whose
   session it is.
@@ -1007,7 +1008,7 @@ current version) run on start.
   Add instructors from **Admin → Add an instructor** or with the Pi's
   `vlabs-cli.sh`.
 - **Exams from before 1.12.0 are rewritten on upgrade.** Exam sections saved
-  in the old shape (typed *questions* and *info* sections) are rewritten as
+  in the old shape (typed _questions_ and _info_ sections) are rewritten as
   sections of items, in templates and running sessions, with every answer
   and tick kept. The app reads only the current shape from now on, and
   Markdown or JSON files exported before 1.12.0 no longer import (export
