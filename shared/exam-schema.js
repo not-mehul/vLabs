@@ -60,9 +60,8 @@
  * A section is a list of items, each with its own type: Informational
  * (instructions), Checklist (instructions plus items the participant ticks
  * off, e.g. "my instructor has checked my bench"; nothing is graded and
- * nobody approves it), or one of the question types. The participant sees a
- * section a page at a time: every Informational or Checklist item starts a
- * new page and the questions after it join that page (sectionPages).
+ * nobody approves it), or one of the question types. The participant sees
+ * each section as one page, its items one below the other.
  *
  * Sections saved before 1.12.0 had a type instead: `questions` sections held
  * `questions`, `info` sections held `steps` of `{ title, body, tasks }` (and
@@ -491,20 +490,6 @@ export function sectionLayout(sec, si) {
 
 /** Where an item is, for messages: "Section 2 · step 1" / "Section 2 · question 3". */
 const itemWhere = (si, at) => `Section ${si + 1} · ${'qi' in at ? 'question' : 'step'} ${at.n}`;
-
-/**
- * The participant's pages of a section: every Informational or Checklist item
- * starts a page and the questions after it join that page. Returns lists of
- * item indexes.
- */
-export function sectionPages(items) {
-  const pages = [];
-  (items || []).forEach((item, ii) => {
-    if (!pages.length || !isQuestion(item)) pages.push([]);
-    pages[pages.length - 1].push(ii);
-  });
-  return pages;
-}
 
 /**
  * Every text of an exam that may hold {{ PLACEHOLDERS }} (resolved per seat,

@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.13.1**.
+Applies to vLabs **1.14.0**.
 
 ---
 
@@ -67,13 +67,12 @@ Points default to 1 (0–100, halves allowed). An unanswered auto-graded
 question scores 0; unanswered hand-marked questions are simply not awarded.
 A section holds up to 200 items, a checklist up to 30 items.
 
-**Pages.** Participants see a section a page at a time. Every step starts a
-new page, and the questions after it join that page, so a step's
-instructions stay on screen while its questions are answered. A section that
-starts with questions has them on its first page. E.g. *Read the scenario*
-(Informational) + 3 questions, then *Cable the bench* (Checklist) + *Read the
-serial number* (Short answer), then *Instructor check* (Checklist) is three
-pages.
+**Pages.** Each section is one page: its steps and questions are shown one
+below the other, in the order written, so a step's instructions stay on
+screen above the questions that follow it. **Next** moves to the next
+section. E.g. *Read the scenario* (Informational) + 3 questions, then *Cable
+the bench* (Checklist) + *Read the serial number* (Short answer), then
+*Instructor check* (Checklist) all appear on the section's one page.
 
 **Checklists** are for practical work the participant completes before
 continuing: e.g. *Cable the bench* (items *Switch is cabled*, *Link light is
@@ -278,8 +277,8 @@ the new shape.
 
 ## 4. During the exam
 
-- **Sections unlock like a lab's.** One section at a time, a page at a time
-  (§2). A participant starts with only the first section. The next one
+- **Sections unlock like a lab's.** One section at a time, each on its own
+  page (§2). A participant starts with only the first section. The next one
   unlocks once **every question** in the current section has an answer and
   **every checklist item** is ticked; **Next** stays disabled until then.
   Locked sections are never sent to the browser and cannot be answered, so
@@ -298,13 +297,9 @@ the new shape.
   indicator for the whole exam (a cloud: *Saving…*, *Saved*, or *Not saved,
   retrying*). There is no mark beside each question, so "saved" is never
   mistaken for "correct". Leaving and rejoining with the same name resumes.
-- A section with several pages shows *Page 1 of 3* above them. **Next
-  page** opens once every question on the page has an answer and every item
-  of its checklist is ticked (ticking saves at once); on the last page
-  **Next** opens the following section. A section always opens on its first
-  page (also from the stepper); **Previous** from the section after it
-  returns to its last page. Links in the review open the page holding the
-  question, or the first page with a box left to tick.
+- Ticking a checklist item saves at once. **Next** opens the following
+  section and **Previous** the one before it. Links in the review open the
+  section and scroll to the question, or to the first box left to tick.
 - Each exam seat is **bound to the device that joined it**. Rejoining with
   the same name on that device resumes. On any other device it is refused
   ("already taking the exam on another device"), so nobody can open a

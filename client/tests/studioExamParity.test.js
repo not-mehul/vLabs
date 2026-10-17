@@ -21,7 +21,6 @@ import {
   examErrors,
   QUESTION_TYPES,
   capturedValue,
-  sectionPages,
 } from '../../shared/exam-schema.js';
 
 const html = fs.readFileSync(
@@ -31,7 +30,7 @@ const html = fs.readFileSync(
 const block = /<script id="vlabs-exam-core">([\s\S]*?)<\/script>/.exec(html);
 assert.ok(block, 'the Studio has a vlabs-exam-core script block');
 const studio = vm.runInNewContext(
-  `${block[1]}\n;({ examParseMarkdown, examToMarkdownText, looksLikeExamMarkdown, examNormalise, examErrorsList, examGrade, examCapturedValue, examSectionPages, EXAM_TYPE_ALIASES })`,
+  `${block[1]}\n;({ examParseMarkdown, examToMarkdownText, looksLikeExamMarkdown, examNormalise, examErrorsList, examGrade, examCapturedValue, EXAM_TYPE_ALIASES })`,
   {},
 );
 
@@ -269,8 +268,5 @@ test('Studio normalises odd JSON like vLabs and grades like the server', () => {
       assert.equal(studio.examGrade(q, r), expected, `${q.type} ${JSON.stringify(r)}`);
       assert.equal(studio.examCapturedValue(q, r), capturedValue(q, r));
     }
-  }
-  for (const sec of app.content) {
-    assert.deepEqual(json(studio.examSectionPages(sec.items)), sectionPages(sec.items));
   }
 });

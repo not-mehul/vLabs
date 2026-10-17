@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.13.1). The first section is the original code
+Newest entry at the bottom (1.14.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -790,3 +790,17 @@ sessions are read in either shape.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.14.0 — one page per exam section
+
+- **Each exam section is one page.** A section's steps and questions are
+  now shown one below the other on a single page, and **Next** moves to the
+  next section. Steps no longer start a new page, so there is no more
+  _Page 1 of 3_, **Next page** or **Previous page**. Links in the review
+  open the section and scroll to the question or the first box left to tick.
+- The Template Studio's participant preview and the exam guide match.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration; templates and running
+sessions are unchanged.
