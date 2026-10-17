@@ -258,6 +258,12 @@ code {
 .brand__name {
   letter-spacing: -0.02em;
 }
+.brand__version {
+  font-family: var(--mono);
+  font-size: 0.55em;
+  font-weight: 400;
+  color: var(--text-2);
+}
 .brand__tag {
   font-family: var(--mono);
   font-size: 0.6em;

@@ -1,14 +1,18 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 
 // During development the SPA runs on :5173 and proxies /api to the Express
 // backend on :4000, so the browser only ever talks to one origin.
 export default defineConfig({
   plugins: [react()],
+  // Baked into the bundle so the instructor portal can show which release is running.
+  define: { __APP_VERSION__: JSON.stringify(version) },
   server: {
     port: 5173,
     // The client imports the shared template schema from ../shared, which is

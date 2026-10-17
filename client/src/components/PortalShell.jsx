@@ -26,6 +26,9 @@ export default function PortalShell({ children }) {
           <span className="brand__mark" aria-hidden="true" />
           <span className="brand__name">vLabs</span>
           <span className="brand__tag">Instructor</span>
+          <span className="brand__version" title="vLabs version">
+            v{__APP_VERSION__}
+          </span>
         </Link>
         <nav className="portal__links" aria-label="Primary">
           <NavLink to="/instructor" end className="portal__link">
