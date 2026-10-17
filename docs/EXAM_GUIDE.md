@@ -368,6 +368,8 @@ running or ended).
   before. **Change seat** works there too.
 - Deleting the lab session unlinks it: seats already given stay, and later
   joiners are numbered in join order.
+- Labs have the same **Seats from** and **Change seat**, for day two of a
+  multi-day lab.
 
 ## 5. Grading
 
@@ -394,7 +396,8 @@ The exam monitor shows:
   whole exam: each question with
   the options (correct and chosen highlighted), their response, the expected
   answer, the verdict, the history of changes to that answer, and
-  **Correct / Incorrect / Clear** buttons.
+  **Correct / Incorrect / Clear** buttons, a points box for part marks and
+  a marker's comment.
 
 Seat actions in the participant panel: **Change seat** (§4.2), **Reopen
 exam** (undo a submission while the session is live), **Move to another
@@ -404,8 +407,19 @@ reopen, the participant continues from the furthest section they reached,
 with their answers, and the section clock starts again.
 
 A manual mark overrides the automatic verdict for that response; **Clear**
-returns to it. Marks can be given during or after the session and record who
-marked and when.
+returns to it. To give **part of the points**, type them in the points box
+(0 up to the question's points, in halves) and press **Give**: the response
+shows *Partial · 2.5/5 pts* and the score adds 2.5. **Correct** or
+**Incorrect** replaces a part mark, and the other way round. **Add a
+comment** keeps a marker's note on the response (for you and the results
+export; participants never see it). Marks can be given during or after the
+session and record who marked and when.
+
+**When the session ends** (**End session**, or about an hour after it
+runs out), every exam not yet submitted is handed in as it stands: answers
+are kept and the clock stops at the end time. The monitor shows those as
+*Time up* instead of *Submitted*, and the export has `auto_submitted`.
+**+30 min** before then keeps exams open.
 
 ## 6. Exports
 
@@ -413,8 +427,9 @@ From **Download** on the monitor:
 
 - **Results CSV** — one row per participant: score, submission time,
   furthest section, seconds per section (`time_s<N>_…`, breaks excluded),
-  and for every question the response, result (correct / incorrect / needs marking /
-  unanswered), points and who marked it.
+  whether it was handed in automatically (`auto_submitted`), and for every
+  question the response, result (correct / partial / incorrect / needs
+  marking / unanswered), points, who marked it and the marker's comment.
 - **Answer key** — every question with options and expected answer.
 - **Answer log** — every answer change across the class, in time order,
   including checklist ticks (question `2.t0` = section 3, its first
