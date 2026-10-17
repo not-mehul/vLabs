@@ -136,7 +136,7 @@ JWT_INSTRUCTOR_SECRET=$(openssl rand -hex 32)
 JWT_PARTICIPANT_SECRET=$(openssl rand -hex 32)
 
 # Used only on the very first start (empty instructors table). Change the
-# password in the portal afterwards (Account → Change password).
+# password in the portal afterwards (Admin → Your password).
 SEED_INSTRUCTOR_USERNAME=instructor
 SEED_INSTRUCTOR_PASSWORD=$seed_pw
 

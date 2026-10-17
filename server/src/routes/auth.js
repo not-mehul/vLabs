@@ -255,7 +255,7 @@ router.post(
     const row = q.byId.get(Number(req.params.id));
     if (!row) throw httpError(404, 'Instructor not found');
     if (row.id === req.instructor.id) {
-      throw httpError(400, 'Change your own password from the Account page');
+      throw httpError(400, 'Change your own password under Your password on the Admin page');
     }
     const password = randomPassword();
     q.resetPassword.run(await bcrypt.hash(password, 10), row.id);

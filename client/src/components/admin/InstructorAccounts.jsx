@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, copyToClipboard } from '../api.js';
-import { formatDateTime } from '../lib/datetime.js';
-import { useInstructorApi } from '../hooks/useInstructorApi.js';
-import PortalShell from '../components/PortalShell.jsx';
-import Icon from '../components/Icon.jsx';
+import { api, copyToClipboard } from '../../api.js';
+import { formatDateTime } from '../../lib/datetime.js';
+import { useInstructorApi } from '../../hooks/useInstructorApi.js';
+import Icon from '../Icon.jsx';
+import PasswordInput from '../PasswordInput.jsx';
 
 const MIN_LENGTH = 10;
 
@@ -59,9 +59,7 @@ export function NewInstructorFields({ username, setUsername, password, setPasswo
       </label>
       <label className="field">
         <span className="field__label">Password (optional)</span>
-        <input
-          className="field__input"
-          type="password"
+        <PasswordInput
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -78,11 +76,12 @@ export function NewInstructorFields({ username, setUsername, password, setPasswo
 }
 
 /**
- * Instructor accounts: list, add, reset a colleague's password (issues a
- * one-time temporary password and signs them out everywhere) and remove an
- * account (its sessions move to you). Every instructor may manage accounts.
+ * Admin page: the instructor accounts (reset a colleague's password, which
+ * issues a one-time temporary password and signs them out everywhere, or
+ * remove an account, whose sessions move to you) and a form to add one.
+ * Every instructor may manage accounts.
  */
-export default function Instructors() {
+export default function InstructorAccounts() {
   const { call } = useInstructorApi();
   const [list, setList] = useState([]);
   const [error, setError] = useState('');
@@ -159,14 +158,7 @@ export default function Instructors() {
   }
 
   return (
-    <PortalShell>
-      <div className="page-head">
-        <h1>Instructors</h1>
-        <p className="muted">
-          Everyone here can sign in to the portal, run sessions and edit the shared templates.
-        </p>
-      </div>
-
+    <>
       {error && (
         <p className="form__error" role="alert">
           {error}
@@ -186,8 +178,13 @@ export default function Instructors() {
         ))}
 
       <div className="split">
-        <div className="panel">
-          <h2 className="panel__title">Accounts</h2>
+        <section className="panel" aria-labelledby="instructors-title">
+          <h2 className="panel__title" id="instructors-title">
+            <Icon name="user" size={16} /> Instructors
+          </h2>
+          <p className="muted small">
+            Everyone here can sign in to the portal, run sessions and edit the shared templates.
+          </p>
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -250,10 +247,10 @@ export default function Instructors() {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <form className="panel form" onSubmit={add}>
-          <h2 className="panel__title">
+        <form className="panel form" onSubmit={add} aria-labelledby="add-instructor-title">
+          <h2 className="panel__title" id="add-instructor-title">
             <Icon name="plus" size={16} /> Add an instructor
           </h2>
           <NewInstructorFields
@@ -267,6 +264,6 @@ export default function Instructors() {
           </button>
         </form>
       </div>
-    </PortalShell>
+    </>
   );
 }

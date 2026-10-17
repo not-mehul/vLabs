@@ -376,9 +376,10 @@ The exam monitor shows:
 - **Sections**: participants on each section and how many completed it.
   Click a section for its timing (§4.1), its participants and the results
   of its questions; click a question or a participant there to open it.
-- **Questions** — answered count, correct rate (over graded responses), and
-  how many still need marking. Click a question to see every participant's
-  response to it and mark them in one place.
+- **Questions** (only when the exam has hand-marked questions) — answered
+  count, correct rate (over graded responses), and how many still need
+  marking. Click a question to see every participant's response to it and
+  mark them in one place.
 - **Participants** — answered, score (`*` = provisional while answers still
   need marking), the section they have reached, time on it against its
   allocation, and status. Click a row for their time per section and their
@@ -400,7 +401,7 @@ marked and when.
 
 ## 6. Exports
 
-From the monitor:
+From **Download** on the monitor:
 
 - **Results CSV** — one row per participant: score, submission time,
   furthest section, seconds per section (`time_s<N>_…`, breaks excluded),

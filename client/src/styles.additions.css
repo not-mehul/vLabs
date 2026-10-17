@@ -106,7 +106,7 @@
   font-family: inherit;
 }
 
-/* ---- Account page --------------------------------------------------- */
+/* ---- Admin page ----------------------------------------------------- */
 
 .account-panel {
   max-width: 520px;
@@ -1634,4 +1634,132 @@ input.field__input--sm[type='number'] {
   margin-top: 1rem;
   padding-top: 0.85rem;
   border-top: 1px dashed var(--border);
+}
+
+/* Password field with a show / hide button inside it. */
+.password-input {
+  position: relative;
+  display: block;
+}
+.password-input .field__input {
+  width: 100%;
+  padding-right: 2.6rem;
+}
+.password-input__toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.password-input__toggle:hover,
+.password-input__toggle:focus-visible {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* Drop-down list of actions (components/Menu.jsx). */
+.menu {
+  position: relative;
+  display: inline-block;
+}
+.menu__list {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 17rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.menu__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.menu__item:hover,
+.menu__item:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+.menu__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+.menu__hint {
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
+/* Session monitor: the controls bar under the header — session time and
+   break on the left, downloads and ending the session on the right. */
+.monitor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.monitor-bar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.monitor-bar__group + .monitor-bar__group {
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border);
+}
+.monitor-bar__time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--text-2);
+}
+.monitor-bar__time strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.monitor-bar__end {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .monitor-bar__end {
+    margin-left: 0;
+  }
+  .monitor-bar__group + .monitor-bar__group {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .monitor-bar .menu__list {
+    left: 0;
+    right: auto;
+  }
 }

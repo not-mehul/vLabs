@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 export default function InstructorLogin() {
   const { login } = useAuth();
@@ -53,9 +54,7 @@ export default function InstructorLogin() {
           </label>
           <label className="field">
             <span className="field__label">Password</span>
-            <input
-              className="field__input"
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

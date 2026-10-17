@@ -16,6 +16,7 @@ import { useCountdown } from '../hooks/useCountdown.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
+import Menu from '../components/Menu.jsx';
 import ExamMonitor from '../components/ExamMonitor.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from '../components/SectionFlow.jsx';
 import SectionDrawer from '../components/SectionDrawer.jsx';
@@ -454,6 +455,40 @@ export default function SessionMonitor() {
     }
   }
 
+  const downloads =
+    data?.kind === 'exam'
+      ? [
+          {
+            label: 'Results CSV',
+            hint: 'One row per participant: score and every response',
+            onSelect: () => exportData('exam-results'),
+          },
+          {
+            label: 'Answer key',
+            hint: 'Every question with its expected answer',
+            onSelect: () => exportData('exam-key'),
+          },
+          {
+            label: 'Answer log',
+            hint: 'Every answer change across the class, in time order',
+            onSelect: () => exportData('exam-log'),
+          },
+          { label: 'JSON', hint: 'The full session export', onSelect: () => exportData('json') },
+        ]
+      : [
+          {
+            label: 'Participants CSV',
+            hint: 'Progress, section times, answers, hints and solutions',
+            onSelect: () => exportData('csv'),
+          },
+          {
+            label: 'Attempts CSV',
+            hint: 'Every checkpoint submission, in time order',
+            onSelect: () => exportData('attempts'),
+          },
+          { label: 'JSON', hint: 'The full session export', onSelect: () => exportData('json') },
+        ];
+
   if (!data) {
     return (
       <PortalShell>
@@ -573,86 +608,41 @@ export default function SessionMonitor() {
             </div>
           </>
         )}
-        <div className="stat">
-          <span className={`stat__num ${remaining === 'expired' ? 'text-warn' : ''}`}>
-            {active ? remaining || '—' : '—'}
-          </span>
-          <span className="stat__label">Time remaining</span>
-        </div>
-        <div className="monitor-head__actions">
-          {active && (
-            <>
+      </div>
+
+      <div className="monitor-bar" role="toolbar" aria-label="Session controls">
+        {active && (
+          <>
+            <div className="monitor-bar__group">
+              <span className="monitor-bar__time">
+                <Icon name="clock" size={15} /> Time left{' '}
+                <strong className={remaining === 'expired' ? 'text-warn' : ''}>
+                  {remaining || '—'}
+                </strong>
+              </span>
+              <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
+                <Icon name="plus" size={15} /> 30 min
+              </button>
+            </div>
+            <div className="monitor-bar__group">
               <button
                 className={`btn btn--sm ${data.on_break ? 'btn--primary' : 'btn--ghost'}`}
                 onClick={toggleBreak}
                 disabled={busy}
                 title="Pause every participant's section timer (e.g. lunch); press again to resume"
               >
-                <Icon name="clock" size={15} /> {data.on_break ? 'End break' : 'Start break'}
+                {data.on_break ? 'End break' : 'Start break'}
               </button>
-              <button className="btn btn--ghost btn--sm" onClick={extend} disabled={busy}>
-                <Icon name="clock" size={15} /> +30 min
-              </button>
-              <button className="btn btn--danger btn--sm" onClick={terminate} disabled={busy}>
-                <Icon name="power" size={15} /> End session
-              </button>
-            </>
-          )}
-          {isExam ? (
-            <>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => exportData('exam-results')}
-                disabled={busy}
-                title="One row per participant: score, and every response with its result"
-              >
-                <Icon name="download" size={16} /> Results CSV
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => exportData('exam-key')}
-                disabled={busy}
-                title="Every question with its expected answer"
-              >
-                <Icon name="download" size={16} /> Answer key
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => exportData('exam-log')}
-                disabled={busy}
-                title="Every answer change across the class, in time order"
-              >
-                <Icon name="download" size={16} /> Answer log
-              </button>
-            </>
+            </div>
+          </>
+        )}
+        <div className="monitor-bar__group monitor-bar__end">
+          <Menu label="Download" icon="download" disabled={busy} items={downloads} />
+          {active ? (
+            <button className="btn btn--danger btn--sm" onClick={terminate} disabled={busy}>
+              <Icon name="power" size={15} /> End session
+            </button>
           ) : (
-            <>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => exportData('csv')}
-                disabled={busy}
-                title="One row per participant: progress, time per section, every checkpoint's answer and wrong attempts, hints, solutions"
-              >
-                <Icon name="download" size={16} /> CSV
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => exportData('attempts')}
-                disabled={busy}
-                title="One row per checkpoint submission (correct and incorrect), in time order"
-              >
-                <Icon name="download" size={16} /> Attempts CSV
-              </button>
-            </>
-          )}
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={() => exportData('json')}
-            disabled={busy}
-          >
-            <Icon name="download" size={16} /> JSON
-          </button>
-          {!active && (
             <button className="btn btn--danger-ghost btn--sm" onClick={remove} disabled={busy}>
               <Icon name="trash" size={16} /> Delete
             </button>

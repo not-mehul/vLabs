@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { downloadFile } from '../lib/files.js';
 import { slug } from '../lib/format.js';
 import { formatDateTime } from '../lib/datetime.js';
+import { rowLink, stopRowClick } from '../lib/rowLink.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
@@ -165,6 +166,7 @@ function CreateSession({ templates, sessions, onCreated }) {
 
 export default function Dashboard() {
   const { call } = useInstructorApi();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -266,7 +268,7 @@ export default function Dashboard() {
           <p className="muted">No sessions yet.</p>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table--clickable">
               <thead>
                 <tr>
                   <th>Code</th>
@@ -279,7 +281,11 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {sessions.map((s) => (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    {...rowLink(navigate, `/instructor/sessions/${s.id}`)}
+                    aria-label={`Open monitor for ${s.title}`}
+                  >
                     <td className="mono">{s.room_code}</td>
                     <td>
                       {s.title}
@@ -301,15 +307,7 @@ export default function Dashboard() {
                     <td>
                       <StatusPill status={s.status} />
                     </td>
-                    <td className="table__actions">
-                      <Link
-                        className="btn btn--sm btn--icon btn--ghost"
-                        to={`/instructor/sessions/${s.id}`}
-                        title="Open monitor"
-                        aria-label={`Open monitor for ${s.title}`}
-                      >
-                        <Icon name="eye" size={16} />
-                      </Link>
+                    <td className="table__actions" {...stopRowClick}>
                       <button
                         className="btn btn--sm btn--icon btn--ghost"
                         onClick={() => handleExport(s)}

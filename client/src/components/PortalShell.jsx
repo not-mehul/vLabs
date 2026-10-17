@@ -14,7 +14,7 @@ export default function PortalShell({ children }) {
     navigate('/instructor/login', { replace: true });
   }
 
-  const onAccountPage = location.pathname === '/instructor/account';
+  const onAdminPage = location.pathname === '/instructor/admin';
 
   return (
     <div className="portal">
@@ -37,11 +37,8 @@ export default function PortalShell({ children }) {
           <NavLink to="/instructor/templates" className="portal__link">
             Templates
           </NavLink>
-          <NavLink to="/instructor/instructors" className="portal__link">
-            Instructors
-          </NavLink>
-          <NavLink to="/instructor/account" className="portal__link">
-            Account
+          <NavLink to="/instructor/admin" className="portal__link">
+            Admin
           </NavLink>
         </nav>
         <div className="portal__actions">
@@ -56,13 +53,13 @@ export default function PortalShell({ children }) {
           </button>
         </div>
       </header>
-      {instructor?.must_change_password && !onAccountPage && (
+      {instructor?.must_change_password && !onAdminPage && (
         <div className="banner banner--warn portal__banner" role="status">
           <span>
             <strong>You are signed in with a temporary password.</strong> Choose your own before
             running a class.
           </span>
-          <Link className="btn btn--sm btn--primary" to="/instructor/account">
+          <Link className="btn btn--sm btn--primary" to="/instructor/admin#password">
             Change password
           </Link>
         </div>

@@ -121,6 +121,13 @@ const P = {
       <circle cx="12" cy="12" r="2.8" />
     </>
   ),
+  // Hidden — the eye struck through (show/hide password)
+  eyeOff: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5c1.6 0 3 .45 4.2 1.1M21.5 12s-3.5 6.5-9.5 6.5c-1.6 0-3-.45-4.2-1.1" />
+      <path d="M9.9 14.1a2.8 2.8 0 0 0 4.2-4.2M4 20 20 4" />
+    </>
+  ),
   layers: (
     <>
       <path d="M12 3 3 8l9 5 9-5-9-5Z" />

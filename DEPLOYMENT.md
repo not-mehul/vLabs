@@ -168,7 +168,7 @@ matters to you.
 
 1. Open the address on your laptop → _Instructor sign in_ → `instructor` +
    the password printed by the installer (also in `/etc/vlabs/vlabs.env`).
-2. **Account → Change password** (the banner nags until you do).
+2. **Admin → Your password** (the banner nags until you do).
 3. Extra instructors: **Instructors** in the portal (add, reset a password,
    remove), or the unlinked page `https://vlabs.local/instructor/add` (also a
    faint link under the sign-in form), where an existing instructor's
