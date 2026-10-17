@@ -98,40 +98,7 @@ export function validateTemplatePayload(payload, opts = {}) {
   const description = tpl.description.trim();
 
   // ---- Variables ---------------------------------------------------------
-  const variables = [];
-  const seenNames = new Set();
-  for (const [i, v] of tpl.variables.entries()) {
-    if (!v.name) {
-      errors.push(`Variable #${i + 1} is missing a name`);
-      continue;
-    }
-    if (!IDENT_RE.test(v.name)) {
-      errors.push(`Variable "${v.name}" has an invalid name`);
-      continue;
-    }
-    if (RESERVED_NAMES.includes(v.name)) {
-      errors.push(`Variable "${v.name}" is reserved`);
-      continue;
-    }
-    if (seenNames.has(v.name)) {
-      errors.push(`Variable "${v.name}" is declared more than once`);
-      continue;
-    }
-    seenNames.add(v.name);
-    if (!v.expression) {
-      errors.push(`Variable "${v.name}" has no formula`);
-      continue;
-    }
-    variables.push({ name: v.name, expression: v.expression });
-  }
-  // Every formula must evaluate for a sample participant (and compose in order).
-  if (errors.length === 0) {
-    try {
-      resolveVariables(variables, 1, SAMPLE_WHO);
-    } catch (err) {
-      errors.push(err.message);
-    }
-  }
+  const { variables, names: seenNames } = cleanVariables(tpl.variables, errors);
 
   // ---- Sections & steps --------------------------------------------------
   if (tpl.content.length === 0) errors.push('At least one section is required');
@@ -169,6 +136,51 @@ export function validateTemplatePayload(payload, opts = {}) {
 
   if (errors.length) return fail(errors);
   return { title, description, content, variables };
+}
+
+/**
+ * Check a template's variables (labs and exams alike): names valid, not
+ * reserved, unique, each with a formula, and every formula evaluating for a
+ * sample participant (in order, so later ones may use earlier ones). Pushes
+ * problems onto `errors`; returns the clean list and the set of names.
+ */
+export function cleanVariables(list, errors) {
+  const variables = [];
+  const names = new Set();
+  const before = errors.length;
+  for (const [i, v] of (list || []).entries()) {
+    if (!v.name) {
+      errors.push(`Variable #${i + 1} is missing a name`);
+      continue;
+    }
+    if (!IDENT_RE.test(v.name)) {
+      errors.push(`Variable "${v.name}" has an invalid name`);
+      continue;
+    }
+    if (RESERVED_NAMES.includes(v.name)) {
+      errors.push(`Variable "${v.name}" is reserved`);
+      continue;
+    }
+    if (names.has(v.name)) {
+      errors.push(`Variable "${v.name}" is declared more than once`);
+      continue;
+    }
+    names.add(v.name);
+    if (!v.expression) {
+      errors.push(`Variable "${v.name}" has no formula`);
+      continue;
+    }
+    variables.push({ name: v.name, expression: v.expression });
+  }
+  // Every formula must evaluate for a sample participant (and compose in order).
+  if (errors.length === before) {
+    try {
+      resolveVariables(variables, 1, SAMPLE_WHO);
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  return { variables, names };
 }
 
 /**

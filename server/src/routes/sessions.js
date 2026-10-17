@@ -29,6 +29,7 @@ import {
   examQuestionResponses,
   gradeParticipant,
   parseObject,
+  parseArray,
   sessionAnswerLog,
 } from '../lib/examGrading.js';
 import { listQuestions, totalPoints, describeExpected } from '../../../shared/exam-schema.js';
@@ -132,6 +133,9 @@ function idParam(req) {
   if (!Number.isInteger(id) || id <= 0) throw httpError(404, 'Session not found');
   return id;
 }
+
+/** A session's per-seat variable formulas (exams resolve them per participant). */
+const variablesOf = (row) => parseArray(row.variables);
 
 function ownedOr404(req) {
   const row = q.detail.get(idParam(req), req.instructor.id);
@@ -443,7 +447,7 @@ router.get('/:id/participants/:pid', (req, res) => {
   if (!p) throw httpError(404, 'Participant not found');
   const content = JSON.parse(row.content);
   if (!isExam(row)) return res.json(participantDetail(p, content, breaksOf(row)));
-  const detail = examParticipantDetail(p, content, breaksOf(row));
+  const detail = examParticipantDetail(p, content, breaksOf(row), variablesOf(row));
   res.json({ ...detail, questions: detail.questions.map(withImages) });
 });
 
@@ -478,7 +482,7 @@ router.put('/:id/participants/:pid/marks/:key', (req, res) => {
     instructor: req.instructor.id,
   });
   const fresh = q.participant.get(p.id, row.id);
-  res.json(gradeParticipant(fresh, content).find((g) => g.key === key));
+  res.json(gradeParticipant(fresh, content, variablesOf(row)).find((g) => g.key === key));
 });
 
 /**
@@ -541,6 +545,7 @@ router.get('/:id/questions/:key', (req, res) => {
     q.participants.all(row.id),
     JSON.parse(row.content),
     String(req.params.key),
+    variablesOf(row),
   );
   if (!out) throw httpError(404, 'Unknown question');
   res.json(withImages(out));
@@ -563,12 +568,14 @@ router.get('/:id/sections/:index', (req, res) => {
   const rows = q.participants.all(row.id);
   const breaks = breaksOf(row);
   if (isExam(row)) {
-    const views = rows.map((p) => examParticipantView(p, content, breaks));
+    const views = rows.map((p) => examParticipantView(p, content, breaks, variablesOf(row)));
     return res.json({
       kind: 'exam',
       ...sectionTimeDetail(section, index, views),
       question_count: (section.questions || []).length,
-      questions: examQuestionStats(rows, content).filter((x) => x.section_index === index),
+      questions: examQuestionStats(rows, content, variablesOf(row)).filter(
+        (x) => x.section_index === index,
+      ),
     });
   }
   const views = rows.map((p) => participantView(p, content, breaks));
@@ -585,7 +592,8 @@ router.get('/:id/sections/:index', (req, res) => {
 function examSessionDetail(row) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
-  const participants = rows.map((p) => examParticipantView(p, content, breaksOf(row)));
+  const variables = variablesOf(row);
+  const participants = rows.map((p) => examParticipantView(p, content, breaksOf(row), variables));
   return {
     ...summarise(row),
     ...breakView(row),
@@ -600,7 +608,7 @@ function examSessionDetail(row) {
     total_points: totalPoints(content),
     submitted_count: participants.filter((p) => p.submitted).length,
     pending_count: participants.reduce((n, p) => n + p.pending_count, 0),
-    questions: examQuestionStats(rows, content),
+    questions: examQuestionStats(rows, content, variables),
     participants,
   };
 }
@@ -921,7 +929,8 @@ function examExport(row) {
   const content = JSON.parse(row.content);
   const rows = q.participants.all(row.id);
   const breaks = breaksOf(row);
-  const views = rows.map((p) => examParticipantView(p, content, breaks));
+  const variables = variablesOf(row);
+  const views = rows.map((p) => examParticipantView(p, content, breaks, variables));
   const averages = sectionAverages(content, views);
   const sectionIndex = content.map((sec, i) => ({
     index: i,
@@ -967,7 +976,7 @@ function examExport(row) {
       section_seconds: v.section_seconds,
       joined_at: p.joined_at,
       last_seen_at: p.last_seen_at,
-      responses: gradeParticipant(p, content).map((g) => ({
+      responses: gradeParticipant(p, content, variables).map((g) => ({
         key: g.key,
         number: g.number,
         response: g.response,

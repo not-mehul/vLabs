@@ -15,6 +15,7 @@ import {
   totalPoints,
   QUESTION_TYPES,
 } from '../../../shared/exam-schema.js';
+import { seatExam } from './examSeat.js';
 
 /**
  * Instructor-side grading for EXAM sessions: per-participant scores, the
@@ -22,7 +23,9 @@ import {
  * statistics. Automatic questions (multiple choice, true/false, short answers
  * with an accepted list) are graded on the fly; anything else waits for — and
  * any question can be overridden by — a manual mark stored in
- * participants.grades as { key: { correct: 0|1, by, at } }.
+ * participants.grades as { key: { correct: 0|1, by, at } }. Each participant
+ * is graded against their own seat's exam (`variables`: the session's
+ * per-seat formulas), so accepted answers may use {{ PLACEHOLDERS }}.
  */
 
 export function parseObject(json) {
@@ -76,10 +79,10 @@ const overrideOf = (grades, key) => {
 };
 
 /** Every question graded for one participant, in exam order. */
-export function gradeParticipant(p, content) {
+export function gradeParticipant(p, content, variables = []) {
   const answers = parseObject(p.answers);
   const grades = parseObject(p.grades);
-  return listQuestions(content).map(({ key, si, qi, number, q }) => {
+  return listQuestions(seatExam(content, variables, p)).map(({ key, si, qi, number, q }) => {
     const value = answers[key];
     const g = gradeResponse(q, value, overrideOf(grades, key));
     return {
@@ -100,9 +103,9 @@ export function gradeParticipant(p, content) {
 }
 
 /** Score summary for one participant. */
-export function examParticipantView(p, content, breaks = []) {
+export function examParticipantView(p, content, breaks = [], variables = []) {
   const now = nowIso();
-  const graded = gradeParticipant(p, content);
+  const graded = gradeParticipant(p, content, variables);
   const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
   const score = graded.reduce((n, g) => n + g.points_awarded, 0);
   const maxScore = totalPoints(content);
@@ -152,11 +155,12 @@ export function examParticipantView(p, content, breaks = []) {
  * prompt, options, expected answer, the response, the automatic verdict, any
  * manual mark, and the history of changes to that answer.
  */
-export function examParticipantDetail(p, content, breaks = []) {
-  const view = examParticipantView(p, content, breaks);
+export function examParticipantDetail(p, content, breaks = [], variables = []) {
+  const view = examParticipantView(p, content, breaks, variables);
   const history = answerHistory(p.id);
-  const questions = listQuestions(content);
-  const graded = gradeParticipant(p, content);
+  // Prompts and expected answers as this participant saw them.
+  const questions = listQuestions(seatExam(content, variables, p));
+  const graded = gradeParticipant(p, content, variables);
   return {
     ...view,
     section_times: content.map((sec, i) => ({
@@ -183,8 +187,8 @@ export function examParticipantDetail(p, content, breaks = []) {
 }
 
 /** Class-wide statistics per question (answered / correct / awaiting marking). */
-export function examQuestionStats(participants, content) {
-  const perParticipant = participants.map((p) => gradeParticipant(p, content));
+export function examQuestionStats(participants, content, variables = []) {
+  const perParticipant = participants.map((p) => gradeParticipant(p, content, variables));
   return listQuestions(content).map(({ key, si, number, q }, i) => {
     const rows = perParticipant.map((g) => g[i]);
     const answered = rows.filter((r) => r.answered).length;
@@ -214,7 +218,7 @@ export function examQuestionStats(participants, content) {
 }
 
 /** Every participant's response to one question (grade-by-question view). */
-export function examQuestionResponses(participants, content, key) {
+export function examQuestionResponses(participants, content, key, variables = []) {
   const all = listQuestions(content);
   const i = all.findIndex((x) => x.key === key);
   if (i < 0) return null;
@@ -233,7 +237,7 @@ export function examQuestionResponses(participants, content, key) {
     manual: isManualQuestion(entry.q),
     expected: describeExpected(entry.q),
     responses: participants.map((p) => {
-      const g = gradeParticipant(p, content)[i];
+      const g = gradeParticipant(p, content, variables)[i];
       return {
         participant_id: p.id,
         seat_number: p.seat_number,

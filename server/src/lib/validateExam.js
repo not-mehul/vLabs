@@ -1,11 +1,11 @@
 import { IMAGE_MD_RE, imageRefName, LIMITS } from '../../../shared/template-schema.js';
-import { minutesInvalid } from './validateTemplate.js';
+import { minutesInvalid, cleanVariables } from './validateTemplate.js';
 import { EXAM_LIMITS, normaliseExam, examErrors } from '../../../shared/exam-schema.js';
 
 /**
  * Validate & normalise an instructor-authored EXAM payload (the counterpart of
  * validateTemplate.js for labs). Returns { kind, title, description, content,
- * variables: [] } in storage shape or throws a 400 listing every problem.
+ * variables } in storage shape or throws a 400 listing every problem.
  *
  * @param {object} payload
  * @param {object} [opts]
@@ -60,12 +60,17 @@ export function validateExamPayload(payload, opts = {}) {
     ...(sec.steps ? { steps: sec.steps.map((st) => ({ ...st, body: st.body.trim() })) } : {}),
     questions: sec.questions.map((q) => ({ ...q, prompt: q.prompt.trim() })),
   }));
+  if ((payload?.variables?.length || 0) > LIMITS.variables) {
+    errors.push(`Too many variables (max ${LIMITS.variables})`);
+  }
+  // Per-seat variables follow the lab rules exactly.
+  const { variables } = cleanVariables(exam.variables, errors);
   const clean = {
     kind: 'exam',
     title: exam.title.trim(),
     description: exam.description.trim(),
     content,
-    variables: [],
+    variables,
   };
   errors.push(...examErrors(clean));
 

@@ -52,7 +52,10 @@
  * the correct ones). `> points: N` sets the weight (default 1); `> answer:`
  * gives a true/false answer; `> accept:` lists accepted short answers
  * separated by ` | ` (write `\|` for a literal pipe) — a short question
- * without `> accept:` is marked by hand, as is every long question. Fenced
+ * without `> accept:` is marked by hand, as is every long question.
+ * `> capture: NAME` on a short question saves the participant's answer as
+ * {{ NAME }} for every later section. Front matter `variables:` declares
+ * per-seat formulas (`  NAME = formula` lines), as in labs. Fenced
  * code blocks are copied verbatim.
  *
  * A section heading may carry a section type: `# [info] Title` is an
@@ -101,7 +104,7 @@ export const SECTION_ALIASES = Object.freeze({
 });
 
 const OPTION_RE = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
-const DIRECTIVE_RE = /^>\s*(points|answer|accept)\s*:\s*(.*)$/i;
+const DIRECTIVE_RE = /^>\s*(points|answer|accept|capture)\s*:\s*(.*)$/i;
 const FENCE_RE = /^\s*(```|~~~)/;
 
 /** Lab step types: a `## [desk]`-style heading means a lab, not an exam. */
@@ -149,12 +152,24 @@ export function parseExamMarkdown(text) {
   const lines = String(text ?? '')
     .replace(/\r\n?/g, '\n')
     .split('\n');
-  const exam = { kind: 'exam', title: '', description: '', content: [] };
+  const exam = { kind: 'exam', title: '', description: '', variables: [], content: [] };
   let i = 0;
 
   if (lines[0]?.trim() === '---') {
     i = 1;
+    let inVars = false;
     while (i < lines.length && lines[i].trim() !== '---') {
+      // `variables:` then indented `NAME = formula` lines, exactly as in labs.
+      if (inVars && /^\s+\S/.test(lines[i])) {
+        const line = lines[i].trim();
+        const eq = line.indexOf('=');
+        const name = (eq < 0 ? line : line.slice(0, eq)).trim();
+        if (name)
+          exam.variables.push({ name, expression: eq < 0 ? '' : line.slice(eq + 1).trim() });
+        i += 1;
+        continue;
+      }
+      inVars = false;
       const m = /^([A-Za-z_]+)\s*:\s*(.*)$/.exec(lines[i]);
       if (m) {
         const key = m[1].toLowerCase();
@@ -163,6 +178,7 @@ export function parseExamMarkdown(text) {
         }
         if (key === 'title') exam.title = m[2].trim();
         else if (key === 'description') exam.description = m[2].trim();
+        else if (key === 'variables') inVars = true;
       }
       i += 1;
     }
@@ -286,6 +302,7 @@ export function parseExamMarkdown(text) {
         if (key === 'points') q.points = Number(d[2]);
         else if (key === 'answer') q.correct = d[2].trim();
         else if (key === 'accept') q.accepted.push(...splitPipes(d[2]));
+        else if (key === 'capture') q.capture = d[2].trim();
         continue;
       }
     }
@@ -302,6 +319,10 @@ export function examToMarkdown(input) {
   const exam = normaliseExam(input);
   const out = ['---', 'kind: exam', `title: ${exam.title}`];
   if (exam.description) out.push(`description: ${exam.description.replace(/\n+/g, ' ')}`);
+  const vars = exam.variables.filter((v) => v.name);
+  if (vars.length) {
+    out.push('variables:', ...vars.map((v) => `  ${v.name} = ${v.expression}`));
+  }
   out.push('---', '');
   for (const sec of exam.content) {
     out.push(`# ${sec.type === 'questions' ? '' : `[${sec.type}] `}${sec.title}`);
@@ -339,6 +360,7 @@ export function examToMarkdown(input) {
       if (q.type === 'short' && q.accepted.length) {
         out.push(`> accept: ${q.accepted.map((a) => a.replace(/\|/g, '\\|')).join(' | ')}`);
       }
+      if (q.capture) out.push(`> capture: ${q.capture}`);
       if (q.points !== 1) out.push(`> points: ${q.points}`);
       out.push('');
     }

@@ -12,6 +12,10 @@
  *   kind: 'exam',
  *   title: string,
  *   description: string,
+ *   variables: [{ name, expression }], // per-seat values, exactly as in labs:
+ *                                      //   {{ NAME }} anywhere in the exam text
+ *                                      //   (and the built-ins SEAT_ID,
+ *                                      //   FIRST_NAME, LAST_NAME, FULL_NAME)
  *   content: [{                        // sections ("parts") of the exam
  *     type: 'questions' | 'info' | 'submit',
  *     title: string,
@@ -39,6 +43,10 @@
  *                                      // short / long: null
  *       accepted: string[],            // short only: accepted answers; empty →
  *                                      //   graded by hand
+ *       capture?: string,              // short only, optional: save the
+ *                                      //   participant's answer as {{ NAME }}
+ *                                      //   for every LATER section (like a lab
+ *                                      //   checkpoint capture)
  *     }],
  *   }],
  * }
@@ -68,7 +76,14 @@
  * client how to render it (ExamQuestion.jsx) and edit it (ExamEditor.jsx).
  */
 
-import { normaliseMinutes } from './template-schema.js';
+import {
+  LIMITS,
+  normaliseMinutes,
+  BUILTIN_PLACEHOLDERS,
+  BUILTIN_IDENTIFIERS,
+  PLACEHOLDER_RE,
+  IDENT_RE,
+} from './template-schema.js';
 
 export const EXAM_LIMITS = Object.freeze({
   sections: 50,
@@ -293,6 +308,8 @@ export function normaliseQuestion(raw) {
     accepted: [],
     ...QUESTION_TYPES[type].normalise(q),
   };
+  const capture = str(q.capture, LIMITS.captureName).trim();
+  if (capture) out.capture = capture;
   return out;
 }
 
@@ -393,8 +410,104 @@ export function normaliseExam(obj) {
     kind: 'exam',
     title: str(o.title, EXAM_LIMITS.title),
     description: str(o.description, EXAM_LIMITS.description),
+    variables: (Array.isArray(o.variables) ? o.variables : [])
+      .filter((v) => v && typeof v === 'object')
+      .slice(0, LIMITS.variables)
+      .map((v) => ({ name: str(v.name).trim(), expression: str(v.expression).trim() })),
     content: [...sections.filter((sec) => sec.type !== 'submit'), submit],
   };
+}
+
+/**
+ * Every text of an exam that may hold {{ PLACEHOLDERS }} (resolved per seat,
+ * as in labs), with a readable location, in reading order.
+ */
+export function examTextFields(exam) {
+  const out = [];
+  (exam?.content || []).forEach((sec, si) => {
+    const at = `Section ${si + 1}`;
+    const push = (where, text) => out.push({ si, where, text });
+    push(`${at} title`, sec.title);
+    const type = sectionType(sec);
+    if (type === 'info') {
+      infoSteps(sec).forEach((st, sti) => {
+        const where = `${at} · step ${sti + 1}`;
+        push(`${where} title`, st.title);
+        push(where, st.body);
+        (st.tasks || []).forEach((t, ti) => push(`${where} checklist item ${ti + 1}`, t));
+      });
+    } else if (type === 'submit') {
+      push(at, sec.body);
+    }
+    (sec.questions || []).forEach((q, qi) => {
+      const where = `${at} · question ${qi + 1}`;
+      push(where, q.prompt);
+      (q.options || []).forEach((o, oi) => push(`${where} option ${oi + 1}`, o));
+      (q.accepted || []).forEach((a) => push(`${where} accepted answers`, a));
+    });
+  });
+  return out;
+}
+
+/**
+ * Questions that save their answer as a variable, in reading order (the
+ * first one wins a repeated name).
+ */
+export function examCaptures(exam) {
+  const out = [];
+  (exam?.content || []).forEach((sec, si) =>
+    (sec.questions || []).forEach((q, qi) => {
+      if (q.capture) {
+        out.push({ name: q.capture, si, qi, where: `Section ${si + 1} · question ${qi + 1}` });
+      }
+    }),
+  );
+  return out;
+}
+
+/**
+ * Placeholders in an exam that name neither a variable, a built-in nor an
+ * answer saved in an EARLIER section (`early` when it is saved, but only in
+ * this section or a later one).
+ */
+export function unknownExamPlaceholders(exam) {
+  const known = new Set([...BUILTIN_PLACEHOLDERS, ...(exam?.variables || []).map((v) => v.name)]);
+  const savedIn = new Map();
+  for (const c of examCaptures(exam)) if (!savedIn.has(c.name)) savedIn.set(c.name, c.si);
+  const out = [];
+  const seen = new Set();
+  for (const { si, where, text } of examTextFields(exam)) {
+    for (const m of String(text ?? '').matchAll(PLACEHOLDER_RE)) {
+      const name = m[1];
+      const key = `${name}@${where}`;
+      if (known.has(name) || savedIn.get(name) < si || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name, where, early: savedIn.has(name) });
+    }
+  }
+  return out;
+}
+
+/** Problems with the names questions save their answers under. */
+function captureErrors(exam, errors) {
+  const reserved = new Set([...BUILTIN_PLACEHOLDERS, ...BUILTIN_IDENTIFIERS]);
+  const variables = new Set((exam?.variables || []).map((v) => v.name));
+  const saved = new Map();
+  for (const { name, si, qi, where } of examCaptures(exam)) {
+    if (exam.content[si].questions[qi].type !== 'short') {
+      errors.push(`${where}: only a short answer can be saved as a variable`);
+    } else if (!IDENT_RE.test(name)) {
+      errors.push(`${where}: "${name}" is not a valid variable name`);
+    } else if (reserved.has(name)) {
+      errors.push(`${where}: "${name}" is a reserved name`);
+    } else if (variables.has(name)) {
+      errors.push(`${where}: "${name}" is already a variable`);
+    } else if (saved.has(name)) {
+      errors.push(`${where}: "${name}" is already saved by ${saved.get(name)}`);
+    } else {
+      saved.set(name, where);
+    }
+  }
 }
 
 /**
@@ -434,6 +547,14 @@ export function examErrors(exam) {
   });
   if (parts.length && !count && !parts.some((sec) => sectionType(sec) === 'info')) {
     errors.push('The exam has no questions');
+  }
+  captureErrors(exam, errors);
+  for (const { name, where, early } of unknownExamPlaceholders(exam)) {
+    errors.push(
+      early
+        ? `{{ ${name} }} is used in ${where} before the question that saves it (saved answers are available from the following section onward)`
+        : `Unknown placeholder {{ ${name} }} in ${where}`,
+    );
   }
   return errors;
 }
@@ -481,6 +602,8 @@ export function listQuestions(content) {
 export function publicQuestion(q) {
   const out = { type: q.type, prompt: q.prompt, points: q.points };
   if (QUESTION_TYPES[q.type]?.hasOptions) out.options = [...q.options];
+  // Lets the participant page refresh later sections when this answer changes.
+  if (q.capture) out.capture = q.capture;
   return out;
 }
 

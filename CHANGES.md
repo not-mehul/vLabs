@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.10.0). The first section is the original code
+Newest entry at the bottom (1.11.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -689,3 +689,31 @@ title` starts a step inside an `# [info]` section; in JSON a section
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.11.0 — tokens and saved answers in exams
+
+- **Fixed: an informational section opened on its last step.** A section
+  whose first steps have no checklist (e.g. a briefing) counted those steps
+  as done and skipped straight to the last one. Sections now open on their
+  first step, and **Previous** from the next section returns to the last.
+- **Exams have tokens, like labs.** `{{ SEAT_ID }}`, `{{ FIRST_NAME }}`,
+  `{{ LAST_NAME }}`, `{{ FULL_NAME }}` and the exam's own per-seat
+  **variables** (`STORE = 100 + seat`) resolve in every section title, step,
+  checklist item, prompt, option and accepted answer, for each participant.
+  Grading uses each seat's own accepted answers. Unknown names are rejected
+  on save. Exam editor: a **Variables** panel and a seat number on the
+  preview. Markdown: `variables:` in the front matter. JSON: top-level
+  `"variables"`.
+- **Saved answers.** A short-answer question can save the participant's
+  answer as a variable (`> capture: NAME`, JSON `"capture"`) for every later
+  section to show or accept, like a lab checkpoint capture. Using it in its
+  own section or earlier is an error. Changing the answer updates later
+  sections.
+- **Template Studio** exams get the Variables view, the Token button and
+  picker (with saved answers), per-seat preview with the seat and name
+  inputs, and the same validation.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration: sessions already store
+variables, and exams without any behave as before.
