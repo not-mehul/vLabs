@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { downloadFile } from '../lib/files.js';
-import { slug } from '../lib/format.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { rowLink, stopRowClick } from '../lib/rowLink.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
@@ -209,23 +207,6 @@ export default function Dashboard() {
     [call, refresh],
   );
 
-  const handleExport = useCallback(
-    async (s) => {
-      setError('');
-      try {
-        const doc = await call((t) => api.exportSession(t, s.id));
-        downloadFile(
-          `${slug(doc.session.title, 'session')}.json`,
-          JSON.stringify(doc, null, 2),
-          'application/json',
-        );
-      } catch (err) {
-        setError(err.message);
-      }
-    },
-    [call],
-  );
-
   return (
     <PortalShell>
       <div className="page-head">
@@ -308,14 +289,6 @@ export default function Dashboard() {
                       <StatusPill status={s.status} />
                     </td>
                     <td className="table__actions" {...stopRowClick}>
-                      <button
-                        className="btn btn--sm btn--icon btn--ghost"
-                        onClick={() => handleExport(s)}
-                        title="Export session data (JSON)"
-                        aria-label={`Export ${s.title}`}
-                      >
-                        <Icon name="download" size={16} />
-                      </button>
                       {s.status !== 'active' && (
                         <button
                           className="btn btn--sm btn--icon btn--danger-ghost"

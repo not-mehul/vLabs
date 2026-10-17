@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.14.0). The first section is the original code
+Newest entry at the bottom (1.14.1). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -820,3 +820,18 @@ sessions are read in either shape.
 
 `deploy/pi/update.sh` as usual. No migration; templates and running
 sessions are unchanged.
+
+## 1.14.1 — instructor portal touch-ups
+
+- **Row lines no longer break** in Templates, Sessions and the Admin
+  instructor list. When another cell wrapped (a template description, a
+  long date), the actions cell's bottom border stopped short of the row's.
+- **Sessions list:** the JSON download is gone. Every export, JSON
+  included, is under **Download** on the session's monitor.
+- **Admin layout:** **Your password** and **Add an instructor** sit side
+  by side at the same height, and the instructor list runs full width below
+  them. Its password and added columns now use the same text style.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.

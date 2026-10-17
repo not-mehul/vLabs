@@ -177,93 +177,95 @@ export default function InstructorAccounts() {
           </div>
         ))}
 
-      <div className="split">
-        <section className="panel" aria-labelledby="instructors-title">
-          <h2 className="panel__title" id="instructors-title">
-            <Icon name="user" size={16} /> Instructors
-          </h2>
-          <p className="muted small">
-            Everyone here can sign in to the portal, run sessions and edit the shared templates.
-          </p>
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th className="col--md">Password</th>
-                  <th className="col--sm">Sessions</th>
-                  <th className="col--lg">Added</th>
-                  <th></th>
+      <section className="panel admin-grid__list" aria-labelledby="instructors-title">
+        <h2 className="panel__title" id="instructors-title">
+          <Icon name="user" size={16} /> Instructors
+        </h2>
+        <p className="muted small">
+          Everyone here can sign in to the portal, run sessions and edit the shared templates.
+        </p>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th className="col--md">Password</th>
+                <th className="col--sm">Sessions</th>
+                <th className="col--lg">Added</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((i) => (
+                <tr key={i.id}>
+                  <td className="table__primary instructor-name">
+                    {i.username}
+                    {i.is_me && <span className="tag">you</span>}
+                  </td>
+                  <td className="col--md muted">
+                    {i.must_change_password ? (
+                      <span className="text-warn">Temporary</span>
+                    ) : (
+                      `Changed ${formatDateTime(i.password_changed_at)}`
+                    )}
+                  </td>
+                  <td className="col--sm">
+                    {i.session_count}
+                    {i.active_session_count > 0 && (
+                      <>
+                        {' · '}
+                        <span className="status-live">{i.active_session_count} live</span>
+                      </>
+                    )}
+                  </td>
+                  <td className="col--lg muted">{formatDateTime(i.created_at)}</td>
+                  <td className="table__actions">
+                    {!i.is_me && (
+                      <>
+                        <button
+                          className="btn btn--sm btn--icon btn--ghost"
+                          onClick={() => reset(i)}
+                          title="Reset password"
+                          aria-label={`Reset password for ${i.username}`}
+                        >
+                          <Icon name="key" size={16} />
+                        </button>
+                        <button
+                          className="btn btn--sm btn--icon btn--danger-ghost"
+                          onClick={() => remove(i)}
+                          title="Remove instructor"
+                          aria-label={`Remove ${i.username}`}
+                        >
+                          <Icon name="trash" size={16} />
+                        </button>
+                      </>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {list.map((i) => (
-                  <tr key={i.id}>
-                    <td className="table__primary">
-                      {i.username}
-                      {i.is_me && <span className="tag">you</span>}
-                    </td>
-                    <td className="col--md muted small">
-                      {i.must_change_password ? (
-                        <span className="text-warn">temporary</span>
-                      ) : (
-                        `changed ${formatDateTime(i.password_changed_at)}`
-                      )}
-                    </td>
-                    <td className="col--sm">
-                      {i.session_count}
-                      {i.active_session_count > 0 && (
-                        <>
-                          {' · '}
-                          <span className="status-live">{i.active_session_count} live</span>
-                        </>
-                      )}
-                    </td>
-                    <td className="col--lg muted">{formatDateTime(i.created_at)}</td>
-                    <td className="table__actions">
-                      {!i.is_me && (
-                        <>
-                          <button
-                            className="btn btn--sm btn--icon btn--ghost"
-                            onClick={() => reset(i)}
-                            title="Reset password"
-                            aria-label={`Reset password for ${i.username}`}
-                          >
-                            <Icon name="key" size={16} />
-                          </button>
-                          <button
-                            className="btn btn--sm btn--icon btn--danger-ghost"
-                            onClick={() => remove(i)}
-                            title="Remove instructor"
-                            aria-label={`Remove ${i.username}`}
-                          >
-                            <Icon name="trash" size={16} />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        <form className="panel form" onSubmit={add} aria-labelledby="add-instructor-title">
-          <h2 className="panel__title" id="add-instructor-title">
-            <Icon name="plus" size={16} /> Add an instructor
-          </h2>
-          <NewInstructorFields
-            username={username}
-            setUsername={setUsername}
-            password={password}
-            setPassword={setPassword}
-          />
-          <button type="submit" className="btn btn--primary" disabled={busy || !username.trim()}>
-            <Icon name="plus" size={15} /> {busy ? 'Adding…' : 'Add instructor'}
-          </button>
-        </form>
-      </div>
+      <form
+        className="panel form admin-grid__add"
+        onSubmit={add}
+        aria-labelledby="add-instructor-title"
+      >
+        <h2 className="panel__title" id="add-instructor-title">
+          <Icon name="plus" size={16} /> Add an instructor
+        </h2>
+        <NewInstructorFields
+          username={username}
+          setUsername={setUsername}
+          password={password}
+          setPassword={setPassword}
+        />
+        <button type="submit" className="btn btn--primary" disabled={busy || !username.trim()}>
+          <Icon name="plus" size={15} /> {busy ? 'Adding…' : 'Add instructor'}
+        </button>
+      </form>
     </>
   );
 }

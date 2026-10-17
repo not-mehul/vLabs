@@ -10,8 +10,11 @@ export default function Admin() {
         <h1>Admin</h1>
         <p className="muted">Your password and the instructor accounts.</p>
       </div>
-      <ChangePassword />
-      <InstructorAccounts />
+      {/* Two forms side by side, the instructor list full width below. */}
+      <div className="admin-grid">
+        <ChangePassword />
+        <InstructorAccounts />
+      </div>
     </PortalShell>
   );
 }
