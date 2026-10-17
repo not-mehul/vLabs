@@ -689,6 +689,42 @@ test('archived templates can be restored', async () => {
   );
 });
 
+test('a template can be duplicated: same kind and content, new title, its own history', async () => {
+  const src = await call(`/api/templates/${archivedTemplateId}`, { token: instructorToken });
+  const dup = await call(`/api/templates/${archivedTemplateId}/duplicate`, {
+    method: 'POST',
+    token: instructorToken,
+  });
+  assert.equal(dup.status, 201);
+  assert.notEqual(dup.data.id, archivedTemplateId);
+  assert.equal(dup.data.title, `${src.data.title} (copy)`);
+  assert.equal(dup.data.kind, src.data.kind);
+  assert.equal(dup.data.version, 1);
+  assert.deepEqual(dup.data.content, src.data.content);
+  assert.deepEqual(dup.data.variables, src.data.variables);
+  const audit = await call(`/api/templates/${dup.data.id}/audit`, { token: instructorToken });
+  assert.deepEqual(
+    audit.data.map((a) => a.action),
+    ['created'],
+  );
+
+  const named = await call(`/api/templates/${archivedTemplateId}/duplicate`, {
+    method: 'POST',
+    token: instructorToken,
+    body: { title: '  Next term  ' },
+  });
+  assert.equal(named.data.title, 'Next term');
+  assert.equal(
+    (await call('/api/templates/999999/duplicate', { method: 'POST', token: instructorToken }))
+      .status,
+    404,
+  );
+  for (const id of [dup.data.id, named.data.id]) {
+    await call(`/api/templates/${id}`, { method: 'DELETE', token: instructorToken });
+    await call(`/api/templates/${id}?permanent=1`, { method: 'DELETE', token: instructorToken });
+  }
+});
+
 test('permanent deletion is refused with active sessions and otherwise detaches sessions intact', async () => {
   const launch = await call('/api/sessions', {
     method: 'POST',
@@ -879,8 +915,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 8: exam seats from a lab)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 8);
+test('database schema version is recorded (migration 9: exams handed in at session end)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 9);
   const sessionCols = db
     .prepare('PRAGMA table_info(sessions)')
     .all()
@@ -890,7 +926,13 @@ test('database schema version is recorded (migration 8: exam seats from a lab)',
     .prepare('PRAGMA table_info(participants)')
     .all()
     .map((c) => c.name);
-  for (const c of ['captured_values', 'checkpoint_log', 'section_times', 'completed_at']) {
+  for (const c of [
+    'captured_values',
+    'checkpoint_log',
+    'section_times',
+    'completed_at',
+    'auto_submitted',
+  ]) {
     assert.ok(cols.includes(c), c);
   }
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());

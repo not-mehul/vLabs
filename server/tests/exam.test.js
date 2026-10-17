@@ -333,6 +333,58 @@ test('manual marks override or complete grading; clearing restores the automatic
   assert.equal(byQ.data.responses.find((r) => r.name === 'Ada Lovelace').correct, true);
 });
 
+test('hand marks can give part of the points and carry a marker comment', async () => {
+  const detail = await call(`/api/sessions/${sessionId}`, { token });
+  const a = detail.data.participants.find((p) => p.name === 'Ada Lovelace');
+  const mark = (key, body) =>
+    call(`/api/sessions/${sessionId}/participants/${a.id}/marks/${key}`, {
+      method: 'PUT',
+      token,
+      body,
+    });
+
+  assert.equal((await mark('1.2', {})).status, 400, 'nothing to change');
+  assert.equal((await mark('1.2', { points: 6 })).status, 400, 'more than the question is worth');
+  assert.equal((await mark('1.2', { points: -1 })).status, 400);
+  assert.equal((await mark('1.2', { points: 2.3 })).status, 400, 'halves only');
+  assert.equal((await mark('1.2', { points: '2' })).status, 400);
+  assert.equal((await mark('1.2', { comment: 42 })).status, 400);
+  assert.equal((await mark('1.2', { comment: 'x'.repeat(1001) })).status, 400);
+
+  const partial = await mark('1.2', { points: 2.5 });
+  assert.equal(partial.status, 200);
+  assert.equal(partial.data.partial, true);
+  assert.equal(partial.data.correct, false);
+  assert.equal(partial.data.pending, false);
+  assert.equal(partial.data.marked_points, 2.5);
+  assert.equal(partial.data.points_awarded, 2.5);
+  let pd = await call(`/api/sessions/${sessionId}/participants/${a.id}`, { token });
+  assert.equal(pd.data.score, 2 + 1 + 1 + 1 + 2.5, 'the score adds the partial points');
+
+  // A comment rides along without changing the mark; a full mark replaces the points.
+  const noted = await mark('1.2', { comment: '  Good start, missing the ACL  ' });
+  assert.equal(noted.data.comment, 'Good start, missing the ACL');
+  assert.equal(noted.data.points_awarded, 2.5);
+  const full = await mark('1.2', { correct: true });
+  assert.equal(full.data.points_awarded, 5);
+  assert.equal(full.data.marked_points, null);
+  assert.equal(full.data.comment, 'Good start, missing the ACL');
+
+  // A comment alone on an auto-graded question keeps the automatic verdict.
+  const auto = await mark('0.0', { comment: 'Changed their mind once' });
+  assert.equal(auto.data.correct, true);
+  assert.equal(auto.data.override, null);
+  const cleared = await mark('0.0', { comment: '' });
+  assert.equal(cleared.data.comment, null);
+  assert.equal(cleared.data.marked_by, null, 'nothing left, so the mark is gone');
+
+  pd = await call(`/api/sessions/${sessionId}/participants/${a.id}`, { token });
+  assert.equal(pd.data.score, 2 + 1 + 1 + 1 + 5);
+  const exported = await call(`/api/sessions/${sessionId}/export`, { token });
+  const ea = exported.data.participants.find((p) => p.name === 'Ada Lovelace');
+  assert.equal(ea.responses.find((r) => r.key === '1.2').comment, 'Good start, missing the ACL');
+});
+
 test('the export carries questions, expected answers, responses, marks and the answer log', async () => {
   const res = await call(`/api/sessions/${sessionId}/export`, { token });
   assert.equal(res.status, 200);
@@ -1005,7 +1057,7 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
   assert.equal((await detail(byName('bob LAB').id)).data.questions[0].correct, true);
   assert.equal((await detail(typoId)).data.questions[0].correct, false);
 
-  // Change seat: refused when taken or out of range, exams only.
+  // Change seat: refused when taken or out of range.
   const seat = (sid, pid, n) =>
     call(`/api/sessions/${sid}/participants/${pid}/seat`, {
       method: 'PUT',
@@ -1018,8 +1070,6 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
   assert.match(taken.data.error, /bob LAB/);
   assert.equal((await seat(examSid, typoId, 0)).status, 400);
   assert.equal((await seat(examSid, typoId, 1.5)).status, 400);
-  const labDetail = await call(`/api/sessions/${lab.data.id}`, { token });
-  assert.equal((await seat(lab.data.id, labDetail.data.participants[0].id, 9)).status, 409);
 
   // Moving the typo to Cy's lab seat switches their values and marking at once.
   const moved = await seat(examSid, typoId, 3);
@@ -1099,4 +1149,141 @@ test('the exam lists the sections a seat has opened (an info-only section is not
   assert.deepEqual((await exam()).data.visited_sections, [0, 2]);
   await go(1);
   assert.deepEqual((await exam()).data.visited_sections, [0, 1, 2]);
+});
+
+test('ending an exam session hands in every open exam; the expiry sweep does the same', async () => {
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Time up',
+      content: [{ title: 'Q', items: [{ type: 'truefalse', prompt: 'True?', correct: true }] }],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const launch = async () => {
+    const sess = await call('/api/sessions', {
+      method: 'POST',
+      token,
+      body: { template_id: tpl.data.id },
+    });
+    const seat = async (first) =>
+      (
+        await call('/api/participant/join', {
+          method: 'POST',
+          body: { room_code: sess.data.room_code, first_name: first, last_name: 'Late' },
+        })
+      ).data.token;
+    return { id: sess.data.id, a: await seat('Ann'), b: await seat('Ben') };
+  };
+
+  // Ended by the instructor: Ann handed in herself, Ben is collected as he stands.
+  const one = await launch();
+  await call('/api/participant/exam/answer', {
+    method: 'PUT',
+    token: one.b,
+    body: { key: '0.0', value: true },
+  });
+  await call('/api/participant/exam/submit', { method: 'POST', token: one.a });
+  const ended = await call(`/api/sessions/${one.id}/terminate`, { method: 'POST', token });
+  assert.equal(ended.status, 200);
+  assert.equal(ended.data.auto_submitted, 1);
+  const d = await call(`/api/sessions/${one.id}`, { token });
+  const by = (first) => d.data.participants.find((p) => p.first_name === first);
+  assert.equal(d.data.submitted_count, 2);
+  assert.equal(by('Ann').auto_submitted, false);
+  assert.equal(by('Ben').submitted, true);
+  assert.equal(by('Ben').auto_submitted, true);
+  assert.equal(by('Ben').score, 1, 'answers are kept');
+  assert.equal(by('Ben').submitted_at, d.data.ended_at);
+  const exported = await call(`/api/sessions/${one.id}/export`, { token });
+  assert.equal(exported.data.participants.find((p) => p.first_name === 'Ben').auto_submitted, true);
+
+  // Ran out of time and was swept: handed in at the expiry time.
+  const two = await launch();
+  const expiredAt = new Date(Date.now() - 2 * 3600_000).toISOString();
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiredAt, two.id);
+  const { sweepExpiredSessions } = await import('../src/lib/sessionLifecycle.js');
+  assert.ok(sweepExpiredSessions() >= 1);
+  const swept = await call(`/api/sessions/${two.id}`, { token });
+  assert.equal(swept.data.submitted_count, 2);
+  assert.ok(swept.data.participants.every((p) => p.auto_submitted && p.submitted_at === expiredAt));
+});
+
+test('day two of a lab takes its seats from day one; Change seat works in labs too', async () => {
+  const join = (code, first, last) =>
+    call('/api/participant/join', {
+      method: 'POST',
+      body: { room_code: code, first_name: first, last_name: last },
+    });
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'lab',
+      title: 'Two days',
+      variables: [{ name: 'IP', expression: '"10.0.0." + seat' }],
+      content: [
+        {
+          title: 'Network',
+          steps: [
+            {
+              title: 'Your address',
+              body: 'Ping {{ IP }}',
+              checkpoint: { prompt: 'Your IP?', answer: '{{ IP }}' },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const launch = (source) =>
+    call('/api/sessions', {
+      method: 'POST',
+      token,
+      body: { template_id: tpl.data.id, seat_source_session_id: source },
+    });
+  const day1 = await launch(null);
+  for (const [first, last] of [
+    ['Ann', 'One'],
+    ['Ben', 'Two'],
+    ['Cat', 'Three'],
+  ]) {
+    await join(day1.data.room_code, first, last);
+  }
+
+  const day2 = await launch(day1.data.id);
+  assert.equal(day2.status, 201);
+  const cat = await join(day2.data.room_code, 'Cat', 'Three');
+  assert.equal(cat.data.seat_number, 3, 'same seat as day one');
+  const typo = await join(day2.data.room_code, 'Bne', 'Two');
+  assert.equal(typo.data.seat_number, 4, 'above day one’s highest seat');
+
+  const monitor = await call(`/api/sessions/${day2.data.id}`, { token });
+  assert.equal(monitor.data.seat_source.id, day1.data.id);
+  const typoRow = monitor.data.participants.find((p) => p.first_name === 'Bne');
+  assert.equal(typoRow.lab_seat, null, 'not found in day one');
+  const content = (t) => call('/api/participant/content', { token: t });
+  assert.match(JSON.stringify((await content(typo.data.token)).data), /10\.0\.0\.4/);
+
+  const seat = (n) =>
+    call(`/api/sessions/${day2.data.id}/participants/${typoRow.id}/seat`, {
+      method: 'PUT',
+      token,
+      body: { seat_number: n },
+    });
+  assert.equal((await seat(3)).status, 409, 'Cat holds seat 3');
+  const moved = await seat(2);
+  assert.equal(moved.status, 200);
+  const after = await content(typo.data.token);
+  assert.equal(after.data.seat_number, 2);
+  assert.match(JSON.stringify(after.data), /10\.0\.0\.2/);
+  assert.doesNotMatch(JSON.stringify(after.data), /10\.0\.0\.4/);
+  const st = await call('/api/participant/status', { token: typo.data.token });
+  assert.equal(st.data.seat_number, 2);
+  const detail = await call(`/api/sessions/${day2.data.id}/participants/${typoRow.id}`, { token });
+  assert.equal(detail.data.lab_seat, null);
+  assert.equal(detail.data.seat_number, 2);
 });

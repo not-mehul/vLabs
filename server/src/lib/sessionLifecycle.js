@@ -1,11 +1,18 @@
 import db from '../db/index.js';
 import config from '../config.js';
 import { log } from './logger.js';
+import { breaksOf, closeOpenVisit } from './sectionTiming.js';
 
 const q = {
-  sweep: db.prepare(
-    `UPDATE sessions SET is_active = 0, ended_at = expires_at
-      WHERE is_active = 1 AND expires_at < ?`,
+  expired: db.prepare(
+    `SELECT id, kind, expires_at, breaks FROM sessions WHERE is_active = 1 AND expires_at < ?`,
+  ),
+  end: db.prepare('UPDATE sessions SET is_active = 0, ended_at = expires_at WHERE id = ?'),
+  openSeats: db.prepare('SELECT * FROM participants WHERE session_id = ? AND submitted_at IS NULL'),
+  autoSubmit: db.prepare(
+    `UPDATE participants SET submitted_at = ?, completed_at = COALESCE(completed_at, ?),
+            finished_at = COALESCE(finished_at, ?), section_times = ?, auto_submitted = 1
+      WHERE id = ? AND submitted_at IS NULL`,
   ),
   template: db.prepare('SELECT id, title, content, variables, version FROM templates WHERE id = ?'),
   push: db.prepare(
@@ -33,9 +40,35 @@ const q = {
  */
 export function sweepExpiredSessions(graceMinutes = config.expiredSessionGraceMinutes) {
   const cutoff = new Date(Date.now() - graceMinutes * 60_000).toISOString();
-  const { changes } = q.sweep.run(cutoff);
-  if (changes) log.info('sessions.swept', { ended: changes, cutoff });
-  return changes;
+  const rows = q.expired.all(cutoff);
+  db.transaction(() => {
+    for (const s of rows) {
+      q.end.run(s.id);
+      // Exams end at their expiry time, as if the instructor had ended them then.
+      if (s.kind === 'exam') collectExamSubmissions(s, s.expires_at);
+    }
+  })();
+  if (rows.length) log.info('sessions.swept', { ended: rows.length, cutoff });
+  return rows.length;
+}
+
+/**
+ * When an exam session ends, hand in every exam still open, as it stands at
+ * `at`: answers are kept, the section clock stops then, and the seat is
+ * flagged auto_submitted so the monitor can tell it apart from a hand-in.
+ * Without this an unsubmitted exam stayed "in progress" for good.
+ *
+ * @returns {number} exams handed in
+ */
+export function collectExamSubmissions(session, at) {
+  const breaks = breaksOf(session);
+  let n = 0;
+  for (const p of q.openSeats.all(session.id)) {
+    const times = closeOpenVisit(p, at, breaks);
+    n += q.autoSubmit.run(at, at, at, JSON.stringify(times), p.id).changes;
+  }
+  if (n) log.info('exam.auto_submitted', { session: session.id, count: n });
+  return n;
 }
 
 /**

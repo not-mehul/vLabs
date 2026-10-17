@@ -18,6 +18,7 @@ import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
 import Menu from '../components/Menu.jsx';
 import ExamMonitor from '../components/ExamMonitor.jsx';
+import SeatChange from '../components/SeatChange.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from '../components/SectionFlow.jsx';
 import SectionDrawer from '../components/SectionDrawer.jsx';
 
@@ -61,7 +62,7 @@ function StatusPill({ p }) {
 }
 
 /** Slide-over with one participant's answers, attempts, hints and timings. Live-refreshes. */
-function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
+function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved, onChanged }) {
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
@@ -155,6 +156,10 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
                 Joined {formatDateTime(d.joined_at)}
                 {d.completed_at ? ` · completed ${formatDateTime(d.completed_at)}` : ''}
                 {d.finished_at ? ` · pressed Finish ${formatDateTime(d.finished_at)}` : ''}
+                {d.lab_seat === null && ' · not found in the linked lab'}
+                {d.lab_seat != null &&
+                  d.lab_seat !== d.seat_number &&
+                  ` · seat ${d.lab_seat} in the linked lab`}
               </p>
             </div>
           ) : (
@@ -194,6 +199,17 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
             </div>
 
             <div className="drawer__actions">
+              <SeatChange
+                name={d.name}
+                seatNumber={d.seat_number}
+                what="Their manual and checkpoints"
+                onSave={async (seat) => {
+                  await call((t) => api.changeSeat(t, sessionId, participantId, seat));
+                  setReload((n) => n + 1);
+                  onChanged();
+                }}
+                onError={setError}
+              />
               <button className="btn btn--sm btn--danger-ghost" onClick={remove}>
                 <Icon name="trash" size={14} /> Remove participant
               </button>
@@ -433,7 +449,10 @@ export default function SessionMonitor() {
 
   const terminate = () =>
     act((t) => api.terminateSession(t, id), {
-      confirmText: 'End this session now? All participant access will be revoked immediately.',
+      confirmText:
+        data?.kind === 'exam'
+          ? 'End this session now? All participant access will be revoked immediately, and every exam not yet submitted is handed in as it stands.'
+          : 'End this session now? All participant access will be revoked immediately.',
     });
 
   const extend = () => act((t) => api.extendSession(t, id, 30));
@@ -722,6 +741,8 @@ export default function SessionMonitor() {
             <div className="panel__head">
               <h2 className="panel__title">Participants</h2>
               <span className="muted small">
+                {data.seat_source &&
+                  `Seats from ${data.seat_source.title} (${data.seat_source.room_code}) · `}
                 {data.complete_count} of {data.participants.length} complete · click a row for
                 answers, attempts, hints and timings
               </span>
@@ -761,7 +782,19 @@ export default function SessionMonitor() {
                         <td className="col--seat">
                           <span className="seat-num">{p.seat_number}</span>
                         </td>
-                        <td className="table__primary">{p.name}</td>
+                        <td className="table__primary">
+                          {p.name}
+                          {p.lab_seat === null && (
+                            <span className="tag" title="No one by this name in the linked lab">
+                              not in lab
+                            </span>
+                          )}
+                          {p.lab_seat != null && p.lab_seat !== p.seat_number && (
+                            <span className="tag" title="Their seat number in the linked lab">
+                              lab #{p.lab_seat}
+                            </span>
+                          )}
+                        </td>
                         <td>
                           {p.complete ? (
                             <span className="muted">Done</span>
@@ -838,6 +871,7 @@ export default function SessionMonitor() {
               participantId={selected}
               onClose={() => setSelected(null)}
               onRemoved={refresh}
+              onChanged={refresh}
             />
           )}
         </>

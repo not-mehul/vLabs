@@ -45,9 +45,14 @@ import {
   sectionItems,
   isQuestion,
   isSubmitSection,
+  isValidMarkPoints,
 } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
-import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
+import {
+  sweepExpiredSessions,
+  snapshotTemplateIntoSession,
+  collectExamSubmissions,
+} from '../lib/sessionLifecycle.js';
 import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
 import {
   MAX_SEAT_NUMBER,
@@ -116,7 +121,7 @@ const q = {
   // Reopening restarts the section clock now (time while submitted doesn't count).
   reopenExam: db.prepare(
     `UPDATE participants SET submitted_at = NULL, completed_at = NULL, finished_at = NULL,
-            section_entered_at = ? WHERE id = ?`,
+            auto_submitted = 0, section_entered_at = ? WHERE id = ?`,
   ),
 };
 
@@ -445,10 +450,9 @@ router.post(
       24 * 60,
     );
 
-    // Exams only: reuse the seat numbers of one of the instructor's labs.
-    const seatSource = exam
-      ? checkSeatSource(req.body?.seat_source_session_id, req.instructor.id)
-      : null;
+    // Optional: reuse the seat numbers of one of the instructor's labs (an exam
+    // after a lab, or day two of a multi-day lab).
+    const seatSource = checkSeatSource(req.body?.seat_source_session_id, req.instructor.id);
 
     const roomCode = generateRoomCode();
     const info = q.insert.run(
@@ -494,7 +498,12 @@ router.get('/:id/participants/:pid', (req, res) => {
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
   const content = JSON.parse(row.content);
-  if (!isExam(row)) return res.json(participantDetail(p, content, breaksOf(row)));
+  if (!isExam(row)) {
+    return res.json({
+      ...participantDetail(p, content, breaksOf(row)),
+      lab_seat: labSeatOf(labSeatMap(row), p),
+    });
+  }
   const detail = examParticipantDetail(p, content, breaksOf(row), variablesOf(row));
   res.json({
     ...detail,
@@ -504,16 +513,15 @@ router.get('/:id/participants/:pid', (req, res) => {
 });
 
 /**
- * PUT /api/sessions/:id/participants/:pid/seat — EXAM sessions: body
- * { seat_number }. Gives the participant another seat number (a typo or a
- * name clash kept them from their lab seat). Refused when someone else holds
- * that number. Their exam and marking use the new seat's values at once,
- * because both are worked out from the seat whenever they are read; answers
- * already given are kept as they are.
+ * PUT /api/sessions/:id/participants/:pid/seat — body { seat_number }. Gives
+ * the participant another seat number (a typo or a name clash kept them from
+ * their lab seat). Refused when someone else holds that number. Their exam or
+ * manual, its checks and the marking use the new seat's values at once,
+ * because all are worked out from the seat whenever they are read; answers
+ * and checkpoints already given are kept as they are.
  */
 router.put('/:id/participants/:pid/seat', (req, res) => {
   const row = ownedOr404(req);
-  if (!isExam(row)) throw httpError(409, 'Seats can only be changed in exam sessions');
   const p = participantOr404(req, row);
   const seat = Number(req.body?.seat_number);
   if (!Number.isInteger(seat) || seat < 1 || seat > MAX_SEAT_NUMBER) {
@@ -626,9 +634,13 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
 
 /**
  * PUT /api/sessions/:id/participants/:pid/marks/:key — EXAM sessions only.
- * Body: { correct: true | false | null }. Marks one response correct or
- * incorrect by hand (overriding the automatic verdict), or clears the mark
- * with null. Allowed during and after the session.
+ * Body (any of): { correct: true | false | null, points: N | null,
+ * comment: string | null }. `correct` marks the response correct or incorrect
+ * by hand (overriding the automatic verdict); `points` gives part of the
+ * question's points instead (0 … its points, halves allowed); null clears
+ * either and falls back to the automatic verdict. `comment` is the marker's
+ * note (empty or null removes it); participants never see it. Allowed during
+ * and after the session.
  */
 router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   const row = ownedOr404(req);
@@ -639,19 +651,56 @@ router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   const content = JSON.parse(row.content);
   const key = String(req.params.key);
   if (!listQuestions(content).some((x) => x.key === key)) throw httpError(404, 'Unknown question');
-  const verdict = req.body?.correct;
-  if (verdict !== true && verdict !== false && verdict !== null) {
-    throw httpError(400, 'correct must be true, false or null');
+  const body = req.body || {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  if (!has('correct') && !has('points') && !has('comment')) {
+    throw httpError(400, 'Give correct, points or comment');
   }
+  const question = listQuestions(content).find((x) => x.key === key).q;
   const grades = parseObject(p.grades);
-  if (verdict === null) delete grades[key];
-  else grades[key] = { correct: verdict ? 1 : 0, by: req.instructor.username, at: nowIso() };
+  const mark = { ...(grades[key] || {}) };
+  if (has('correct')) {
+    const verdict = body.correct;
+    if (verdict !== true && verdict !== false && verdict !== null) {
+      throw httpError(400, 'correct must be true, false or null');
+    }
+    delete mark.points;
+    if (verdict === null) delete mark.correct;
+    else mark.correct = verdict ? 1 : 0;
+  }
+  if (has('points')) {
+    const points = body.points;
+    if (points !== null && !isValidMarkPoints(points, question.points)) {
+      throw httpError(
+        400,
+        `points must be from 0 to ${question.points}, in steps of 0.5 (or null)`,
+      );
+    }
+    delete mark.correct;
+    if (points === null) delete mark.points;
+    else mark.points = points;
+  }
+  if (has('comment')) {
+    if (body.comment !== null && typeof body.comment !== 'string') {
+      throw httpError(400, 'comment must be text or null');
+    }
+    const comment = body.comment === null ? '' : body.comment.trim();
+    if (comment.length > 1000) throw httpError(400, 'A comment can be at most 1000 characters');
+    if (comment) mark.comment = comment;
+    else delete mark.comment;
+  }
+  if ('correct' in mark || 'points' in mark || 'comment' in mark) {
+    grades[key] = { ...mark, by: req.instructor.username, at: nowIso() };
+  } else {
+    delete grades[key];
+  }
   q.setGrades.run(JSON.stringify(grades), p.id);
   log.info('exam.marked', {
     session: row.id,
     participant: p.id,
     question: key,
-    correct: verdict,
+    correct: grades[key]?.correct ?? null,
+    points: grades[key]?.points ?? null,
     instructor: req.instructor.id,
   });
   const fresh = q.participant.get(p.id, row.id);
@@ -802,7 +851,11 @@ router.get('/:id', (req, res) => {
   const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
   const breaks = breaksOf(row);
-  const participants = q.participants.all(row.id).map((p) => participantView(p, sections, breaks));
+  const labSeats = labSeatMap(row);
+  const participants = q.participants.all(row.id).map((p) => ({
+    ...participantView(p, sections, breaks),
+    lab_seat: labSeatOf(labSeats, p),
+  }));
 
   // Aggregate: how many seats have got to each section. Seats are placed by
   // their FURTHEST section, so reviewing an earlier one doesn't move them back.
@@ -818,6 +871,7 @@ router.get('/:id', (req, res) => {
     ...summarise(row),
     ...breakView(row),
     capture_names: captureNamesOf(sections),
+    seat_source: seatSourceSummary(row),
     complete_count: completeCount,
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),
@@ -871,9 +925,14 @@ router.post('/:id/terminate', (req, res) => {
     running.end = now;
     q.setBreaks.run(JSON.stringify(breaks), row.id);
   }
-  q.terminate.run(now, row.id);
+  const collected = db.transaction(() => {
+    q.terminate.run(now, row.id);
+    return isExam(row)
+      ? collectExamSubmissions({ ...row, breaks: JSON.stringify(breaks) }, now)
+      : 0;
+  })();
   log.info('session.terminated', { session: row.id, instructor: req.instructor.id });
-  res.json({ id: row.id, status: 'ended' });
+  res.json({ id: row.id, status: 'ended', auto_submitted: collected });
 });
 
 /**
@@ -1145,6 +1204,7 @@ function examExport(row) {
       name: v.name,
       submitted: v.submitted,
       submitted_at: v.submitted_at,
+      auto_submitted: v.auto_submitted,
       answered: v.answered,
       question_count: v.question_count,
       score: v.score,
@@ -1166,8 +1226,10 @@ function examExport(row) {
         auto: g.auto,
         override: g.override,
         correct: g.correct,
+        partial: g.partial,
         pending: g.pending,
         points_awarded: g.points_awarded,
+        comment: g.comment,
         marked_by: g.marked_by,
         marked_at: g.marked_at,
       })),

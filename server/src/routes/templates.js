@@ -331,6 +331,40 @@ router.post('/:id/restore', (req, res) => {
 });
 
 /**
+ * POST /api/templates/:id/duplicate — a new template (version 1) with the same
+ * kind, content, variables and description, titled "<title> (copy)" unless
+ * body.title names it. Archived templates can be duplicated too. Sessions and
+ * change history stay with the original.
+ */
+router.post('/:id/duplicate', (req, res) => {
+  const src = loadOr404(req);
+  const wanted = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  const title = (wanted || `${src.title} (copy)`).slice(0, 200);
+  const info = q.insert.run(
+    kindOf(src),
+    title,
+    src.description,
+    src.content,
+    src.variables,
+    req.instructor.id,
+  );
+  const row = q.get.get(info.lastInsertRowid);
+  recordAudit(req.instructor, {
+    templateId: row.id,
+    title: row.title,
+    action: 'created',
+    version: row.version,
+    snapshot: snapshotOf(row),
+  });
+  log.info('template.duplicated', {
+    template: row.id,
+    from: src.id,
+    instructor: req.instructor.id,
+  });
+  res.status(201).json(rowToTemplate(row));
+});
+
+/**
  * POST /api/templates/:id/preview
  * Authoring aid: render the manual for a chosen seat so instructors can see the
  * resolved output without a live session. Also accepts an inline draft body so

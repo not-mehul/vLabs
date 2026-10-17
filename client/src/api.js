@@ -184,6 +184,8 @@ export const api = {
   deleteTemplate: (token, id, { permanent = false } = {}) =>
     request(`/templates/${id}${permanent ? '?permanent=1' : ''}`, { method: 'DELETE', token }),
   restoreTemplate: (token, id) => request(`/templates/${id}/restore`, { method: 'POST', token }),
+  duplicateTemplate: (token, id, title) =>
+    request(`/templates/${id}/duplicate`, { method: 'POST', body: title ? { title } : {}, token }),
   previewTemplate: (token, id, seatId, draft) =>
     request(`/templates/${id}/preview`, {
       method: 'POST',
@@ -203,10 +205,11 @@ export const api = {
   getParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { token }),
   /** Exam sessions: mark a response correct / incorrect (null clears the mark). */
-  markResponse: (token, sessionId, participantId, key, correct) =>
+  /** Exams: mark a response by hand. body: { correct } | { points } | { comment } (null clears). */
+  markResponse: (token, sessionId, participantId, key, body) =>
     request(`/sessions/${sessionId}/participants/${participantId}/marks/${key}`, {
       method: 'PUT',
-      body: { correct },
+      body,
       token,
     }),
   /** Exam sessions: every participant's response to one question. */

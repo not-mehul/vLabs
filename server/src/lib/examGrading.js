@@ -27,7 +27,9 @@ import { seatExam } from './examSeat.js';
  * statistics. Automatic questions (multiple choice, true/false, short answers
  * with an accepted list) are graded on the fly; anything else waits for — and
  * any question can be overridden by — a manual mark stored in
- * participants.grades as { key: { correct: 0|1, by, at } }. Each participant
+ * participants.grades as { key: { correct: 0|1 | points: N, comment?, by, at } }
+ * (points: a partial mark; comment: the marker's note, never shown to
+ * participants). Each participant
  * is graded against their own seat's exam (`variables`: the session's
  * per-seat formulas), so accepted answers may use {{ PLACEHOLDERS }}.
  */
@@ -88,7 +90,8 @@ export function gradeParticipant(p, content, variables = []) {
   const grades = parseObject(p.grades);
   return listQuestions(seatExam(content, variables, p)).map(({ key, si, qi, number, q }) => {
     const value = answers[key];
-    const g = gradeResponse(q, value, overrideOf(grades, key));
+    const mark = grades[key];
+    const g = gradeResponse(q, value, overrideOf(grades, key), mark?.points ?? null);
     return {
       key,
       section_index: si,
@@ -101,6 +104,7 @@ export function gradeParticipant(p, content, variables = []) {
       response: describeResponse(q, value),
       marked_by: grades[key]?.by ?? null,
       marked_at: grades[key]?.at ?? null,
+      comment: grades[key]?.comment ?? null,
       ...g,
     };
   });
@@ -170,6 +174,8 @@ export function examParticipantView(p, content, breaks = [], variables = []) {
     fully_graded: graded.every((g) => !g.pending),
     submitted,
     submitted_at: p.submitted_at,
+    // Handed in by the session ending, not by the participant.
+    auto_submitted: submitted && Boolean(p.auto_submitted),
     status: submitted ? 'submitted' : secondsSinceSeen < 90 ? 'active' : 'idle',
     complete: submitted,
     furthest_section: furthest,

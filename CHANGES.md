@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.15.0). The first section is the original code
+Newest entry at the bottom (1.16.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -922,3 +922,33 @@ builds the Studio; CI checks that the committed offline file is current.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.16.0 — part marks, exams handed in at the end, lab seats, duplicate
+
+- **Part marks and marker comments** (exams). Next to **Correct /
+  Incorrect** a points box gives part of a question's points (0 up to its
+  points, in halves); the response shows *Partial · 2.5/5 pts* and the score
+  adds it. **Add a comment** keeps a marker's note on any response; it is in
+  the export and the results CSV (`q<N>_comment`), never shown to
+  participants. The results CSV's result column can now read *partial*.
+- **Exams are handed in when the session ends.** **End session**, or the
+  sweep about an hour after a session runs out, hands in every exam not yet
+  submitted, as it stands: answers are kept and the section clock stops at
+  the end time. Before, those stayed *in progress* for good. The monitor
+  shows them as *Time up*; the export and results CSV have
+  `auto_submitted`. The participant's closed screen says their answers were
+  handed in.
+- **Seats from and Change seat for labs.** A lab can be launched with
+  **Seats from** an earlier lab session (day two of a multi-day lab), so
+  each student keeps their seat number and values. **Change seat** is now
+  in the lab participant panel too; their manual and checkpoint answers
+  switch to the new seat at once (their page reloads on the next status
+  poll) and cleared checkpoints stay cleared.
+- **Duplicate a template.** A copy button on the Templates page (labs and
+  exams, archived ones too) makes a new template titled *… (copy)* with
+  the same content and variables and its own change history.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. Migration 9 adds `participants.auto_submitted`
+(runs on start).

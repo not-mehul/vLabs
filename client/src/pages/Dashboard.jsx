@@ -19,7 +19,7 @@ function StatusPill({ status }) {
 function CreateSession({ templates, sessions, onCreated }) {
   const { call } = useInstructorApi();
   const [templateId, setTemplateId] = useState('');
-  // Exams: the lab session whose seat numbers (and so per-seat values) to reuse.
+  // Optional: the lab session whose seat numbers (and so per-seat values) to reuse.
   const [seatSource, setSeatSource] = useState('');
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(DEFAULT_MINUTES.lab);
@@ -29,7 +29,6 @@ function CreateSession({ templates, sessions, onCreated }) {
   const [error, setError] = useState('');
 
   const canSubmit = templateId && !busy;
-  const isExam = templates.find((t) => String(t.id) === templateId)?.kind === 'exam';
   const labSessions = sessions.filter((s) => s.kind !== 'exam');
 
   async function handleSubmit(e) {
@@ -50,7 +49,7 @@ function CreateSession({ templates, sessions, onCreated }) {
           template_id: Number(templateId),
           title,
           duration_minutes: Number(duration),
-          seat_source_session_id: isExam && seatSource ? Number(seatSource) : null,
+          seat_source_session_id: seatSource ? Number(seatSource) : null,
         }),
       );
       setTitle('');
@@ -114,7 +113,7 @@ function CreateSession({ templates, sessions, onCreated }) {
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>
-          {isExam && (
+          {templateId && labSessions.length > 0 && (
             <label className="field">
               <span className="field__label">Seats from</span>
               <select
@@ -150,8 +149,9 @@ function CreateSession({ templates, sessions, onCreated }) {
         Sessions run for 8 hours (labs) or 1 hour (exams) unless you change it; use +30 min on the
         monitor to extend. The session takes a copy of the template at launch; later edits only
         reach it when you push them from the monitor.
-        {isExam &&
-          ' Seats from a lab: anyone whose name matches someone in that lab gets their lab seat, and so the same values; use Change seat on the monitor for typos.'}
+        {templateId &&
+          labSessions.length > 0 &&
+          ` Seats from a lab (for an exam after a lab, or day two of a lab): anyone whose name matches someone in that lab gets their lab seat, and so the same values; use Change seat on the monitor for typos.`}
       </p>
       {error && (
         <p className="form__error" role="alert">

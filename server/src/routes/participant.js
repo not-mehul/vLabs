@@ -682,7 +682,7 @@ router.get('/status', contentLimiter, (req, res) => {
     template_version: req.session.template_version,
     // Labs: the instructor can unlock a checkpoint; a change reloads the manual.
     checkpoints_cleared: completedSetOf(p).size,
-    // Exams: the instructor can change the seat (and so its values) mid-exam.
+    // The instructor can change the seat (and so its values) mid-session.
     seat_number: p.seat_number,
   });
 });

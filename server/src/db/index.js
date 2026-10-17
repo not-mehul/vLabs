@@ -408,6 +408,13 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 9,
+    name: 'exams handed in automatically when the session ends',
+    up() {
+      addColumnIfMissing('participants', 'auto_submitted', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
 ];
 
 /**

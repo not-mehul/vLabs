@@ -689,25 +689,54 @@ export function isAnswered(value) {
   return true;
 }
 
+/** True when `points` is a valid partial mark for a question worth `max`. */
+export function isValidMarkPoints(points, max) {
+  return (
+    typeof points === 'number' &&
+    Number.isFinite(points) &&
+    points >= 0 &&
+    points <= max &&
+    Number.isInteger(points * 2)
+  );
+}
+
 /**
  * Grade one response.
  *  - auto:     true / false / null (null: needs a human, or unanswered text)
  *  - override: the instructor's mark (true / false) when set
- *  - correct:  the final verdict (override wins), or null while pending
+ *  - marked_points: the instructor's points (0 … q.points, halves allowed)
+ *              when a partial mark was given instead of correct / incorrect
+ *  - correct:  the final verdict (a mark wins): true only for full marks,
+ *              false otherwise, or null while pending
+ *  - partial:  a hand mark of some but not all of the points
  *  - pending:  answered, needs a human mark, none given yet
  */
-export function gradeResponse(q, value, override) {
+export function gradeResponse(q, value, override, points = null) {
   const answered = isAnswered(value);
   let auto = null;
   if (answered) auto = QUESTION_TYPES[q.type].grade(q, value);
   else if (!isManualQuestion(q)) auto = false; // unanswered auto question scores zero
+  if (isValidMarkPoints(points, q.points)) {
+    return {
+      answered,
+      auto,
+      override: null,
+      marked_points: points,
+      correct: points === q.points,
+      partial: points > 0 && points < q.points,
+      pending: false,
+      points_awarded: points,
+    };
+  }
   const hasOverride = override === true || override === false;
   const correct = hasOverride ? override : auto;
   return {
     answered,
     auto,
     override: hasOverride ? override : null,
+    marked_points: null,
     correct,
+    partial: false,
     pending: correct === null && answered,
     points_awarded: correct === true ? q.points : 0,
   };

@@ -72,6 +72,15 @@ Applies to vLabs **1.10.0**.
 5. Editing the template later never changes a running class until you press
    **Push latest version** on the session monitor (see §15).
 
+**A lab over several days.** Launch day two with **Seats from:** day one's
+session. Anyone who joins under the same name gets their day-one seat
+number, and so the same values; anyone else is numbered above day one's
+highest seat. **Change seat** in the participant panel fixes typos and name
+clashes: their manual and checkpoint answers switch to the new seat's values
+at once, and checkpoints already cleared stay cleared. **Duplicate** on the
+Templates page copies a lab (for next term, or a variant) as a new template
+with its own history.
+
 Everything the server personalises comes from three sources: the **seat
 number**, the participant's **registered name**, and **values they entered at
 checkpoints** (captures). Design your variables around those.

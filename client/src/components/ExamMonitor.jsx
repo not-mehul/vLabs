@@ -5,6 +5,7 @@ import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import Markdown from './Markdown.jsx';
 import Icon from './Icon.jsx';
+import SeatChange from './SeatChange.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from './SectionFlow.jsx';
 import SectionDrawer from './SectionDrawer.jsx';
 
@@ -16,10 +17,17 @@ const TYPE_LABEL = {
   long: 'Long answer',
 };
 
-/** Correct / incorrect / needs marking / unanswered badge for one response. */
+/** Correct / partial / incorrect / needs marking / unanswered badge for one response. */
 function Verdict({ r }) {
   if (!r.answered) return <span className="verdict verdict--none">Unanswered</span>;
   if (r.pending) return <span className="verdict verdict--pending">Needs marking</span>;
+  if (r.partial) {
+    return (
+      <span className="verdict verdict--partial">
+        Partial · {r.points_awarded}/{r.points} pts
+      </span>
+    );
+  }
   return r.correct ? (
     <span className="verdict verdict--ok">
       <Icon name="check" size={12} /> Correct
@@ -33,50 +41,114 @@ function Verdict({ r }) {
 
 /**
  * Manual marking: mark a response correct or incorrect (overriding the
- * automatic verdict), or clear the mark to fall back to it.
+ * automatic verdict), give part of the points, or clear the mark to fall back
+ * to it; plus a marker's comment, never shown to the participant.
+ * `onMark(body)` sends { correct } / { points } / { comment }.
  */
 function MarkControls({ r, onMark, busy }) {
+  const marked = r.override !== null || r.marked_points !== null;
+  const [points, setPoints] = useState('');
+  const [comment, setComment] = useState(r.comment || '');
+  useEffect(() => setComment(r.comment || ''), [r.comment]);
+  const max = r.points;
+  const givePoints = (e) => {
+    e.preventDefault();
+    const n = Number(points);
+    if (points === '' || Number.isNaN(n)) return;
+    onMark({ points: n });
+    setPoints('');
+  };
   return (
-    <div className="mark" role="group" aria-label="Mark this response">
-      <button
-        type="button"
-        className={`btn btn--xs ${r.override === true ? 'btn--success' : 'btn--ghost'}`}
-        onClick={() => onMark(true)}
-        disabled={busy}
-        aria-pressed={r.override === true}
-      >
-        <Icon name="check" size={12} /> Correct
-      </button>
-      <button
-        type="button"
-        className={`btn btn--xs ${r.override === false ? 'btn--danger' : 'btn--ghost'}`}
-        onClick={() => onMark(false)}
-        disabled={busy}
-        aria-pressed={r.override === false}
-      >
-        <Icon name="close" size={12} /> Incorrect
-      </button>
-      {r.override !== null && (
+    <div className="mark-block">
+      <div className="mark" role="group" aria-label="Mark this response">
         <button
           type="button"
-          className="btn btn--xs btn--ghost"
-          onClick={() => onMark(null)}
+          className={`btn btn--xs ${r.override === true ? 'btn--success' : 'btn--ghost'}`}
+          onClick={() => onMark({ correct: true })}
           disabled={busy}
-          title={
-            r.auto === null
-              ? 'Remove the mark'
-              : `Remove the mark (automatic verdict: ${r.auto ? 'correct' : 'incorrect'})`
-          }
+          aria-pressed={r.override === true}
         >
-          <Icon name="undo" size={12} /> Clear
+          <Icon name="check" size={12} /> Correct
         </button>
-      )}
-      {r.marked_by && (
-        <span className="muted small">
-          marked by {r.marked_by}
-          {r.marked_at ? ` · ${formatDateTime(r.marked_at)}` : ''}
-        </span>
-      )}
+        <button
+          type="button"
+          className={`btn btn--xs ${r.override === false ? 'btn--danger' : 'btn--ghost'}`}
+          onClick={() => onMark({ correct: false })}
+          disabled={busy}
+          aria-pressed={r.override === false}
+        >
+          <Icon name="close" size={12} /> Incorrect
+        </button>
+        {max > 0 && (
+          <form className="mark__points" onSubmit={givePoints}>
+            <input
+              type="number"
+              min={0}
+              max={max}
+              step={0.5}
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              placeholder={r.marked_points !== null ? String(r.marked_points) : 'pts'}
+              aria-label={`Points out of ${max}`}
+              disabled={busy}
+            />
+            <span className="muted small">/ {max}</span>
+            <button
+              type="submit"
+              className="btn btn--xs btn--ghost"
+              disabled={busy || points === ''}
+            >
+              Give
+            </button>
+          </form>
+        )}
+        {marked && (
+          <button
+            type="button"
+            className="btn btn--xs btn--ghost"
+            onClick={() => onMark({ correct: null })}
+            disabled={busy}
+            title={
+              r.auto === null
+                ? 'Remove the mark'
+                : `Remove the mark (automatic verdict: ${r.auto ? 'correct' : 'incorrect'})`
+            }
+          >
+            <Icon name="undo" size={12} /> Clear
+          </button>
+        )}
+        {r.marked_by && (
+          <span className="muted small">
+            marked by {r.marked_by}
+            {r.marked_at ? ` · ${formatDateTime(r.marked_at)}` : ''}
+          </span>
+        )}
+      </div>
+      <details className="mark__comment" open={Boolean(r.comment)}>
+        <summary className="muted small">{r.comment ? 'Marker comment' : 'Add a comment'}</summary>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onMark({ comment });
+          }}
+        >
+          <textarea
+            rows={2}
+            maxLength={1000}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="For your records and the results export; participants never see it"
+            disabled={busy}
+          />
+          <button
+            type="submit"
+            className="btn btn--xs btn--ghost"
+            disabled={busy || comment.trim() === (r.comment || '')}
+          >
+            Save comment
+          </button>
+        </form>
+      </details>
     </div>
   );
 }
@@ -166,10 +238,10 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
   const [busy, setBusy] = useState('');
   const [filter, setFilter] = useState('all');
 
-  async function mark(key, correct) {
+  async function mark(key, body) {
     setBusy(key);
     try {
-      await call((t) => api.markResponse(t, sessionId, participantId, key, correct));
+      await call((t) => api.markResponse(t, sessionId, participantId, key, body));
       await reload();
       onChanged();
     } finally {
@@ -178,33 +250,6 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
   }
 
   const [actionError, setActionError] = useState('');
-  const [seatDraft, setSeatDraft] = useState(null); // the number being typed, or null when closed
-
-  /** Give the participant another seat number (fixes a typo or a name clash). */
-  async function changeSeat(e) {
-    e.preventDefault();
-    const seat = Number(seatDraft);
-    if (seat === d.seat_number) {
-      setSeatDraft(null);
-      return;
-    }
-    if (
-      !window.confirm(
-        `Move ${d.name} to seat ${seat}?\n\nTheir exam and marking switch to seat ${seat}'s values at once. Answers already given are kept as they are.`,
-      )
-    )
-      return;
-    setActionError('');
-    try {
-      await call((t) => api.changeSeat(t, sessionId, participantId, seat));
-      setSeatDraft(null);
-      await reload();
-      onChanged();
-    } catch (err) {
-      setActionError(err.message);
-    }
-  }
-
   /** Seat-level actions (reopen / move device / remove), each confirmed first. */
   async function seatAction(kind) {
     const name = d?.name || 'this participant';
@@ -246,7 +291,11 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
               <span className="seat-num">{d.seat_number}</span>
               <h2>{d.name}</h2>
               <span className={`pill pill--${d.submitted ? 'active' : 'ended'}`}>
-                {d.submitted ? 'submitted' : 'in progress'}
+                {d.auto_submitted
+                  ? 'handed in at session end'
+                  : d.submitted
+                    ? 'submitted'
+                    : 'in progress'}
               </span>
             </div>
             <p className="muted small">
@@ -294,41 +343,18 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
           </div>
 
           <div className="drawer__actions">
-            {seatDraft === null ? (
-              <button
-                className="btn btn--sm btn--ghost"
-                onClick={() => setSeatDraft(String(d.seat_number))}
-                title="Give them another seat number, and so that seat's values"
-              >
-                <Icon name="edit" size={14} /> Change seat
-              </button>
-            ) : (
-              <form className="seat-change" onSubmit={changeSeat}>
-                <label className="seat-change__label" htmlFor="seat-change-input">
-                  Seat
-                </label>
-                <input
-                  id="seat-change-input"
-                  className="field__input seat-change__input"
-                  type="number"
-                  min={1}
-                  max={999}
-                  step={1}
-                  required
-                  autoFocus
-                  value={seatDraft}
-                  onChange={(e) => setSeatDraft(e.target.value)}
-                />
-                <button className="btn btn--sm btn--primary">Save</button>
-                <button
-                  type="button"
-                  className="btn btn--sm btn--ghost"
-                  onClick={() => setSeatDraft(null)}
-                >
-                  Cancel
-                </button>
-              </form>
-            )}
+            <SeatChange
+              name={d.name}
+              seatNumber={d.seat_number}
+              what="Their exam and marking"
+              onSave={async (seat) => {
+                setActionError('');
+                await call((t) => api.changeSeat(t, sessionId, participantId, seat));
+                await reload();
+                onChanged();
+              }}
+              onError={setActionError}
+            />
             {active && d.submitted && (
               <button className="btn btn--sm btn--ghost" onClick={() => seatAction('reopen')}>
                 <Icon name="undo" size={14} /> Reopen exam
@@ -467,10 +493,10 @@ function QuestionDrawer({ sessionId, questionKey, onClose, onChanged }) {
   const { d, error, reload } = usePolled(loader);
   const [busy, setBusy] = useState(null);
 
-  async function mark(pid, correct) {
+  async function mark(pid, body) {
     setBusy(pid);
     try {
-      await call((t) => api.markResponse(t, sessionId, pid, questionKey, correct));
+      await call((t) => api.markResponse(t, sessionId, pid, questionKey, body));
       await reload();
       onChanged();
     } finally {
@@ -765,8 +791,16 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                     </td>
                     <td>
                       {p.submitted ? (
-                        <span className="pill pill--active">
-                          <Icon name="check" size={13} /> Submitted
+                        <span
+                          className="pill pill--active"
+                          title={
+                            p.auto_submitted
+                              ? 'Handed in automatically when the session ended'
+                              : undefined
+                          }
+                        >
+                          <Icon name="check" size={13} />{' '}
+                          {p.auto_submitted ? 'Time up' : 'Submitted'}
                         </span>
                       ) : p.seconds_since_seen < 90 ? (
                         <span className="status-live">
