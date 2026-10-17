@@ -157,8 +157,3 @@ test('attempts CSV is one row per submission with correct flag', () => {
   assert.match(lines[2], /abcd1234wxyz,yes$/);
   assert.equal(attemptsToCsv({}).trim().split('\n').length, 1, 'header only when empty');
 });
-
-test('legacy call with a plain rows array still works', () => {
-  const csv = participantsToCsv(doc.participants);
-  assert.match(csv.split('\n')[0], /^number,name/);
-});

@@ -45,17 +45,12 @@ const colSlug = (t) =>
  * `cp_<s.i>_wrong` (incorrect entries joined with " | "), plus the hints
  * opened and solutions revealed as readable lists.
  *
- * @param {object|Array} docOrRows the export document (preferred) or legacy rows
+ * @param {object} doc the session export document
  */
-export function participantsToCsv(docOrRows) {
-  const doc = Array.isArray(docOrRows) ? { participants: docOrRows } : docOrRows || {};
-  const rows = doc.participants || [];
-  const sections =
-    doc.sections ||
-    (rows[0]?.section_times || []).map((t) => ({ number: t.number, title: t.title }));
-  const checkpoints =
-    doc.checkpoints ||
-    (rows[0]?.checkpoints || []).map((c) => ({ key: c.key, step_title: c.step_title }));
+export function participantsToCsv(doc) {
+  const rows = doc?.participants || [];
+  const sections = doc?.sections || [];
+  const checkpoints = doc?.checkpoints || [];
   const captureCols = Object.keys(rows[0]?.captured || {});
 
   const fixed = [

@@ -121,9 +121,9 @@ only to later steps.
 ## 3. Authoring in Markdown
 
 The Markdown format is the recommended way to write templates: it is
-readable, diff-able, and round-trips losslessly through the editor's
-**Export → Markdown**. Import it with **Templates → New → Import** (or the
-Import button inside any editor to replace the current draft).
+readable, diff-able, and round-trips losslessly through the Studio's
+**Export → Markdown**. Import it with **Templates → Import** (or the
+Studio's **Import** to replace the template you are editing).
 
 ### 3.1 Anatomy
 
@@ -189,7 +189,7 @@ Write **{{ SERIAL }}** on the label and attach it.
 | Capture | `> capture: NAME` | On either kind of checkpoint. Must follow the `> checkpoint:` line. |
 | Input placeholder | `> placeholder: text` | Grey example text in the answer box. Must follow the `> checkpoint:` line (ignored otherwise). |
 | Link | `[text](https://…)` | Opens in a new tab. Placeholders allowed in the URL. See §12. |
-| Image | `![alt](file-name.png "title")` | File name of a library image (upload in Settings → Images). See §12. |
+| Image | `![alt](file-name.png "title")` | File name of a library image (upload in the Studio's **Image Library**). See §12. |
 | Literal `::` | `\::` | In hint labels/text and prompts. |
 | Literal `\|` | `\|` | In answers. |
 
@@ -207,7 +207,7 @@ Write **{{ SERIAL }}** on the label and attach it.
 ### 3.4 Round-trip guarantee
 
 Export → Markdown → Import produces an identical template (this is tested).
-So you can author in the editor, export, keep the `.md` in version control,
+So you can author in the Studio, export, keep the `.md` in version control,
 and re-import into another instance.
 
 ---
@@ -215,8 +215,8 @@ and re-import into another instance.
 ## 4. Variables and formulas
 
 Variables are **formulas evaluated per participant** when content is
-rendered. Declare them in the front matter (or Settings tab). Each has a
-**name** and an **expression**.
+rendered. Declare them in the front matter (or the Studio's **Variables &
+Formulas** view). Each has a **name** and an **expression**.
 
 ### 4.1 Names
 
@@ -323,7 +323,7 @@ A placeholder may be:
 Rules:
 
 - **Every placeholder must resolve.** Saving is refused for an unknown name,
-  with the exact location. The editor underlines the same problems live.
+  with the exact location. The Studio's Validation Audit lists the same problems.
 - A **capture** is only known from the step **after** its checkpoint. Using it
   earlier (including in the body of the capturing step itself) is an error
   ("used before the checkpoint that captures it").
@@ -487,7 +487,7 @@ Rules:
   would accept only one string is rejected ("use an exact answer instead").
 - Masks are ≤ 120 characters. There is no regular-expression mode on
   purpose — masks are predictable and cannot be made to hang the server.
-- The editor shows a generated example beside the mask as you type
+- The Studio shows a generated example beside the mask as you type
   (`AB12.CD34.EFAB` for `XXXX.XXXX.XXXX`); copy it into the placeholder.
 - Separators you want to be **required** must be escaped (`99\.99` requires
   the dot; `99.99` accepts `1234` too). Letters/digits used as literals are
@@ -722,8 +722,8 @@ Reference: <https://docs.example/switch-cli>
 
 ### Images
 
-Images come from the instance's **image library** (Settings → Images in the
-editor, or drag files onto that panel). Reference a library image by its
+Images come from the instance's **image library** (**Image Library** in the
+Studio's sidebar: drop files onto it or browse). Reference a library image by its
 **file name** with standard Markdown image syntax:
 
 ```markdown
@@ -741,7 +741,7 @@ Connect the cable as shown:
   `images/` is ignored (so a `.md` written alongside an `images/` folder
   imports unchanged), matching is **case-insensitive**, and spaces or other
   odd characters in a name are turned into `-` on upload (`Rack Diagram
-  (v2).PNG` → `Rack-Diagram-v2.PNG`). The editor's **Markdown** button on
+  (v2).PNG` → `Rack-Diagram-v2.PNG`). **Copy Markdown** on
   each library image copies a ready-made snippet.
 - The alt text in `[…]` is read by screen readers and shown if the image
   can't load — make it describe the picture ("Rear of switch with console
@@ -749,8 +749,8 @@ Connect the cable as shown:
 - An optional `"title"` after the name becomes the hover tooltip.
 - **Saving is refused while a referenced image is missing** from the library
   (`Image "x.png" referenced in Section 2 · step 1 body is not in the image
-  library`). After a `.md` import the editor lists the missing names and
-  offers **Upload missing**; drop the files in and save.
+  library`). After a `.md` import the Studio's Image Library lists the missing
+  names; drop the files in and save.
 - The library is **shared across all templates** on an instance. Prefix names
   by course (`net-lab-rack.png`, `cam-unbox-label.jpg`) to avoid collisions.
   Uploading a file under an existing name asks before **replacing** it — a
@@ -829,7 +829,7 @@ problems at once. Locations read `Section N · step M <field>`.
 | `… checkpoint: "X" is not a valid variable name` | Capture names follow variable rules. |
 | `… checkpoint: variable name "X" is reserved` | Built-in or helper name. |
 | `… checkpoint: "X" is already a declared variable` / `already captured by Section …` | Pick another name. |
-| `Image "x.png" referenced in … is not in the image library — upload it first` | Upload the file (same name, folders ignored) in Settings → Images, or fix the reference. |
+| `Image "x.png" referenced in … is not in the image library — upload it first` | Upload the file (same name, folders ignored) in the Studio's Image Library, or fix the reference. |
 | `Too many variables / sections / steps / hints / accepted answers` | Over a structural limit (§13). |
 | `Template is too large` | Over 900 kB — usually an embedded image. |
 
@@ -869,7 +869,7 @@ Before you save or hand a template to someone else:
 - [ ] Every variable works for seat 1 and makes sense for seat 100 (`100 +
       seat` → `.200`; does your subnet allow it? Pods of 4 → 25 pods?).
 - [ ] Every `{{ PLACEHOLDER }}` is declared, built-in, or a capture used
-      *after* its checkpoint (the editor banner is empty).
+      *after* its checkpoint (the Studio's Validation Audit is clean).
 - [ ] Each section that should gate the next ends with a checkpoint; sections
       meant to be read freely have none.
 - [ ] Exact answers are discoverable, not printed earlier; alternatives cover
@@ -878,8 +878,8 @@ Before you save or hand a template to someone else:
       body states the real notation.
 - [ ] Steps with a solution have at least one hint (or you accept instant
       reveal).
-- [ ] Every `![…](name)` image is in the library (the editor's Images panel
-      shows no "missing" banner); dynamic names have a file for every value.
+- [ ] Every `![…](name)` image is in the library (the Studio's Image Library
+      shows no "missing" notice); dynamic names have a file for every value.
 - [ ] Links point at addresses participants can actually reach from the
       classroom network.
 - [ ] `info` steps carry no directives (they would be dropped anyway).
@@ -1213,7 +1213,7 @@ What to leave as-is and what to hand in. Your tag was {{ ASSET }}.
 ## 18. JSON format
 
 JSON is the canonical, lossless form (**Export → JSON**). It is the same
-shape the editor and the API use, so it is also what you would generate from
+shape the Studio and the API use, so it is also what you would generate from
 another tool. Keys not listed are ignored on import; missing ones default.
 
 ```json

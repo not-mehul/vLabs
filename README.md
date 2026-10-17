@@ -83,12 +83,12 @@ Participant registration (the default landing page) is in
 | **Template authoring** — vLabs Template Studio is the template editor (labs and exams), with the same Studio as one offline file; `.zip` with images, `.md`, `.json` import/export, live per-seat preview, variable map, immutable change history with revert                                                             | `client/studio/`, `client/src/pages/TemplateEditor.jsx`, `shared/`                                   |
 | **Examination mode** — exam templates (sections mixing informational / checklist steps and single / multiple / true-false / short / long questions; short answers by exact match or pattern), autosave + submit lock, answers never sent to participants, automatic + manual grading, grade-by-question, CSV/JSON exports | `shared/exam-schema.js`, `routes/exam.js`, `lib/examGrading.js`, `pages/Exam.jsx`, `ExamMonitor.jsx` |
 | **Archive instead of delete** — templates archive by default; permanent deletion keeps session analytics and history                                                                                                                                                                                                      | `server/src/routes/templates.js`                                                                     |
-| **IP protection** — content is JSON to the DOM only, `no-store`, no file endpoints, print-hidden                                                                                                                                                                                                                          | `server/src/routes/participant.js`, `client/src/styles.additions.css`                                |
+| **IP protection** — content is JSON to the DOM only, `no-store`, no file endpoints, print-hidden                                                                                                                                                                                                                          | `server/src/routes/participant.js`, `client/src/styles.css` (print rules)                            |
 | **Session gating & kill-switch** — every participant request re-validates the live session                                                                                                                                                                                                                                | `server/src/middleware/auth.js`                                                                      |
 | **Rate limiting & anti-scraping** — identity-keyed limiters, failed-join brute-force cap, progressive delivery                                                                                                                                                                                                            | `server/src/middleware/rateLimit.js`                                                                 |
 | **Live analytics** — "where everyone is" section flow, per-seat section/progress/time/status, click-through detail with answers, wrong attempts, hints and time per section; CSV/JSON exports carry all of it                                                                                                             | `server/src/routes/sessions.js`, `client/src/pages/SessionMonitor.jsx`                               |
-| **Image library** — upload PNG/JPEG/GIF/WebP once, reference by file name from any template (`![alt](rack.png)`), served offline-safe under random ids                                                                                                                                                                    | `server/src/lib/images.js`, `routes/images.js`, editor Settings → Images                             |
-| **Instructor accounts** — add instructors in the portal (**Admin**) or with the Pi's `vlabs-cli.sh`; only the admin account (the bootstrap `instructor`) resets or removes them; password change with revocation of older tokens                                                                                                             | `server/src/routes/auth.js`, `client/src/pages/Admin.jsx`, `components/admin/`                      |
+| **Image library** — upload PNG/JPEG/GIF/WebP once, reference by file name from any template (`![alt](rack.png)`), served offline-safe under random ids                                                                                                                                                                    | `server/src/lib/images.js`, `routes/images.js`, Studio → Image Library                               |
+| **Instructor accounts** — add instructors in the portal (**Admin**) or with the Pi's `vlabs-cli.sh`; only the admin account (the bootstrap `instructor`) resets or removes them; password change with revocation of older tokens                                                                                          | `server/src/routes/auth.js`, `client/src/pages/Admin.jsx`, `components/admin/`                       |
 
 ## Architecture
 
@@ -192,9 +192,9 @@ Try it end-to-end:
    section; **End session** to revoke access instantly.
 5. Edit the template while the session is running: nothing changes for
    participants until you click **Push latest version** on the monitor.
-6. In **Templates**, edit sections in-page, import/export a `.md`/`.json`,
-   archive a template, and toggle **light / dark mode** from the ☾/☀ control on
-   any screen.
+6. In **Templates**, open a template in the Studio, import a `.zip`, `.md`
+   or `.json`, duplicate or archive a template, and toggle **light / dark
+   mode** from the ☾/☀ control on any screen.
 
 ## Hosting a class (Raspberry Pi, bare metal + systemd)
 
@@ -252,7 +252,7 @@ Placeholders are written `{{ NAME }}` in section titles, step titles, bodies,
 hints, solutions and checkpoint prompts/answers. `{{ SEAT_ID }}` is always
 available. **Saving a template that references an undeclared placeholder is
 refused** with the exact location (`Unknown placeholder {{ HOST_IPP }} in
-Section 2 · step 2 checkpoint answer`), and the editor flags it live while you
+Section 2 · step 2 checkpoint answer`), and the Studio flags it live while you
 type — a typo in a checkpoint answer used to silently produce an unpassable
 checkpoint.
 
@@ -265,7 +265,7 @@ checkpoint.
 | `info`     | Read (neutral, dashed) | body only                   | context, background, safety notes — nothing to do |
 
 Info steps never block progress and are stripped of any hint/solution/
-checkpoint on save, so switching a step's type in the editor is always safe.
+checkpoint on save, so switching a step's type in the Studio is always safe.
 
 ### Progressive disclosure & checkpoints
 
@@ -347,7 +347,7 @@ out.
 
 - Every save bumps `version` and appends an immutable **audit** entry with a
   full snapshot (append-only is enforced by database triggers). The editor's
-  _Change history_ summarises each version and can **revert** (loads the old
+  **History** summarises each version and can **revert** (loads the old
   snapshot for review; saving creates a new version).
 - **Archive** (the default "delete") hides a template from the list and the
   session launcher. Archived templates remain readable/editable and can be
@@ -418,7 +418,7 @@ requests), plus an original set of geometric line icons
 | **Anti-scraping / rate limiting** | Layered `express-rate-limit`. Authenticated limits are keyed on the **verified identity inside the token** (participant/instructor id), not the raw header — so a classroom behind one NAT is not throttled as one client, garbage tokens cannot mint fresh buckets, and re-joining cannot reset a seat's checkpoint-guessing or content limits. Anonymous joins are capped per IP on _failed_ attempts (code enumeration) and, more generously, on total attempts (token-minting floods). |
 | **Formula sandbox**               | Instructor formulas run in a purpose-built evaluator with a fixed function whitelist, no property access, and length/depth caps.                                                                                                                                                                                                                                                                                                                                                           |
 | **Authored content**              | Templates are validated and size-capped server-side; Markdown is rendered through `marked` and sanitised with DOMPurify (inline `style` and form elements stripped; images only from the app's own library or `data:` URIs; links open in a new tab with `rel=noopener`).                                                                                                                                                                                                                  |
-| **Transport & headers**           | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP with **no `unsafe-inline`**, `frame-ancestors 'none'`, `no-referrer`, `noindex`. `TRUST_PROXY` must match the topology.                                                                                                                                                                                                                                                                                    |
+| **Transport & headers**           | Designed to run behind mandatory HTTPS/TLS (reverse proxy). Strict `helmet` CSP with **no `unsafe-inline`**, `frame-ancestors 'self'` (only the portal frames the Studio), `no-referrer`, `noindex`. `TRUST_PROXY` must match the topology.                                                                                                                                                                                                                                                |
 | **Credentials**                   | Instructor passwords hashed with bcrypt (constant-time compare with a dummy hash for unknown users); separate HS256 secrets per token audience; instructor tokens carry a `token_version` so **changing the password revokes every older token**.                                                                                                                                                                                                                                          |
 | **Fail-fast configuration**       | In production the server refuses to start with weak/placeholder JWT secrets, identical secrets, or when it would create the bootstrap instructor with the default password.                                                                                                                                                                                                                                                                                                                |
 | **Operational**                   | Structured request/audit logging (no bodies or tokens), DB-backed health check, graceful shutdown that closes SQLite cleanly.                                                                                                                                                                                                                                                                                                                                                              |
@@ -431,51 +431,74 @@ devices and keep room codes private.
 ## Data model
 
 SQLite tables (`server/src/db/index.js`), migrated with `PRAGMA user_version`
-(current version **2**):
+(current version **12**; each migration is listed in [CHANGES.md](CHANGES.md)
+with the release that added it):
 
 - **`instructors`** — `id`, `username`, `password_hash`, `token_version`
-  (bumped on password change; embedded in JWTs), `password_changed_at`.
-- **`templates`** — `id`, `title`, `description`, `content` (JSON sections →
-  steps), `variables` (JSON formulas), `version`, `archived_at`, `created_by`,
-  timestamps.
+  (bumped on password change or reset; embedded in JWTs),
+  `password_changed_at` (NULL = temporary password), `created_at`. The
+  bootstrap account (or the oldest, if it is gone) is the admin.
+- **`templates`** — `id`, `kind` (`lab | exam`, fixed at creation), `title`,
+  `description`, `content` (JSON sections), `variables` (JSON formulas),
+  `version`, `archived_at`, `created_by`, timestamps.
 - **`template_audit`** — append-only history: `template_id`, `template_title`,
   `action` (`created | updated | archived | restored | deleted`), `version`,
   `snapshot` (full JSON), `instructor_id`, `instructor_username`, `at`.
   `UPDATE`/`DELETE` are rejected by triggers.
-- **`sessions`** — `id`, `room_code`, `title`, `template_id` (nullable,
-  `ON DELETE SET NULL`), `instructor_id`, **`template_version`,
+- **`sessions`** — `id`, `room_code`, `title`, `kind`, `template_id`
+  (nullable, `ON DELETE SET NULL`), `instructor_id`, **`template_version`,
   `template_title`, `content`, `variables`** (the session's own snapshot),
-  `is_active`, `expires_at`, `created_at`, `ended_at`. A partial unique index
+  `is_active`, `expires_at`, `created_at`, `ended_at`, `breaks` (JSON class
+  breaks), `seat_source_session_id` (**Seats from**). A partial unique index
   keeps room codes unique among _active_ sessions only.
 - **`participants`** — `id`, `session_id`, `seat_number` (1–100),
   `first_name`, `last_name`, `name_key`, `current_section`, `max_section`,
   `completed_checkpoints` (JSON `"section.step"` keys), `captured_values`
-  (JSON `{ NAME: "canonical value" }` from pattern/capturing checkpoints),
-  `checkpoint_log` (JSON `[{ k, a, ok, at }]` — every attempt as typed,
+  (JSON `{ NAME: "canonical value" }` from capturing checkpoints),
+  `checkpoint_log` (JSON `[{ k, a, ok, at, by? }]`, every attempt as typed,
   capped at 200), `section_times` (JSON seconds per section for closed
   visits), `hints_taken`, `revealed_solutions`, `completed_at` (set by the
-  server when every section is cleared — the clock stops), `finished_at`
-  (pressed Finish), `section_entered_at`, `joined_at`, `last_seen_at`. Unique
-  on `(session_id, seat_number)` and `(session_id, name_key)`.
+  server when every section is cleared; the clock stops), `finished_at`
+  (pressed Finish), `section_entered_at`, `joined_at`, `last_seen_at`. Exams
+  add `answers`, `grades` (marks, part marks and comments), `submitted_at`,
+  `auto_submitted`, `resume_hash` (device binding) and `token_version`
+  (bumped when the seat is released). Unique on `(session_id, seat_number)`
+  and `(session_id, name_key)`.
+- **`exam_answer_events`** — append-only answer history, one row per change
+  (`participant_id`, `question_key`, `response`, `at`).
 - **`images`** — `id` (random, in URLs), `name` (unique, case-insensitive;
   what templates reference), `mime`, `size`, `width`, `height`, `data`
   (blob), `created_by`, `created_at`.
 
-Step storage shape (per section `steps[]`):
+Lab content shape (`shared/template-schema.js`; exams are in
+`shared/exam-schema.js`). Every section, step and exam item carries a stable
+`id`, given on save, that lets **Push latest version** move work with it:
 
 ```json
 {
-  "type": "desk | computer",
-  "title": "…",
-  "body": "markdown with {{ VARS }}",
-  "hints": [{ "label": "…", "text": "markdown" }],
-  "solution": "markdown (optional)",
-  "checkpoint": {
-    "prompt": "…",
-    "placeholder": "…",
-    "answer": "{{ HOST_IP }}",
-    "answers": ["{{ HOST_IP }}/24"]
-  }
+  "id": "k3x9a2bq",
+  "title": "Section title with {{ VARS }}",
+  "minutes": 20,
+  "optional": false,
+  "steps": [
+    {
+      "id": "p0w7c1zd",
+      "type": "desk | computer | info",
+      "title": "…",
+      "body": "markdown with {{ VARS }}",
+      "hints": [{ "label": "…", "text": "markdown" }],
+      "solution": "markdown (optional)",
+      "checkpoint": {
+        "prompt": "…",
+        "placeholder": "…",
+        "mode": "exact | pattern",
+        "answer": "{{ HOST_IP }}",
+        "answers": ["{{ HOST_IP }}/24"],
+        "pattern": "",
+        "capture": ""
+      }
+    }
+  ]
 }
 ```
 
@@ -498,55 +521,55 @@ Templates are shared by every instructor. Any instructor can **read** any
 session (its monitor, participants, sections, questions and export); only the
 instructor who launched it can **change** it (`403 NOT_SESSION_OWNER`).
 
-| Method   | Path                                         | Description                                                                                                                                                                                                                                                                                               |
-| -------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/auth/me`                                   | Current instructor                                                                                                                                                                                                                                                                                        |
-| `PUT`    | `/auth/password`                             | `{ current_password, new_password }` → fresh token; revokes older tokens                                                                                                                                                                                                                                  |
-| `GET`    | `/auth/instructors`                          | Every instructor account with session counts                                                                                                                                                                                                                                                              |
-| `POST`   | `/auth/instructors`                          | `{ username, password? }` → new account (+ `temporary_password` when generated). Any signed-in instructor |
-| `POST`   | `/auth/instructors/:id/reset-password`       | **Admin only.** New temporary password; signs that instructor out everywhere (`403 ADMIN_ONLY` for anyone else)                                                                                                                                                                                           |
-| `DELETE` | `/auth/instructors/:id`                      | **Admin only.** Remove an account (not yourself); its sessions move to you                                                                                                                                                                                                                                |
-| `GET`    | `/templates`                                 | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at`                                                                                                                                                                                                         |
-| `GET`    | `/templates/functions`                       | Formula helper names                                                                                                                                                                                                                                                                                      |
-| `POST`   | `/templates`                                 | Create (validated; `400` with `details[]`). `kind: 'exam'` creates an exam (fixed at creation)                                                                                                                                                                                                            |
-| `GET`    | `/templates/:id`                             | Full template                                                                                                                                                                                                                                                                                             |
-| `PUT`    | `/templates/:id`                             | Update → new version; running sessions unaffected. Optional `expected_version` → `409 VERSION_CONFLICT` if someone saved in between                                                                                                                                                                       |
-| `DELETE` | `/templates/:id`                             | **Archive** (`204`)                                                                                                                                                                                                                                                                                       |
-| `DELETE` | `/templates/:id?permanent=1`                 | Permanently delete; `409` while sessions are active                                                                                                                                                                                                                                                       |
-| `POST`   | `/templates/:id/restore`                     | Un-archive                                                                                                                                                                                                                                                                                                |
-| `POST`   | `/templates/:id/duplicate`                   | `{ title? }` → a new template (v1) with the same kind, content and variables, titled "… (copy)" by default |
-| `GET`    | `/templates/:id/audit`                       | Change history (newest first)                                                                                                                                                                                                                                                                             |
-| `POST`   | `/templates/:id/preview`                     | `{ seat_id, first_name?, last_name?, draft? }` → rendered manual for one seat (solutions inline; captures stood in by mask examples). Exams: `{ context, sections }` with tokens resolved for that seat; saved answers stand in as `[answer to …]`                                                        |
-| `GET`    | `/sessions`                                  | This instructor's sessions (`?scope=all`: everyone's, with `owner` and `can_manage`) with `participant_count`, `template_version`, `update_available`                                                                                                                                                                                                               |
-| `POST`   | `/sessions`                                  | `{ template_id, title?, duration_minutes?, seat_source_session_id? }` → session (snapshot taken; `409` if template archived). Default length: 480 min for a lab, 60 for an exam                                                                                                                                                    |
-| `GET`    | `/sessions/:id`                              | Detail + live analytics (`section_distribution` with `minutes` / `avg_seconds` / `completed_count` / `final`, `on_break`, per-participant `time_status` against the section's allocation, `participants[]` incl. `captured`, `capture_names`, `template_exists`, `template_archived`)                     |
-| `POST`   | `/sessions/:id/terminate`                    | End now; participant tokens rejected immediately. Exams: every exam not yet submitted is handed in as it stands (`auto_submitted` count in the response) |
-| `POST`   | `/sessions/:id/break`                        | `{ on: true \| false }` — start / end a class break: section timers pause for everyone (`409` unless active)                                                                                                                                                                                              |
-| `POST`   | `/sessions/:id/extend`                       | `{ minutes }` added to the later of now / current expiry                                                                                                                                                                                                                                                  |
-| `POST`   | `/sessions/:id/push-template`                | Copy the template's latest version into the live session                                                                                                                                                                                                                                                  |
-| `DELETE` | `/sessions/:id`                              | Delete session and its participants                                                                                                                                                                                                                                                                       |
-| `GET`    | `/sessions/:id/export`                       | Full JSON export: `sections[]` + `checkpoints[]` index, per-participant `section_times[]`, `checkpoints[]` (accepted answer + every wrong attempt with timestamps), `hints_opened[]`, `solutions_revealed_list[]`, `captured`, plus a flat chronological `attempts[]` log (works after template deletion) |
-| `GET`    | `/sessions/:id/participants/:pid`            | One participant in depth: checkpoints with accepted answer + wrong attempts, hints opened, solutions revealed, time per section                                                                                                                                                                           |
-| `GET`    | `/sessions/:id/sections/:index`              | Monitor section details: time allocated, average / median / fastest / slowest, who is on it, completed it or has not reached it; labs add per-step hints, solutions and checkpoint results (common wrong answers), exams the section's question results                                                   |
-| `GET`    | `/server/addresses`                          | Where participants can reach this vLabs right now (`urls`); on the Pi it follows network changes, elsewhere it is empty                                                                                                                                                                                   |
-| `PUT`    | `/sessions/:id/participants/:pid/marks/:key` | Exams: any of `{ correct: true \| false \| null, points: N \| null, comment: string \| null }` — mark a response by hand, give part of its points (0 … its points, halves allowed), or leave a marker's comment (null clears) |
-| `GET`    | `/sessions/:id/questions/:key`               | Exams: every participant's response to one question                                                                                                                                                                                                                                                       |
-| `POST`   | `/sessions/:id/participants/:pid/checkpoints/:key/unlock` | Labs: clear a checkpoint the participant has reached but is stuck on (instructor only; logged as cleared by you). `{ value }` is required when a pattern checkpoint saves the answer as a variable (`400 VALUE_REQUIRED`) |
-| `DELETE` | `/sessions/:id/participants/:pid`            | Remove a participant (their device is signed out with `SEAT_REMOVED`)                                                                                                                                                                                                                                     |
-| `POST`   | `/sessions/:id/participants/:pid/release`    | Exams: let the seat be resumed on another device (signs out the current one with `SEAT_RELEASED`)                                                                                                                                                                                                         |
-| `POST`   | `/sessions/:id/participants/:pid/reopen`     | Exams: undo a submission while the session is live                                                                                                                                                                                                                                                        |
-| `PUT`    | `/sessions/:id/participants/:pid/seat`       | `{ seat_number }` — give the participant another seat (and so its values); `409 SEAT_IN_USE` when taken |
-| `GET`    | `/images`                                    | Image library listing                                                                                                                                                                                                                                                                                     |
-| `POST`   | `/images?name=…[&replace=1]`                 | Upload one image as the raw body (type sniffed; PNG/JPEG/GIF/WebP ≤ 3 MB); `409 IMAGE_EXISTS` unless `replace`                                                                                                                                                                                            |
-| `GET`    | `/images/:id/references`                     | Templates / active sessions using the image                                                                                                                                                                                                                                                               |
-| `DELETE` | `/images/:id`                                | Delete (409 while referenced)                                                                                                                                                                                                                                                                             |
+| Method   | Path                                                      | Description                                                                                                                                                                                                                                                                                               |
+| -------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/auth/me`                                                | Current instructor                                                                                                                                                                                                                                                                                        |
+| `PUT`    | `/auth/password`                                          | `{ current_password, new_password }` → fresh token; revokes older tokens                                                                                                                                                                                                                                  |
+| `GET`    | `/auth/instructors`                                       | Every instructor account with session counts                                                                                                                                                                                                                                                              |
+| `POST`   | `/auth/instructors`                                       | `{ username, password? }` → new account (+ `temporary_password` when generated). Any signed-in instructor                                                                                                                                                                                                 |
+| `POST`   | `/auth/instructors/:id/reset-password`                    | **Admin only.** New temporary password; signs that instructor out everywhere (`403 ADMIN_ONLY` for anyone else)                                                                                                                                                                                           |
+| `DELETE` | `/auth/instructors/:id`                                   | **Admin only.** Remove an account (not yourself); its sessions move to you                                                                                                                                                                                                                                |
+| `GET`    | `/templates`                                              | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at`                                                                                                                                                                                                         |
+| `GET`    | `/templates/functions`                                    | Formula helper names                                                                                                                                                                                                                                                                                      |
+| `POST`   | `/templates`                                              | Create (validated; `400` with `details[]`). `kind: 'exam'` creates an exam (fixed at creation)                                                                                                                                                                                                            |
+| `GET`    | `/templates/:id`                                          | Full template                                                                                                                                                                                                                                                                                             |
+| `PUT`    | `/templates/:id`                                          | Update → new version; running sessions unaffected. Optional `expected_version` → `409 VERSION_CONFLICT` if someone saved in between                                                                                                                                                                       |
+| `DELETE` | `/templates/:id`                                          | **Archive** (`204`)                                                                                                                                                                                                                                                                                       |
+| `DELETE` | `/templates/:id?permanent=1`                              | Permanently delete; `409` while sessions are active                                                                                                                                                                                                                                                       |
+| `POST`   | `/templates/:id/restore`                                  | Un-archive                                                                                                                                                                                                                                                                                                |
+| `POST`   | `/templates/:id/duplicate`                                | `{ title? }` → a new template (v1) with the same kind, content and variables, titled "… (copy)" by default                                                                                                                                                                                                |
+| `GET`    | `/templates/:id/audit`                                    | Change history (newest first)                                                                                                                                                                                                                                                                             |
+| `POST`   | `/templates/:id/preview`                                  | `{ seat_id, first_name?, last_name?, draft? }` → rendered manual for one seat (solutions inline; captures stood in by mask examples). Exams: `{ context, sections }` with tokens resolved for that seat; saved answers stand in as `[answer to …]`                                                        |
+| `GET`    | `/sessions`                                               | This instructor's sessions (`?scope=all`: everyone's, with `owner` and `can_manage`) with `participant_count`, `template_version`, `update_available`                                                                                                                                                     |
+| `POST`   | `/sessions`                                               | `{ template_id, title?, duration_minutes?, seat_source_session_id? }` → session (snapshot taken; `409` if template archived). Default length: 480 min for a lab, 60 for an exam                                                                                                                           |
+| `GET`    | `/sessions/:id`                                           | Detail + live analytics (`section_distribution` with `minutes` / `avg_seconds` / `completed_count` / `final`, `on_break`, per-participant `time_status` against the section's allocation, `participants[]` incl. `captured`, `capture_names`, `template_exists`, `template_archived`)                     |
+| `POST`   | `/sessions/:id/terminate`                                 | End now; participant tokens rejected immediately. Exams: every exam not yet submitted is handed in as it stands (`auto_submitted` count in the response)                                                                                                                                                  |
+| `POST`   | `/sessions/:id/break`                                     | `{ on: true \| false }` — start / end a class break: section timers pause for everyone (`409` unless active)                                                                                                                                                                                              |
+| `POST`   | `/sessions/:id/extend`                                    | `{ minutes }` added to the later of now / current expiry                                                                                                                                                                                                                                                  |
+| `POST`   | `/sessions/:id/push-template`                             | Copy the template's latest version into the live session                                                                                                                                                                                                                                                  |
+| `DELETE` | `/sessions/:id`                                           | Delete session and its participants                                                                                                                                                                                                                                                                       |
+| `GET`    | `/sessions/:id/export`                                    | Full JSON export: `sections[]` + `checkpoints[]` index, per-participant `section_times[]`, `checkpoints[]` (accepted answer + every wrong attempt with timestamps), `hints_opened[]`, `solutions_revealed_list[]`, `captured`, plus a flat chronological `attempts[]` log (works after template deletion) |
+| `GET`    | `/sessions/:id/participants/:pid`                         | One participant in depth: checkpoints with accepted answer + wrong attempts, hints opened, solutions revealed, time per section                                                                                                                                                                           |
+| `GET`    | `/sessions/:id/sections/:index`                           | Monitor section details: time allocated, average / median / fastest / slowest, who is on it, completed it or has not reached it; labs add per-step hints, solutions and checkpoint results (common wrong answers), exams the section's question results                                                   |
+| `GET`    | `/server/addresses`                                       | Where participants can reach this vLabs right now (`urls`); on the Pi it follows network changes, elsewhere it is empty                                                                                                                                                                                   |
+| `PUT`    | `/sessions/:id/participants/:pid/marks/:key`              | Exams: any of `{ correct: true \| false \| null, points: N \| null, comment: string \| null }` — mark a response by hand, give part of its points (0 … its points, halves allowed), or leave a marker's comment (null clears)                                                                             |
+| `GET`    | `/sessions/:id/questions/:key`                            | Exams: every participant's response to one question                                                                                                                                                                                                                                                       |
+| `POST`   | `/sessions/:id/participants/:pid/checkpoints/:key/unlock` | Labs: clear a checkpoint the participant has reached but is stuck on (instructor only; logged as cleared by you). `{ value }` is required when a pattern checkpoint saves the answer as a variable (`400 VALUE_REQUIRED`)                                                                                 |
+| `DELETE` | `/sessions/:id/participants/:pid`                         | Remove a participant (their device is signed out with `SEAT_REMOVED`)                                                                                                                                                                                                                                     |
+| `POST`   | `/sessions/:id/participants/:pid/release`                 | Exams: let the seat be resumed on another device (signs out the current one with `SEAT_RELEASED`)                                                                                                                                                                                                         |
+| `POST`   | `/sessions/:id/participants/:pid/reopen`                  | Exams: undo a submission while the session is live                                                                                                                                                                                                                                                        |
+| `PUT`    | `/sessions/:id/participants/:pid/seat`                    | `{ seat_number }` — give the participant another seat (and so its values); `409 SEAT_IN_USE` when taken                                                                                                                                                                                                   |
+| `GET`    | `/images`                                                 | Image library listing                                                                                                                                                                                                                                                                                     |
+| `POST`   | `/images?name=…[&replace=1]`                              | Upload one image as the raw body (type sniffed; PNG/JPEG/GIF/WebP ≤ 3 MB); `409 IMAGE_EXISTS` unless `replace`                                                                                                                                                                                            |
+| `GET`    | `/images/:id/references`                                  | Templates / active sessions using the image                                                                                                                                                                                                                                                               |
+| `DELETE` | `/images/:id`                                             | Delete (409 while referenced)                                                                                                                                                                                                                                                                             |
 
 ### Participant (Bearer participant token; every call re-validates the session)
 
 | Method | Path                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/participant/content`       | Unlocked sections rendered for the seat (checkpoints carry `mode`, never answers/masks); `template_version`                                                                                                                                                                                                                                                                                                                                                |
-| `GET`  | `/participant/status`        | Heartbeat: `expires_at`, `finished`, `template_version`, `on_break`, `checkpoints_cleared` (labs: a rise from an instructor unlock reloads the manual)                                                                                                                                                                                                                                                                                                                                                                                        |
+| `GET`  | `/participant/status`        | Heartbeat: `expires_at`, `finished`, `template_version`, `on_break`, `checkpoints_cleared` (labs: a rise from an instructor unlock reloads the manual)                                                                                                                                                                                                                                                                                                     |
 | `POST` | `/participant/checkpoint`    | `{ section_index, step_index, answer }` → `{ correct, section_cleared?, unlocked_section? }`; stores the canonical value when the checkpoint captures one                                                                                                                                                                                                                                                                                                  |
 | `POST` | `/participant/progress`      | `{ section_index }` — section being viewed                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `POST` | `/participant/hint`          | `{ section_index, step_index, hint_index }`                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -598,7 +621,7 @@ password.
 ```bash
 npm test                # from the repo root: server + client suites
 cd server && npm test   # unit + HTTP integration tests (node:test, no extra deps)
-cd client && npm test   # template format unit tests (node:test)
+cd client && npm test     # format + Studio unit tests (node:test)
 npm run lint            # ESLint across server, client and shared
 npm run format          # Prettier write (repo root); format:check runs in CI
 ```
@@ -618,10 +641,19 @@ Suites, all under Node's built-in test runner:
   archive/restore/permanent delete (sessions detach intact), frozen snapshot +
   push, the 101st-participant limit, password change revoking older tokens,
   the kill-switch, audit immutability and the schema version.
+- **`server/tests/exam.test.js`** — examination mode over HTTP: validation,
+  delivery without answers, autosave and the submit lock, automatic grading,
+  marks and part marks, device-bound seats, seats from a lab, exports.
+- **`server/tests/accounts.test.js`** — instructor accounts: the admin
+  account, resets, removal, durable password changes.
+- **`server/tests/contentRemap.test.js`**, **`labProgress.test.js`**,
+  **`legacyExam.test.js`** — push-time remapping by stable id, progress and
+  optional sections, and migration 12's rewrite of old exam sections.
 - **`server/tests/time.test.js`** — UTC parsing of SQLite and ISO timestamps.
-- **`client/tests/templateFormat.test.js`** — lossless Markdown/JSON
-  round-trips, code-fence handling, multi-line hints, escapes, alternatives,
-  and the bundled sample.
+- **`client/tests/templateFormat.test.js`**, **`examFormat.test.js`** —
+  lossless Markdown/JSON round-trips for labs and exams, code fences,
+  multi-line hints, escapes, alternatives and the bundled samples.
+- **`client/tests/format.test.js`** — CSV exports (formula neutralising).
 - **`client/tests/studio.test.js`** — the Template Studio's CSP-safe handler
   interpreter, every handler the Studio writes, and that it runs on the
   shared modules (no `eval`, no copy of the rules).
@@ -673,66 +705,66 @@ Per the spec's deployment section:
 
 ## Upgrading an existing deployment
 
-- The database migrates automatically on first boot (`user_version` 0/1 → 4).
-  Migration 2 **rebuilds the `sessions` table** to make `template_id` nullable
-  and to add the per-session content snapshot; existing sessions are
-  back-filled from the audit snapshot matching their `template_version` (or
-  the live template if none). Migration 3 adds `participants.captured_values`;
-  migration 4 adds the `images` table and `participants.checkpoint_log`,
-  `section_times`, `completed_at` (all additive). **Back up the database
-  first** (`update.sh` does).
+- On the Pi, `sudo /opt/vlabs/deploy/pi/update.sh` backs up the database,
+  pulls, builds, restarts and checks health, and rolls the code back if the
+  new version does not come up.
+- The database migrates automatically on start, from any earlier version, in
+  order (`PRAGMA user_version`). Each release's migration and what it does is
+  under **Upgrading** in [CHANGES.md](CHANGES.md). Migration 2 rebuilds the
+  `sessions` table; every other one adds columns or rewrites JSON in place.
+  **Back up the database first** (`update.sh` does).
 - Production **requires** `JWT_INSTRUCTOR_SECRET`, `JWT_PARTICIPANT_SECRET` and
   `SEED_INSTRUCTOR_PASSWORD`. Secrets that are short or look like placeholders
   (`change-me…`, `dev-…`) are rejected.
-- Coming from the earlier Docker deployment? Copy `vlabs.sqlite` out of the
-  `vlabs-data` volume to `/var/lib/vlabs/vlabs.sqlite` (owner `vlabs:vlabs`)
-  before the first `systemctl start vlabs`; the Docker files themselves were
-  removed in 1.2.0.
-- Instructor tokens issued before the upgrade remain valid until that
-  instructor changes their password.
-- `DELETE /api/templates/:id` now archives; pass `?permanent=1` to delete.
+- Instructor tokens issued before an upgrade remain valid until that
+  instructor changes their password (or an admin resets it).
 
 ## Project layout
 
 ```
 vLabs/
-├── package.json               # root scripts: setup, dev, build, start, test, lint, format
-├── scripts/dev.js             # `npm run dev`: API + Vite side by side (no deps)
-├── .env.example               # dev config; the Pi uses /etc/vlabs/vlabs.env
-├── deploy/pi/                 # Raspberry Pi: install.sh, update.sh, backup.sh,
-│                              #   vlabs-cli.sh, export-root-cert.sh, systemd units,
-│                              #   Caddyfile.template (HTTPS, internal CA)
-├── DEPLOYMENT.md              # Pi runbook + later hosted deployment
-├── .github/                   # CI workflow + Dependabot
-├── shared/                    # used by the server, the portal and the Studio
-│   ├── template-schema.js     # canonical template shape, limits, placeholder checks
-│   ├── templating.js          # formulas, placeholders, masks (per-seat rendering)
-│   ├── template-format.js     # lab Markdown/JSON
+├── package.json             # root scripts: setup, dev, build, start, test, lint, format
+├── scripts/                 # dev.js (`npm run dev`: API + Vite), lint-studio.js
+├── .env.example             # dev config; the Pi uses /etc/vlabs/vlabs.env
+├── deploy/pi/               # Raspberry Pi: install.sh, update.sh, uninstall.sh,
+│                            # backup.sh, vlabs-cli.sh, export-root-cert.sh,
+│                            # render-caddy.sh, watch-network.sh, systemd units,
+│                            # Caddyfile.template (HTTPS, internal CA)
+├── DEPLOYMENT.md            # Pi runbook + later hosted deployment
+├── CHANGES.md               # change log, with upgrade notes per release
+├── docs/                    # authoring guides, production readiness,
+│                            # screenshots, offline Template Studio (one file)
+├── .github/                 # CI workflow + Dependabot
+├── shared/                  # used by the server, the portal and the Studio
+│   ├── template-schema.js   # canonical lab shape, limits, masks, placeholder checks
+│   ├── templating.js        # formulas, placeholders, answers (per-seat rendering)
+│   ├── template-format.js   # lab Markdown/JSON
 │   ├── exam-schema.js, exam-format.js
+│   ├── lab-progress.js      # optional sections, what counts towards progress
 │   └── validate-template.js, validate-exam.js   # what a save must pass
-├── server/                    # Express + SQLite API
+├── server/                  # Express + SQLite API
+│   ├── scripts/             # instructors.js, backup.js (run via vlabs-cli.sh on the Pi)
 │   ├── src/
-│   │   ├── app.js             # express app (helmet, cors, logging, static SPA)
-│   │   ├── index.js           # entrypoint: prod guards, sweeps, graceful shutdown
+│   │   ├── app.js           # express app (helmet, cors, logging, static SPA)
+│   │   ├── index.js         # entrypoint: prod guards, sweeps, graceful shutdown
 │   │   ├── config.js
-│   │   ├── db/                # schema + versioned migrations, seeder (sample lab)
-│   │   ├── lib/               # tokens, logger, exam/lab progress,
-│   │   │                      #   session lifecycle, time
-│   │   ├── middleware/        # auth (session gating), rate limits, errors
-│   │   └── routes/            # auth, templates, sessions, participant
-│   └── tests/                 # templating unit tests + HTTP integration tests
-└── client/                    # React + Vite SPA
-    ├── tests/                 # template format + Studio unit tests (node:test)
-    ├── studio/                # vLabs Template Studio: sources + build (in-app and offline)
+│   │   ├── db/              # schema + versioned migrations, seeder (sample lab and exam)
+│   │   ├── lib/             # tokens, logger, images, grading, progress, seats,
+│   │   │                    # push remapping, session lifecycle, time
+│   │   ├── middleware/      # auth (session gating), rate limits, errors
+│   │   └── routes/          # auth, templates, sessions, participant, exam,
+│   │                        # images, server
+│   └── tests/               # unit tests + HTTP integration tests
+└── client/                  # React + Vite SPA
+    ├── tests/               # format + Studio unit tests (node:test)
+    ├── studio/              # vLabs Template Studio: sources + build (in-app and offline)
     └── src/
-        ├── pages/             # Join (default), Lab, Dashboard, Templates,
-        │                      #   TemplateEditor, SessionMonitor, InstructorLogin, Admin
-        ├── components/        # StepCard, HintBox, SolutionBox, Checkpoint, Markdown,
-        │                      #   PortalShell, ThemeToggle, Icon (line-icon set)
-        ├── hooks/             # instructor API helper, countdown
-        ├── context/           # AuthContext, ThemeContext (light/dark)
-        ├── lib/               # markdown, files, format, datetime
-        ├── styles.css         # design system + light & dark themes
-        ├── styles.additions.css
-        └── api.js             # fetch client (+ participant resume storage)
+        ├── pages/           # Join (default), Lab, Exam, Dashboard, Templates,
+        │                    # TemplateEditor, SessionMonitor, InstructorLogin, Admin
+        ├── components/      # lab and exam views, monitors, drawers, admin/, editor/
+        ├── hooks/           # instructor API helper, countdown
+        ├── context/         # AuthContext, ThemeContext (light/dark)
+        ├── lib/             # markdown, format (CSV), files, datetime, rowLink
+        ├── styles.css       # design system, light & dark themes, components
+        └── api.js           # fetch client (+ participant resume storage)
 ```

@@ -306,7 +306,8 @@ partner devices ──HTTPS──▶ labs.partner.example (A/AAAA → VPS)
 **Phase 0 — decisions:** hostname and who controls DNS; who operates it (SSH
 access, on-call, backup custody); data handling (participant names are
 personal data — agree retention and backup region); account model (how many
-partner instructors, who resets passwords — CLI today, see 2.5).
+partner instructors, who holds the admin account that resets passwords; see
+2.5).
 
 **Phase 1 — provision (½ day):** VPS with fixed IPv4 (+IPv6). Harden: SSH keys
 only, `ufw allow 22,80,443`, `unattended-upgrades`, fail2ban. Clone to
@@ -361,20 +362,18 @@ Budget ≈ VPS €5–12 + domain + ~€1 object storage per month.
 
 Prioritised; none block the Pi pilot.
 
-1. **Admin role.** Instructor management is in the portal (1.5.0) but every
-   instructor can manage every account. An `is_admin` flag gating
-   `/api/auth/instructors` would matter once instructors are not all trusted
-   equally. Half a day.
-2. **Data retention job.** Auto-delete sessions (and participants) older than
+1. **Data retention job.** Auto-delete sessions (and participants) older than
    N days; keep template audit. A `sessionLifecycle` addition plus a config
    knob. Half a day.
-3. ~~Server time in `/status`~~ — done in 1.5.1 (countdowns correct for
-   device clock skew).
-4. **Password reset without the CLI.** Either email-based (adds SMTP) or an
-   admin-issued one-time reset code. Depends on (1).
-5. **Partner branding knobs** (name, logo, accent colour) via env/config if
+2. **Self-service password reset.** The admin account resets passwords in
+   the portal (1.15.0), but a forgotten admin password still needs
+   `vlabs-cli.sh`. Email-based reset adds SMTP; decide whether it is needed.
+3. **Finer roles.** Today there is one admin (the bootstrap account) and
+   everyone else is equal, and templates are shared by all. Separate
+   permissions per course or partner would need roles beyond that.
+4. **Partner branding knobs** (name, logo, accent colour) via env/config if
    the partner wants their identity on the participant page.
-6. **Per-partner isolation inside one instance** (organisations) — only if
+5. **Per-partner isolation inside one instance** (organisations) — only if
    you end up with many partners and separate instances become tedious.
 
 ### 2.6 Moving data from the Pi to the cloud

@@ -129,6 +129,3 @@ export const actionLimiter = rateLimit({
   limit: 120,
   message: { error: 'Too many requests. Please slow down.' },
 });
-
-// Backwards-compatible alias (older code imported `joinLimiter`).
-export const joinLimiter = joinFailLimiter;
