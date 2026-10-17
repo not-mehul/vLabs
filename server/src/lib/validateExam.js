@@ -57,6 +57,7 @@ export function validateExamPayload(payload, opts = {}) {
     title: sec.title.trim(),
     ...(minutes ? { minutes } : {}),
     ...('body' in sec ? { body: sec.body.trim() } : {}),
+    ...(sec.steps ? { steps: sec.steps.map((st) => ({ ...st, body: st.body.trim() })) } : {}),
     questions: sec.questions.map((q) => ({ ...q, prompt: q.prompt.trim() })),
   }));
   const clean = {
@@ -84,7 +85,10 @@ export function validateExamPayload(payload, opts = {}) {
       }
     };
     content.forEach((sec, si) => {
-      check([sec.body || '', ...(sec.tasks || [])], `Section ${si + 1}`);
+      check([sec.body || ''], `Section ${si + 1}`);
+      (sec.steps || []).forEach((st, sti) =>
+        check([st.body, ...st.tasks], `Section ${si + 1} · step ${sti + 1}`),
+      );
       sec.questions.forEach((q, qi) =>
         check([q.prompt, ...q.options], `Section ${si + 1} · question ${qi + 1}`),
       );

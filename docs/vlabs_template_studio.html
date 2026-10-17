@@ -868,16 +868,17 @@
     const EXAM_LIMITS = Object.freeze({
       sections: 50, questionsPerSection: 200, options: 12, accepted: 20, title: 200,
       description: 1000, sectionTitle: 200, prompt: 10000, option: 500, acceptedAnswer: 200,
-      maxPoints: 100, sectionMinutes: 600, body: 20000, tasks: 30, task: 300
+      maxPoints: 100, sectionMinutes: 600, body: 20000, steps: 20, stepTitle: 200, tasks: 30, task: 300
     });
 
-    /** Section types: questions (default), info (instructions + a checklist the
-        participant ticks off) and submit (the last section, always exactly one). */
+    /** Section types: questions (default), info ("Informational": steps of
+        instructions, each with a checklist the participant ticks off) and
+        submit (the last section, always exactly one). */
     const EXAM_SECTION_TYPES = Object.freeze({
-      questions: 'Questions', info: 'Instructions & checklist', submit: 'Submit'
+      questions: 'Questions', info: 'Informational', submit: 'Submit'
     });
     const EXAM_SECTION_ALIASES = Object.freeze({
-      questions: 'questions', info: 'info', checklist: 'info', tasks: 'info', submit: 'submit', review: 'submit'
+      questions: 'questions', info: 'info', informational: 'info', checklist: 'info', tasks: 'info', submit: 'submit', review: 'submit'
     });
     const examSectionType = (sec) => (Object.prototype.hasOwnProperty.call(EXAM_SECTION_TYPES, sec?.type) ? sec.type : 'questions');
 
@@ -960,6 +961,31 @@
       return { type: 'submit', title: 'Review and submit', minutes: null, body: '', review: true, questions: [] };
     }
 
+    function examBlankStep() {
+      return { title: '', body: '', tasks: [''] };
+    }
+
+    /** Steps of an info section; 1.9.0 files hold one step's body / tasks on the section. */
+    function examInfoSteps(sec) {
+      if (Array.isArray(sec?.steps)) return sec.steps;
+      if (sec && (sec.body || (Array.isArray(sec.tasks) && sec.tasks.length))) {
+        return [{ title: '', body: sec.body || '', tasks: Array.isArray(sec.tasks) ? sec.tasks : [] }];
+      }
+      return [];
+    }
+
+    function examNormaliseStep(raw) {
+      const st = raw && typeof raw === 'object' ? raw : {};
+      return {
+        title: examStr(st.title, EXAM_LIMITS.stepTitle).trim(),
+        body: examStr(st.body, EXAM_LIMITS.body),
+        tasks: (Array.isArray(st.tasks) ? st.tasks : [])
+          .map((t) => examStr(t, EXAM_LIMITS.task).trim())
+          .filter(Boolean)
+          .slice(0, EXAM_LIMITS.tasks)
+      };
+    }
+
     function examNormaliseSection(raw) {
       const s = raw && typeof raw === 'object' ? raw : {};
       const type = examSectionType(s);
@@ -972,11 +998,7 @@
           type,
           title,
           minutes: examMinutes(s.minutes),
-          body: examStr(s.body, EXAM_LIMITS.body),
-          tasks: (Array.isArray(s.tasks) ? s.tasks : [])
-            .map((t) => examStr(t, EXAM_LIMITS.task).trim())
-            .filter(Boolean)
-            .slice(0, EXAM_LIMITS.tasks),
+          steps: examInfoSteps(s).slice(0, EXAM_LIMITS.steps).map(examNormaliseStep),
           questions: []
         };
       }
@@ -1051,7 +1073,14 @@
         const type = examSectionType(sec);
         if (type === 'submit') return;
         if (type === 'info') {
-          if (!sec.body.trim() && !sec.tasks.length) errors.push(`Section ${si + 1} needs instructions or a checklist`);
+          const steps = examInfoSteps(sec);
+          if (!steps.length) errors.push(`Section ${si + 1} needs instructions or a checklist`);
+          steps.forEach((st, sti) => {
+            if (st.body.trim() || st.tasks.length) return;
+            errors.push(steps.length === 1
+              ? `Section ${si + 1} needs instructions or a checklist`
+              : `Section ${si + 1} · step ${sti + 1} needs instructions or a checklist`);
+          });
           return;
         }
         if (!sec.questions.length) errors.push(`Section ${si + 1} has no questions`);
@@ -1139,11 +1168,21 @@
       }
       let section = null;
       let q = null;
+      let step = null;
       let body = [];
       let heading = '';
       let inFence = false;
       const flush = () => {
-        if (section && section.type !== 'questions') {
+        if (section?.type === 'info') {
+          const text = body.join('\n').trim();
+          body = [];
+          if (step && (step.explicit || text || step.tasks.length)) {
+            section.steps.push({ title: step.title, body: text, tasks: step.tasks });
+          }
+          step = null;
+          return;
+        }
+        if (section?.type === 'submit') {
           section.body = body.join('\n').trim();
           body = [];
           return;
@@ -1163,7 +1202,8 @@
           const rest = line.replace(/^#\s+/, '').trim();
           const tag = /^\[([^\]]+)\]\s*(.*)$/.exec(rest);
           const type = tag ? EXAM_SECTION_ALIASES[tag[1].trim().toLowerCase()] : null;
-          section = { type: type || 'questions', title: type ? tag[2].trim() : rest, questions: [], tasks: [] };
+          section = { type: type || 'questions', title: type ? tag[2].trim() : rest, questions: [], steps: [] };
+          if (section.type === 'info') step = { title: '', tasks: [], explicit: false };
           exam.content.push(section);
           continue;
         }
@@ -1173,6 +1213,13 @@
             if (qm && EXAM_TYPE_ALIASES[qm[1].trim().toLowerCase()]) {
               throw new Error(`Questions cannot go in a [${section.type}] section ("${section.title}"), line ${i + 1}`);
             }
+            if (section.type === 'info' && /^##\s+/.test(line)) {
+              flush();
+              const rest = line.replace(/^##\s+/, '').trim();
+              const sm = /^\[step\]\s*(.*)$/i.exec(rest);
+              step = { title: sm ? sm[1].trim() : rest, tasks: [], explicit: true };
+              continue;
+            }
             const mm = /^>\s*(minutes|review)\s*:\s*(.*)$/i.exec(line);
             if (mm) {
               if (mm[1].toLowerCase() === 'minutes') section.minutes = mm[2].trim();
@@ -1181,7 +1228,7 @@
             }
             const task = EXAM_OPTION_RE.exec(line);
             if (task && section.type === 'info') {
-              section.tasks.push(task[2].trim());
+              step.tasks.push(task[2].trim());
               continue;
             }
           }
@@ -1244,9 +1291,20 @@
         if (sec.minutes) out.push(`> minutes: ${sec.minutes}`);
         if (sec.type === 'submit' && !sec.review) out.push('> review: false');
         out.push('');
-        if (sec.type !== 'questions') {
+        if (sec.type === 'info') {
+          sec.steps.forEach((st, sti) => {
+            const empty = !st.body.trim() && !st.tasks.length;
+            if (st.title || sti > 0 || empty) {
+              const plain = st.title && !st.title.startsWith('[');
+              out.push(`## ${plain ? st.title : `[step] ${st.title}`.trim()}`, '');
+            }
+            if (st.body.trim()) out.push(st.body.trim(), '');
+            if (st.tasks.length) out.push(...st.tasks.map((t) => `- [ ] ${t}`), '');
+          });
+          continue;
+        }
+        if (sec.type === 'submit') {
           if (sec.body.trim()) out.push(sec.body.trim(), '');
-          if (sec.type === 'info' && sec.tasks.length) out.push(...sec.tasks.map((t) => `- [ ] ${t}`), '');
           continue;
         }
         for (const q of sec.questions) {
@@ -2516,13 +2574,9 @@
         pushHistorySnapshot();
         runFullValidation(false);
         scheduleAutoSave();
-      } else if (action === 'update-sec-time') {
-        // Hours + minutes boxes → whole minutes (both empty = no allocation).
-        const box = (unit) => document.querySelector(`[data-action="update-sec-time"][data-sec-idx="${sIdx}"][data-unit="${unit}"]`);
-        const h = String(box('h')?.value || '').trim();
-        const m = String(box('m')?.value || '').trim();
-        const total = (parseInt(h, 10) || 0) * 60 + (parseInt(m, 10) || 0);
-        templateData.content[sIdx].minutes = total > 0 ? total : null;
+      } else if (action === 'update-sec-minutes') {
+        const raw = String(target.value || '').trim();
+        templateData.content[sIdx].minutes = raw === '' ? null : Number(raw);
         pushHistorySnapshot();
         runFullValidation(false);
         scheduleAutoSave();
@@ -3939,7 +3993,7 @@
         }
         validateTextPlaceholders(sec.title, `${secLoc} title`, sIdx, 0);
         if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
-          addError(secLoc, `Section ${sIdx + 1} time allocated must be between 1 minute and 10 hours (or empty)`, { sIdx, stIdx: 0 });
+          addError(secLoc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
         }
 
         const steps = sec.steps || [];
@@ -4156,27 +4210,20 @@
     }
 
     /** A section's time allocation: whole minutes from 1 to 600 (vLabs 1.6.0). */
-    /** 90 → "1h 30m", 45 → "45m". */
     function formatSectionTime(minutes) {
-      const n = Number(minutes) || 0;
-      const h = Math.floor(n / 60);
-      const m = n % 60;
-      return h ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`;
+      return `${Number(minutes) || 0} min`;
     }
 
-    /** Hours + minutes boxes for a section's time allocation (stored as minutes). */
+    /** The minutes box for a section's time allocation (session lengths are set
+        in hours and minutes when a session starts, not in the template). */
     function sectionTimeInputsHtml(section, sIdx, noun) {
-      const total = Number(section.minutes);
-      const set = section.minutes !== null && section.minutes !== undefined && section.minutes !== '' && Number.isFinite(total);
-      const box = (unit, value, max, label) => `
-        <input type="number" min="0" max="${max}" step="1" inputmode="numeric" value="${set ? value : ''}" placeholder="–"
-          class="w-9 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
-          data-action="update-sec-time" data-unit="${unit}" data-sec-idx="${sIdx}" aria-label="${label} allocated to ${noun} ${sIdx + 1}">`;
       return `
-        <label class="flex items-center gap-0.5 shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this ${noun}, in hours and minutes (empty = none). Time on the ${noun} is judged against it.">
+        <label class="flex items-center shrink-0 text-[10px] font-mono text-slate-400 dark:text-slate-500" title="Time allocated to this ${noun}, in minutes (empty = none). Time on the ${noun} is judged against it.">
           <i class="ph ph-timer text-xs mr-1"></i>
-          ${box('h', Math.floor(total / 60), 10, 'Hours')}<span>h</span>
-          ${box('m', total % 60, 59, 'Minutes')}<span>m</span>
+          <input type="number" min="1" max="600" step="1" inputmode="numeric" value="${section.minutes ? escapeHtml(String(section.minutes)) : ''}" placeholder="min"
+            class="w-14 text-[11px] font-mono text-slate-700 dark:text-slate-200 bg-transparent border-b border-slate-200 dark:border-white/[0.1] hover:border-slate-300 dark:hover:border-slate-700 focus:border-brand-500 focus:outline-none px-1 py-0.5 transition"
+            data-action="update-sec-minutes" data-sec-idx="${sIdx}" aria-label="Minutes allocated to ${noun} ${sIdx + 1}">
+          <span class="ml-1 hidden sm:inline">min</span>
         </label>`;
     }
 
@@ -5076,10 +5123,18 @@ In two or three sentences, explain why networks are split into VLANs.
 # [info] Part 3 · Bench check
 > minutes: 10
 
-Cable your switch to the router as shown on the bench card, then raise your
-hand so your instructor can check it. Tick each item once it is done.
+## Cable the bench
+
+Cable your switch to the router as shown on the bench card. Tick each item
+once it is done.
 
 - [ ] Switch port Gi0/1 is cabled to the router
+- [ ] The link light is green on both ends
+
+## Instructor check
+
+Raise your hand so your instructor can check your bench.
+
 - [ ] My instructor has checked my bench
 
 # [submit] Review and submit
@@ -6060,7 +6115,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         <button data-action="${action}" data-sec-idx="${sIdx}" ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06]'} rounded-md transition disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs"></i></button>`;
       const count = type === 'questions'
         ? `${n} ${n === 1 ? 'question' : 'questions'}`
-        : type === 'info' ? `${(section.tasks || []).length} checklist items` : 'last step';
+        : type === 'info' ? `${(section.steps || []).length} ${(section.steps || []).length === 1 ? 'step' : 'steps'}` : 'last step';
       return `
         <div class="px-4 py-3 border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between bg-slate-50/50 dark:bg-surface-850/40">
           <div class="flex items-center space-x-2.5 flex-1 mr-3">
@@ -6184,12 +6239,12 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
       const body = `
         <div>
-          <label class="block text-[10px] font-medium text-slate-400 mb-1">${type === 'submit' ? 'Text above the submit button (Markdown, optional)' : 'Instructions (Markdown; images by library file name)'}</label>
+          <label class="block text-[10px] font-medium text-slate-400 mb-1">Text above the submit button (Markdown, optional)</label>
           <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-slate-50/40 dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
             ${renderMarkdownToolbar(bodyId, sIdx, 0)}
             <textarea id="${bodyId}" rows="3" data-sec-idx="${sIdx}" data-action="exam-sec-body"
               class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
-              placeholder="${type === 'submit' ? 'e.g. Check every part before you hand in.' : 'e.g. Cable the switch to the router, then call your instructor over to check it.'}">${escapeHtml(section.body || '')}</textarea>
+              placeholder="e.g. Check every part before you hand in.">${escapeHtml(section.body || '')}</textarea>
           </div>
         </div>`;
       if (type === 'submit') {
@@ -6199,22 +6254,62 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
             <span>Show a review first: how many questions are answered, with links to any unanswered question or unfinished checklist. Untick for a plain submit button.</span>
           </label>`;
       }
-      const tasks = section.tasks || [];
-      return `${body}
-        <div class="space-y-1.5">
-          <span class="block text-[10px] font-medium text-slate-400">Checklist: the participant ticks every item to move on (nobody approves it)</span>
-          ${tasks.map((t, ti) => `
+      return body;
+    }
+
+    /** The steps of an informational part: participants see one at a time and
+        tick every item of a step before the next. */
+    function examInfoStepsHtml(section, sIdx) {
+      const inputCls = 'w-full text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-500';
+      const steps = section.steps || [];
+      const btn = (action, stIdx, icon, title, disabled, danger) => `
+        <button data-action="${action}" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" ${disabled ? 'disabled' : ''} class="p-1 text-slate-400 ${danger ? 'hover:text-rose-600' : 'hover:text-slate-700 dark:hover:text-slate-200'} rounded transition disabled:opacity-30" title="${title}"><i class="ph ${icon} text-xs pointer-events-none"></i></button>`;
+      return `${steps.map((st, stIdx) => {
+        const bodyId = `exam-step-body-${sIdx}-${stIdx}`;
+        const tasks = st.tasks || [];
+        return `
+          <div id="exam-step-${sIdx}-${stIdx}" class="rounded-lg border border-slate-200/80 dark:border-white/[0.07] bg-slate-50/40 dark:bg-surface-850/40 p-3 space-y-3">
             <div class="flex items-center gap-2">
-              <i class="ph ph-check-square text-sm text-amber-500 shrink-0"></i>
-              <input type="text" value="${escapeHtml(t)}" placeholder="e.g. My instructor has checked my cabling" data-sec-idx="${sIdx}" data-task-idx="${ti}" data-action="exam-task" class="${inputCls}">
-              <button data-action="exam-del-task" data-sec-idx="${sIdx}" data-task-idx="${ti}" class="p-1 text-slate-400 hover:text-rose-600 rounded" title="Remove item"><i class="ph ph-x text-xs pointer-events-none"></i></button>
-            </div>`).join('')}
-          ${tasks.length < EXAM_LIMITS.tasks ? `<button data-action="exam-add-task" data-sec-idx="${sIdx}" class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add checklist item</button>` : ''}
-        </div>`;
+              <span class="text-[11px] font-mono font-semibold text-amber-600 dark:text-amber-400 shrink-0">Step ${stIdx + 1}</span>
+              <input type="text" value="${escapeHtml(st.title || '')}" placeholder="${steps.length === 1 ? 'Step title (optional)' : 'Step title'}" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-action="exam-step-title" class="${inputCls}">
+              ${btn('exam-move-step-up', stIdx, 'ph-arrow-up', 'Move step up', stIdx === 0)}
+              ${btn('exam-move-step-down', stIdx, 'ph-arrow-down', 'Move step down', stIdx === steps.length - 1)}
+              ${btn('exam-del-step', stIdx, 'ph-trash', 'Delete step', steps.length <= 1, true)}
+            </div>
+            <div>
+              <label class="block text-[10px] font-medium text-slate-400 mb-1">Instructions (Markdown; images by library file name)</label>
+              <div class="rounded-lg border border-slate-200/90 dark:border-white/[0.08] overflow-hidden bg-white dark:bg-surface-900 focus-within:border-brand-500 dark:focus-within:border-brand-500 transition">
+                ${renderMarkdownToolbar(bodyId, sIdx, stIdx)}
+                <textarea id="${bodyId}" rows="3" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-action="exam-step-body"
+                  class="autogrow-textarea w-full text-xs font-mono leading-relaxed text-slate-800 dark:text-slate-100 bg-transparent p-3 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] block"
+                  placeholder="e.g. Cable the switch to the router, then call your instructor over to check it.">${escapeHtml(st.body || '')}</textarea>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <span class="block text-[10px] font-medium text-slate-400">Checklist: the participant ticks every item to move on (nobody approves it)</span>
+              ${tasks.map((t, ti) => `
+                <div class="flex items-center gap-2">
+                  <i class="ph ph-check-square text-sm text-amber-500 shrink-0"></i>
+                  <input type="text" value="${escapeHtml(t)}" placeholder="e.g. My instructor has checked my cabling" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-task-idx="${ti}" data-action="exam-task" class="${inputCls}">
+                  <button data-action="exam-del-task" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" data-task-idx="${ti}" class="p-1 text-slate-400 hover:text-rose-600 rounded" title="Remove item"><i class="ph ph-x text-xs pointer-events-none"></i></button>
+                </div>`).join('')}
+              ${tasks.length < EXAM_LIMITS.tasks ? `<button data-action="exam-add-task" data-sec-idx="${sIdx}" data-step-idx="${stIdx}" class="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition">+ Add checklist item</button>` : ''}
+            </div>
+          </div>`;
+      }).join('')}
+        ${steps.length < EXAM_LIMITS.steps ? `<button data-action="exam-add-step" data-sec-idx="${sIdx}" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Add step</button>` : ''}`;
     }
 
     /** Keep exactly one submit section, last (older saved workspaces have none). */
     function ensureExamSubmitSection() {
+      // Informational parts saved before steps existed hold one step's body / tasks.
+      templateData.content.forEach(sec => {
+        if (examSectionType(sec) !== 'info' || Array.isArray(sec.steps)) return;
+        const steps = examInfoSteps(sec).map(st => ({ title: st.title || '', body: st.body || '', tasks: [...(st.tasks || [])] }));
+        sec.steps = steps.length ? steps : [examBlankStep()];
+        delete sec.body;
+        delete sec.tasks;
+      });
       const content = templateData.content;
       const submits = content.filter(sec => examSectionType(sec) === 'submit');
       const rest = content.filter(sec => examSectionType(sec) !== 'submit');
@@ -6235,7 +6330,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       let number = 0;
       container.innerHTML = templateData.content.map((section, sIdx) => {
         const type = examSectionType(section);
-        const secMatches = !term || [section.title, section.body, ...(section.tasks || [])].join(' ').toLowerCase().includes(term);
+        const secMatches = !term || [section.title, section.body, ...(section.steps || []).flatMap(st => [st.title, st.body, ...(st.tasks || [])])].join(' ').toLowerCase().includes(term);
         const cards = (section.questions || []).map((q, qIdx) => {
           number += 1;
           const hit = !term || secMatches || [q.prompt, ...(q.options || []), ...(q.accepted || [])].join(' ').toLowerCase().includes(term);
@@ -6252,12 +6347,12 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
                     <span class="w-1.5 h-1.5 rounded-full ${EXAM_TYPE_DOT[t]}"></span>${EXAM_TYPE_LABELS[t]}
                   </button>`).join('')}
               </div>`
-          : examSectionBodyHtml(section, sIdx);
+          : type === 'info' ? examInfoStepsHtml(section, sIdx) : examSectionBodyHtml(section, sIdx);
         const addRow = sIdx === last - 1 ? `
           <div class="flex flex-wrap items-center gap-1.5 px-1">
             <span class="text-[11px] text-slate-400 mr-1">Add a part before the submit step:</span>
+            <button data-action="exam-add-section" data-sec-type="info" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Informational</button>
             <button data-action="exam-add-section" data-sec-type="questions" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Questions</button>
-            <button data-action="exam-add-section" data-sec-type="info" class="px-2 py-1 border border-dashed border-slate-200 dark:border-white/[0.09] hover:border-slate-400 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition">+ Instructions &amp; checklist</button>
           </div>` : '';
         return `
           <div id="section-card-${sIdx}" class="${hidden ? 'hidden ' : ''}bg-white dark:bg-surface-900 border ${type === 'submit' ? 'border-dashed border-violet-300/80 dark:border-violet-500/30' : 'border-slate-200/80 dark:border-white/[0.07]'} rounded-xl shadow-2xs overflow-hidden transition-all">
@@ -6321,7 +6416,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const at = content.findIndex(sec => examSectionType(sec) === 'submit');
       const where = at < 0 ? content.length : at;
       const part = type === 'info'
-        ? { type: 'info', title: `Part ${where + 1}`, minutes: null, body: '', tasks: [''], questions: [], collapsed: false }
+        ? { type: 'info', title: `Part ${where + 1}`, minutes: null, steps: [examBlankStep()], questions: [], collapsed: false }
         : { type: 'questions', title: `Part ${where + 1}`, minutes: null, collapsed: false, questions: [{ ...examBlankQuestion('single'), collapsed: false }] };
       content.splice(where, 0, part);
       if (at < 0) content.push({ ...examDefaultSubmitSection(), collapsed: false });
@@ -6355,19 +6450,42 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       const qIdx = target.dataset.qIdx !== undefined ? parseInt(target.dataset.qIdx, 10) : null;
       const sec = templateData.content[sIdx];
       if (!sec) return;
-      if (action === 'exam-add-task') {
-        sec.tasks = sec.tasks || [];
-        if (sec.tasks.length >= EXAM_LIMITS.tasks) return;
-        sec.tasks.push('');
+      const stIdx = target.dataset.stepIdx !== undefined ? parseInt(target.dataset.stepIdx, 10) : null;
+      if (action === 'exam-add-step') {
+        sec.steps = sec.steps || [];
+        if (sec.steps.length >= EXAM_LIMITS.steps) return;
+        sec.steps.push(examBlankStep());
+        examCommit();
+        requestAnimationFrame(() => document.querySelector(`#exam-step-${sIdx}-${sec.steps.length - 1} [data-action="exam-step-title"]`)?.focus());
+        return;
+      }
+      const step = stIdx !== null ? sec.steps?.[stIdx] : null;
+      if (step && action === 'exam-del-step') {
+        if (sec.steps.length <= 1) return;
+        sec.steps.splice(stIdx, 1);
+        examCommit();
+        return;
+      }
+      if (step && (action === 'exam-move-step-up' || action === 'exam-move-step-down')) {
+        const to = stIdx + (action === 'exam-move-step-up' ? -1 : 1);
+        if (to < 0 || to >= sec.steps.length) return;
+        sec.steps.splice(to, 0, sec.steps.splice(stIdx, 1)[0]);
+        examCommit();
+        return;
+      }
+      if (step && action === 'exam-add-task') {
+        step.tasks = step.tasks || [];
+        if (step.tasks.length >= EXAM_LIMITS.tasks) return;
+        step.tasks.push('');
         examCommit();
         requestAnimationFrame(() => {
-          const inputs = document.querySelectorAll(`#section-card-${sIdx} [data-action="exam-task"]`);
+          const inputs = document.querySelectorAll(`#exam-step-${sIdx}-${stIdx} [data-action="exam-task"]`);
           inputs[inputs.length - 1]?.focus();
         });
         return;
       }
-      if (action === 'exam-del-task') {
-        sec.tasks.splice(parseInt(target.dataset.taskIdx, 10), 1);
+      if (step && action === 'exam-del-task') {
+        step.tasks.splice(parseInt(target.dataset.taskIdx, 10), 1);
         examCommit();
         return;
       }
@@ -6416,7 +6534,10 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
     function examHandleInput(action, target, sIdx) {
       const sec = templateData.content[sIdx];
       if (action === 'exam-sec-body' && sec) { sec.body = target.value; examCommit(false); return; }
-      if (action === 'exam-task' && sec) { sec.tasks[parseInt(target.dataset.taskIdx, 10)] = target.value; examCommit(false); return; }
+      const step = sec?.steps?.[parseInt(target.dataset.stepIdx, 10)];
+      if (action === 'exam-step-title' && step) { step.title = target.value; examCommit(false); return; }
+      if (action === 'exam-step-body' && step) { step.body = target.value; examCommit(false); return; }
+      if (action === 'exam-task' && step) { step.tasks[parseInt(target.dataset.taskIdx, 10)] = target.value; examCommit(false); return; }
       const qIdx = parseInt(target.dataset.qIdx, 10);
       const q = templateData.content[sIdx]?.questions?.[qIdx];
       if (!q) return;
@@ -6540,27 +6661,36 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
             ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(sec.body, {}))}</div>`
             : '';
           if (type === 'info') {
-            const tasks = (sec.tasks || []).filter(t => String(t).trim());
-            inner = `
+            // Checklist items are numbered across the steps, as in vLabs.
+            let ti = 0;
+            const steps = sec.steps || [];
+            inner = steps.map((step, stIdx) => {
+              const tasks = (step.tasks || []).filter(t => String(t).trim());
+              const stepBody = (step.body || '').trim()
+                ? `<div class="prose-preview text-sm text-slate-800 dark:text-slate-100">${parseMarkdownSafe(resolveMarkdownImages(step.body, {}))}</div>`
+                : '';
+              return `
               <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 space-y-3">
-                ${bodyHtml}
+                ${steps.length > 1 || step.title ? `<p class="text-[11px] font-mono font-semibold text-slate-500">Step ${stIdx + 1} of ${steps.length}${step.title ? ` · ${escapeHtml(step.title)}` : ''}</p>` : ''}
+                ${stepBody}
                 ${tasks.length ? `<p class="text-[11px] font-semibold text-slate-500">Tick each item once it is done</p>` : ''}
-                ${tasks.map((t, ti) => {
-                  const key = `${sIdx}.t${ti}`;
+                ${tasks.map(t => {
+                  const key = `${sIdx}.t${ti++}`;
                   return `
                     <label class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer text-xs text-slate-700 dark:text-slate-200">
                       <input type="checkbox" ${st.answers[key] ? 'checked' : ''} onchange="examPreviewSet('${key}', this.checked, false)">
                       <span class="prose-preview">${parseMarkdownSafe(resolveMarkdownImages(t, {}))}</span>
                     </label>`;
                 }).join('')}
-                ${!bodyHtml && !tasks.length ? '<p class="text-xs text-slate-400">No instructions or checklist yet.</p>' : ''}
+                ${!stepBody && !tasks.length ? '<p class="text-xs text-slate-400">No instructions or checklist yet.</p>' : ''}
               </div>`;
+            }).join('') || '<p class="text-xs text-slate-400">No steps yet.</p>';
           } else {
             inner = `
               <div class="bg-white dark:bg-surface-900 border border-dashed border-violet-300/80 dark:border-violet-500/30 rounded-xl p-4 space-y-3">
                 ${bodyHtml}
                 <p class="text-xs text-slate-500">${sec.review !== false ? 'Participants see how many questions they answered, with links to anything left, then:' : 'Participants see only:'}</p>
-                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-xs font-medium"><i class="ph ph-flag"></i> Submit exam</span>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 text-white text-xs font-medium"><i class="ph ph-flag"></i> Submit</span>
               </div>`;
           }
         }
@@ -6605,7 +6735,10 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
       };
       templateData.content.forEach((sec, sIdx) => {
         scan(sec.body, `Section ${sIdx + 1}`, sIdx, 0);
-        (sec.tasks || []).forEach((t, ti) => scan(t, `Section ${sIdx + 1} checklist item ${ti + 1}`, sIdx, 0));
+        (sec.steps || []).forEach((step, stIdx) => {
+          scan(step.body, `Section ${sIdx + 1} · step ${stIdx + 1}`, sIdx, 0);
+          (step.tasks || []).forEach((t, ti) => scan(t, `Section ${sIdx + 1} · step ${stIdx + 1} checklist item ${ti + 1}`, sIdx, 0));
+        });
         (sec.questions || []).forEach((q, qIdx) => {
           const at = `Section ${sIdx + 1} · question ${qIdx + 1}`;
           scan(q.prompt, `${at} prompt`, sIdx, qIdx);
@@ -6636,15 +6769,22 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
         const type = examSectionType(sec);
         if (!(sec.title || '').trim()) addError(loc, `Section ${sIdx + 1} needs a title`, { sIdx, stIdx: 0 });
         if (sec.minutes !== null && sec.minutes !== undefined && sec.minutes !== '' && !validSectionMinutes(sec.minutes)) {
-          addError(loc, `Section ${sIdx + 1} time allocated must be between 1 minute and 10 hours (or empty)`, { sIdx, stIdx: 0 });
+          addError(loc, `Section ${sIdx + 1} time allocated must be a whole number of minutes from 1 to 600 (or empty)`, { sIdx, stIdx: 0 });
         }
         if ((sec.body || '').length > EXAM_LIMITS.body) addError(loc, `Text exceeds ${EXAM_LIMITS.body} characters`, { sIdx, stIdx: 0 });
         if (type === 'submit') return;
         if (type === 'info') {
-          const tasks = (sec.tasks || []).filter(t => String(t).trim());
-          if (!(sec.body || '').trim() && !tasks.length) addError(loc, `Section ${sIdx + 1} needs instructions or a checklist`, { sIdx, stIdx: 0 });
-          if ((sec.tasks || []).length !== tasks.length) addWarning(loc, `${loc} has an empty checklist item (left out on export)`, { sIdx, stIdx: 0 });
-          if (tasks.length > EXAM_LIMITS.tasks) addError(loc, `Too many checklist items (${tasks.length} / ${EXAM_LIMITS.tasks} max)`, { sIdx, stIdx: 0 });
+          const steps = sec.steps || [];
+          if (!steps.length) addError(loc, `Section ${sIdx + 1} needs instructions or a checklist`, { sIdx, stIdx: 0 });
+          if (steps.length > EXAM_LIMITS.steps) addError(loc, `Too many steps (${steps.length} / ${EXAM_LIMITS.steps} max)`, { sIdx, stIdx: 0 });
+          steps.forEach((step, stIdx) => {
+            const at = steps.length === 1 ? loc : `${loc} · step ${stIdx + 1}`;
+            const tasks = (step.tasks || []).filter(t => String(t).trim());
+            if (!(step.body || '').trim() && !tasks.length) addError(at, `${at} needs instructions or a checklist`, { sIdx, stIdx: 0 });
+            if ((step.body || '').length > EXAM_LIMITS.body) addError(at, `Text exceeds ${EXAM_LIMITS.body} characters`, { sIdx, stIdx: 0 });
+            if ((step.tasks || []).length !== tasks.length) addWarning(at, `${at} has an empty checklist item (left out on export)`, { sIdx, stIdx: 0 });
+            if (tasks.length > EXAM_LIMITS.tasks) addError(at, `Too many checklist items (${tasks.length} / ${EXAM_LIMITS.tasks} max)`, { sIdx, stIdx: 0 });
+          });
           return;
         }
         const qs = sec.questions || [];
@@ -6683,6 +6823,7 @@ Open the PR's **Commits** tab. The hash listed must be the one you recorded. Ent
           ...sec,
           title: sec.title.trim(),
           ...('body' in sec ? { body: sec.body.trim() } : {}),
+          ...(sec.steps ? { steps: sec.steps.map(st => ({ ...st, body: st.body.trim() })) } : {}),
           ...(minutes ? { minutes } : {})
         }))
       }, null, 2);

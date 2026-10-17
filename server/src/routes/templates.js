@@ -4,7 +4,7 @@ import { requireInstructor } from '../middleware/auth.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../lib/validateTemplate.js';
 import { validateExamPayload } from '../lib/validateExam.js';
-import { listQuestions, totalPoints, sectionType } from '../../../shared/exam-schema.js';
+import { listQuestions, totalPoints, sectionType, infoSteps } from '../../../shared/exam-schema.js';
 import {
   renderManual,
   countSteps,
@@ -364,7 +364,15 @@ router.post(
           index: si,
           type: sectionType(sec),
           ...(sec.body ? { body: injectImages(sec.body, images) } : {}),
-          ...(sec.tasks ? { tasks: sec.tasks.map((t) => injectImages(t, images)) } : {}),
+          ...(sectionType(sec) === 'info'
+            ? {
+                steps: infoSteps(sec).map((st) => ({
+                  ...st,
+                  body: injectImages(st.body, images),
+                  tasks: st.tasks.map((t) => injectImages(t, images)),
+                })),
+              }
+            : {}),
           questions: (sec.questions || []).map((qq, qi) => ({
             ...qq,
             index: qi,

@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.9.0). The first section is the original code
+Newest entry at the bottom (1.10.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -658,3 +658,34 @@ NetworkManager then rejoins any remembered network on its own (DEPLOYMENT.md
 `deploy/pi/update.sh` as usual. No migration: existing exam templates gain
 the default submit section the next time they are opened and saved, and
 running sessions keep working unchanged.
+
+## 1.10.0 — informational steps, minutes per section, exam UI tidy-up
+
+- **"Instructions & checklist" is now "Informational"** everywhere (exam
+  editor, Template Studio, guides), and its **+ Informational** button comes
+  before **+ Questions**. `# [informational] Title` works as well as
+  `# [info] Title`.
+- **Informational sections have steps**, like a lab section. Each step has a
+  title, instructions and its own checklist, and participants see one step
+  at a time (_Step 2 of 3_): **Next step** opens once the step's items are
+  ticked, and the next section once every item is. In Markdown `## Step
+title` starts a step inside an `# [info]` section; in JSON a section
+  carries `"steps": [{ "title", "body", "tasks" }]`. Checklist keys stay
+  `"<section>.t<item>"`, items numbered across the steps, so 1.9.0 sections
+  (`body` + `tasks` on the section) read as one step with the same keys, in
+  templates, imports and running sessions alike.
+- **Fixed: unticking a checklist item no longer lets the participant carry
+  on.** Ticking every item opened the next section, but unticking one left
+  it open. Now an unticked item locks every section after it again (on the
+  page at once, and on the server, which refuses answers there) until it is
+  ticked once more. Clearing a question's answer still does not re-lock.
+- **Section time allocations are minutes again** in the exam and lab editors
+  and Template Studio. Hours and minutes are only for a session's length
+  (**Runs for** on the launcher).
+- **Submit section:** the participant page shows only the template's text
+  (the built-in "Once submitted your answers are final…" paragraph is gone),
+  and the button says **Submit**.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.

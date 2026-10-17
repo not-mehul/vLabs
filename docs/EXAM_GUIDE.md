@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.9.0**.
+Applies to vLabs **1.10.0**.
 
 ---
 
@@ -19,7 +19,7 @@ Exams can be written in two places:
 
 - **vLabs Template Studio** (`docs/vlabs_template_studio.html`): **New → New
   Exam**, or **Examples → E. Network Fundamentals Quiz**. It has the same
-  parts (questions, instructions & checklist, submit), question types, time
+  parts (informational, questions, submit), question types, time
   allocations, image library and validation as below,
   plus a **Participant Preview** where you can answer the exam yourself,
   **Check my answers** (graded exactly as vLabs grades) and **Show answer
@@ -32,10 +32,10 @@ Exams can be written in two places:
 **Templates → New exam** opens the exam editor: sections ("parts") of three
 kinds (§2a). For every question choose a type, write the prompt (Markdown,
 with images by library file name, e.g. `![topology](topology.png)`), set the
-points, and give the correct answer. The **Time** boxes (hours and minutes)
-beside each section title set the time allocated to that section (§4.1).
-**Add a section before the submit step** adds a questions section or an
-instructions-and-checklist section; the submit section always stays last. **Import** (a Studio
+points, and give the correct answer. **Minutes** beside each section title
+sets the time allocated to that section (§4.1).
+**Add a section before the submit step** adds an informational section or a
+questions section; the submit section always stays last. **Import** (a Studio
 `.zip`, `.md` or `.json`) / **.md** / **.json** read and write the format
 below; **Sample .md** downloads a ready-made example. A sample exam is also
 created on a fresh install.
@@ -60,30 +60,34 @@ question scores 0; unanswered hand-marked questions are simply not awarded.
 
 Every exam is a list of sections. There are three kinds:
 
-| Kind                         | Markdown heading     | Participant sees                                                   | Moves on when                       |
-| ---------------------------- | -------------------- | ------------------------------------------------------------------ | ----------------------------------- |
-| **Questions** (the default)  | `# Title`            | the questions                                                      | every question has an answer        |
-| **Instructions & checklist** | `# [info] Title`     | your instructions (Markdown, images) and a checklist to tick off   | every checklist item is ticked      |
-| **Submit**                   | `# [submit] Title`   | optional text, a review of what is answered, and **Submit exam**   | (the last step)                     |
+| Kind                        | Markdown heading   | Participant sees                                                       | Moves on when                    |
+| --------------------------- | ------------------ | ---------------------------------------------------------------------- | -------------------------------- |
+| **Informational**           | `# [info] Title`   | one or more steps of instructions (Markdown, images), each with a checklist | every checklist item is ticked   |
+| **Questions** (the default) | `# Title`          | the questions                                                          | every question has an answer     |
+| **Submit**                  | `# [submit] Title` | optional text, a review of what is answered, and **Submit**            | (the last step)                  |
 
-**Instructions & checklist** sections are for practical work the participant
-completes before continuing, e.g. "Cable the switch to the router, then call
-your instructor over to check it", with checklist items such as *Switch is
-cabled* and *My instructor has checked my bench*. The participant ticks each
-item themselves and the next section unlocks. **Nobody approves it in vLabs**:
-if the instructor checks the work, they do it at the bench and record it on
-your own grading sheet (linking that sheet to vLabs is future work). Ticks are
+**Informational** sections are for practical work the participant completes
+before continuing. Like a lab section, one can hold several **steps**, shown
+one at a time: e.g. *Cable the bench* (items *Switch is cabled*, *Link light
+is green*), then *Instructor check* ("Call your instructor over", item *My
+instructor has checked my bench*). The participant ticks each item themselves;
+**Next step** opens once every item of the step is ticked, and the next
+section once every item of the section is. **Nobody approves it in vLabs**: if
+the instructor checks the work, they do it at the bench and record it on your
+own grading sheet (linking that sheet to vLabs is future work). Ticks are
 saved like answers, appear in the **Answer log** export with their time, and
-are never graded. A checklist section has no questions; give it instructions,
-a checklist, or both (up to 30 items).
+are never graded. An informational section has no questions; give each step
+instructions, a checklist, or both (up to 20 steps, 30 items per step).
+Unticking an item locks every section after it again until it is ticked once
+more.
 
 **Submit** is always the last section, exactly once. Every new exam has one,
 called *Review and submit*. Rename it, add text above the button (e.g. "Hand
 your bench card to your instructor before you submit"), and choose whether it
 shows the review: with **Show a review first** ticked, participants see how
 many questions they answered, with links to any unanswered question or
-unfinished checklist; unticked, they see only the text and the **Submit exam**
-button. An exam imported without a submit section gets the default one, and
+unfinished checklist; unticked, they see only the text and the **Submit**
+button. Nothing else is added: the page shows only what the template says. An exam imported without a submit section gets the default one, and
 one placed anywhere else is moved to the end.
 
 ## 3. Markdown format
@@ -147,18 +151,22 @@ Check every part before you hand in. You cannot change your answers after.
   literal pipe).
 - `> minutes: N` directly under a `#` section heading allocates N minutes to
   that section: whole minutes, 1–600, optional (§4.1). In JSON it is
-  `"minutes": N` on the section. (The editors take hours and minutes.)
-- `# [info] Title` starts an instructions-and-checklist section (aliases
-  `[checklist]`, `[tasks]`). Its text is the instructions; `- [ ]` lines are
-  the checklist (a `- [x]` is read the same way: participants always start
-  unticked). Questions cannot go in it. Use `##` or smaller headings inside
-  the instructions: a `#` line starts a new section.
+  `"minutes": N` on the section.
+- `# [info] Title` starts an informational section (aliases
+  `[informational]`, `[checklist]`, `[tasks]`). Each `## Step title` line
+  starts a step (`## [step] Title` is the same; text before the first one is
+  an untitled first step). A step's text is its instructions and its `- [ ]`
+  lines its checklist (a `- [x]` is read the same way: participants always
+  start unticked). Questions cannot go in it. Use `###` or smaller headings
+  inside a step's instructions: `##` starts a new step and `#` a new section.
 - `# [submit] Title` is the submit section (alias `[review]`). Its text is
   shown above the button; `> review: false` leaves out the review. Exports
   always write it.
 - In JSON a section has `"type": "questions" | "info" | "submit"` (default
-  questions); info sections carry `"body"` and `"tasks": ["…"]`, the submit
-  section `"body"` and `"review": true | false`.
+  questions); info sections carry `"steps": [{ "title", "body", "tasks":
+  ["…"] }]`, the submit section `"body"` and `"review": true | false`.
+  Sections saved by 1.9.0 (`"body"` and `"tasks"` on the section) are read
+  as one step.
 - Export → import round-trips losslessly.
 
 ## 4. During the exam
@@ -166,13 +174,15 @@ Check every part before you hand in. You cannot change your answers after.
 - **Sections unlock like a lab's.** One section per page. A participant
   starts with only the first section. The next one unlocks once **every
   question** in the current section has an answer, or **every checklist
-  item** is ticked in an instructions-and-checklist section; **Next** stays
-  disabled until then. Locked sections are never sent to the browser and
+  item** is ticked in an informational section; **Next** stays disabled
+  until then. Locked sections are never sent to the browser and
   cannot be answered, so nobody can read ahead.
 - **Free navigation, up to the furthest section reached.** Before
   submitting, participants can go back to any unlocked section and change
   answers. Progress stays at the furthest section they reached: clearing an
-  earlier answer does not lock later sections again. The **submit section**
+  earlier answer does not lock later sections again. Unticking a checklist
+  item does: every section after it locks until it is ticked again. The
+  **submit section**
   opens as soon as the last questions section does, so a participant can
   hand in with questions left blank; a checklist right before it must be
   ticked first. With the review on, it lists any unanswered questions and
@@ -182,9 +192,10 @@ Check every part before you hand in. You cannot change your answers after.
   indicator for the whole exam (a cloud: *Saving…*, *Saved*, or *Not saved,
   retrying*). There is no mark beside each question, so "saved" is never
   mistaken for "correct". Leaving and rejoining with the same name resumes.
-- **Instructions & checklist** sections show the instructions and the
-  checklist; ticking an item saves it at once. When every item is ticked
-  the next section unlocks.
+- **Informational** sections show one step at a time (*Step 1 of 3*), with
+  its instructions and checklist; ticking an item saves it at once.
+  **Next step** opens once every item of the step is ticked, and on the
+  last step **Next** opens the following section.
 - Each exam seat is **bound to the device that joined it**. Rejoining with
   the same name on that device resumes. On any other device it is refused
   ("already taking the exam on another device"), so nobody can open a
@@ -206,8 +217,8 @@ Check every part before you hand in. You cannot change your answers after.
 Section time works exactly as in labs (TEMPLATE_GUIDE.md §11.1):
 
 - Set the allocation with `> minutes: N` (Markdown), `"minutes": N` (JSON) or
-  the **Time** boxes (hours and minutes) beside the section title in the exam
-  editor or the Studio. Leave them empty for none. The submit section has no
+  **Minutes** beside the section title in the exam editor or the Studio.
+  Leave it empty for none. The submit section has no
   allocation.
 - The monitor compares each participant's time on their furthest section
   with its allocation. Rows turn amber from 80 % of the allocation and red
@@ -267,8 +278,8 @@ From the monitor:
   unanswered), points and who marked it.
 - **Answer key** — every question with options and expected answer.
 - **Answer log** — every answer change across the class, in time order,
-  including checklist ticks (question `2.t0` = section 3, item 1: *Ticked* /
-  *Unticked*).
+  including checklist ticks (question `2.t0` = section 3, item 1, counting
+  across its steps: *Ticked* / *Unticked*).
 - **JSON** — all of the above in one document, plus a `sections` index
   (allocated minutes, average seconds, completed count) and the session's
   total break time.

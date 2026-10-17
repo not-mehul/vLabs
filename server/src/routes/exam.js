@@ -17,6 +17,9 @@ import {
   examUnlockedSection,
   isExamSectionComplete,
   listTasks,
+  sectionTasks,
+  infoSteps,
+  taskKey,
   sectionType,
 } from '../../../shared/exam-schema.js';
 
@@ -24,8 +27,9 @@ import {
  * Participant side of EXAM sessions, mounted at /api/participant/exam.
  *
  * Sections unlock like a lab's: a section opens once every question in the
- * sections before it has an answer and every checklist item (info sections)
- * is ticked, and locked sections are never sent (nor can they be answered).
+ * sections before it has an answer and every checklist item (informational
+ * sections) is ticked — unticking one locks what follows again — and locked
+ * sections are never sent (nor can they be answered).
  * Ticks are stored with the answers, under "<section>.t<item>" keys. Participants may move freely back through what they
  * have unlocked. Correct answers and accepted-answer lists never leave the
  * server, and participants are never told whether a response was right.
@@ -176,13 +180,18 @@ router.get(
         questions: [],
       };
       if (delivered && type !== 'questions') {
-        block.body = injectImages(sec.body || '', images);
         if (type === 'info') {
-          block.tasks = (sec.tasks || []).map((text, ti) => ({
-            key: `${si}.t${ti}`,
-            text: injectImages(text, images),
+          // Checklist items are numbered across the steps (see taskKey).
+          const tasks = sectionTasks(sec);
+          block.steps = infoSteps(sec).map((st, sti) => ({
+            title: st.title || '',
+            body: injectImages(st.body || '', images),
+            tasks: tasks
+              .filter((t) => t.sti === sti)
+              .map((t) => ({ key: taskKey(si, t.ti), text: injectImages(t.text, images) })),
           }));
         } else {
+          block.body = injectImages(sec.body || '', images);
           block.review = sec.review !== false;
         }
       }
