@@ -116,7 +116,7 @@ export default function Exam() {
       }
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         participantSession.clear();
-        setEnded({ reason: err.message });
+        setEnded({ reason: err.message, handedIn: err.code === 'SESSION_ENDED' });
         return true;
       }
       return false;
@@ -310,7 +310,12 @@ export default function Exam() {
             <Icon name="lock" size={40} />
           </span>
           <h1>Session closed</h1>
-          <p>{ended.reason} Answers you gave before it closed were saved.</p>
+          <p>
+            {ended.reason}{' '}
+            {ended.handedIn
+              ? 'Answers you gave before it closed were saved and handed in.'
+              : 'Answers you gave before it closed were saved.'}
+          </p>
           <button className="btn btn--primary" onClick={() => navigate('/', { replace: true })}>
             Return to start
           </button>

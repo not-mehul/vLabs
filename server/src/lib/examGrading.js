@@ -174,6 +174,8 @@ export function examParticipantView(p, content, breaks = [], variables = []) {
     fully_graded: graded.every((g) => !g.pending),
     submitted,
     submitted_at: p.submitted_at,
+    // Handed in by the session ending, not by the participant.
+    auto_submitted: submitted && Boolean(p.auto_submitted),
     status: submitted ? 'submitted' : secondsSinceSeen < 90 ? 'active' : 'idle',
     complete: submitted,
     furthest_section: furthest,

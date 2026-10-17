@@ -317,7 +317,11 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
               <span className="seat-num">{d.seat_number}</span>
               <h2>{d.name}</h2>
               <span className={`pill pill--${d.submitted ? 'active' : 'ended'}`}>
-                {d.submitted ? 'submitted' : 'in progress'}
+                {d.auto_submitted
+                  ? 'handed in at session end'
+                  : d.submitted
+                    ? 'submitted'
+                    : 'in progress'}
               </span>
             </div>
             <p className="muted small">
@@ -836,8 +840,16 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
                     </td>
                     <td>
                       {p.submitted ? (
-                        <span className="pill pill--active">
-                          <Icon name="check" size={13} /> Submitted
+                        <span
+                          className="pill pill--active"
+                          title={
+                            p.auto_submitted
+                              ? 'Handed in automatically when the session ended'
+                              : undefined
+                          }
+                        >
+                          <Icon name="check" size={13} />{' '}
+                          {p.auto_submitted ? 'Time up' : 'Submitted'}
                         </span>
                       ) : p.seconds_since_seen < 90 ? (
                         <span className="status-live">

@@ -62,6 +62,7 @@ const doc = {
       last_name: 'Lovelace',
       submitted: true,
       submitted_at: '2026-01-01T10:00:00.000Z',
+      auto_submitted: false,
       answered: 2,
       question_count: 2,
       score: 2,

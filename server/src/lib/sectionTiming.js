@@ -50,6 +50,23 @@ function breakOverlap(fromMs, toMs, breaks, nowMs) {
   return total / 1000;
 }
 
+/**
+ * A seat's section_times with the open section visit folded in up to `now`
+ * (breaks excluded): what submitting stores, so the clock stops there.
+ */
+export function closeOpenVisit(p, now, breaks) {
+  let times;
+  try {
+    times = JSON.parse(p.section_times || '{}');
+  } catch {
+    times = {};
+  }
+  if (!times || typeof times !== 'object' || Array.isArray(times)) times = {};
+  const key = String(p.current_section);
+  times[key] = (Number(times[key]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaks);
+  return times;
+}
+
 /** Whole seconds between two timestamps, excluding time spent on breaks. */
 export function activeSecondsBetween(from, to = nowIso(), breaks = []) {
   const a = parseUtc(from);

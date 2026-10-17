@@ -433,7 +433,10 @@ export default function SessionMonitor() {
 
   const terminate = () =>
     act((t) => api.terminateSession(t, id), {
-      confirmText: 'End this session now? All participant access will be revoked immediately.',
+      confirmText:
+        data?.kind === 'exam'
+          ? 'End this session now? All participant access will be revoked immediately, and every exam not yet submitted is handed in as it stands.'
+          : 'End this session now? All participant access will be revoked immediately.',
     });
 
   const extend = () => act((t) => api.extendSession(t, id, 30));

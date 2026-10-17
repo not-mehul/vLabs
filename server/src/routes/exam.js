@@ -8,7 +8,12 @@ import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
 import { seatExam } from '../lib/examSeat.js';
 import { injectImages } from '../lib/templating.js';
-import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
+import {
+  breaksOf,
+  currentBreak,
+  activeSecondsBetween,
+  closeOpenVisit,
+} from '../lib/sectionTiming.js';
 import {
   QUESTION_TYPES,
   listQuestions,
@@ -91,14 +96,6 @@ const parseObject = (json) => {
 
 function touch(id, now) {
   q.touch.run(now, id, new Date(Date.parse(now) - TOUCH_EVERY_MS).toISOString());
-}
-
-/** Fold the open section visit into section_times (breaks excluded). */
-function closeOpenVisit(p, now, breaks) {
-  const times = parseObject(p.section_times);
-  const key = String(p.current_section);
-  times[key] = (Number(times[key]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaks);
-  return times;
 }
 
 /**

@@ -182,6 +182,7 @@ export function examResultsToCsv(doc) {
     'last_name',
     'submitted',
     'submitted_at',
+    'auto_submitted',
     'answered',
     'question_count',
     'score',

@@ -1152,3 +1152,63 @@ test('the exam lists the sections a seat has opened (an info-only section is not
   await go(1);
   assert.deepEqual((await exam()).data.visited_sections, [0, 1, 2]);
 });
+
+test('ending an exam session hands in every open exam; the expiry sweep does the same', async () => {
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Time up',
+      content: [{ title: 'Q', items: [{ type: 'truefalse', prompt: 'True?', correct: true }] }],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const launch = async () => {
+    const sess = await call('/api/sessions', {
+      method: 'POST',
+      token,
+      body: { template_id: tpl.data.id },
+    });
+    const seat = async (first) =>
+      (
+        await call('/api/participant/join', {
+          method: 'POST',
+          body: { room_code: sess.data.room_code, first_name: first, last_name: 'Late' },
+        })
+      ).data.token;
+    return { id: sess.data.id, a: await seat('Ann'), b: await seat('Ben') };
+  };
+
+  // Ended by the instructor: Ann handed in herself, Ben is collected as he stands.
+  const one = await launch();
+  await call('/api/participant/exam/answer', {
+    method: 'PUT',
+    token: one.b,
+    body: { key: '0.0', value: true },
+  });
+  await call('/api/participant/exam/submit', { method: 'POST', token: one.a });
+  const ended = await call(`/api/sessions/${one.id}/terminate`, { method: 'POST', token });
+  assert.equal(ended.status, 200);
+  assert.equal(ended.data.auto_submitted, 1);
+  const d = await call(`/api/sessions/${one.id}`, { token });
+  const by = (first) => d.data.participants.find((p) => p.first_name === first);
+  assert.equal(d.data.submitted_count, 2);
+  assert.equal(by('Ann').auto_submitted, false);
+  assert.equal(by('Ben').submitted, true);
+  assert.equal(by('Ben').auto_submitted, true);
+  assert.equal(by('Ben').score, 1, 'answers are kept');
+  assert.equal(by('Ben').submitted_at, d.data.ended_at);
+  const exported = await call(`/api/sessions/${one.id}/export`, { token });
+  assert.equal(exported.data.participants.find((p) => p.first_name === 'Ben').auto_submitted, true);
+
+  // Ran out of time and was swept: handed in at the expiry time.
+  const two = await launch();
+  const expiredAt = new Date(Date.now() - 2 * 3600_000).toISOString();
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiredAt, two.id);
+  const { sweepExpiredSessions } = await import('../src/lib/sessionLifecycle.js');
+  assert.ok(sweepExpiredSessions() >= 1);
+  const swept = await call(`/api/sessions/${two.id}`, { token });
+  assert.equal(swept.data.submitted_count, 2);
+  assert.ok(swept.data.participants.every((p) => p.auto_submitted && p.submitted_at === expiredAt));
+});

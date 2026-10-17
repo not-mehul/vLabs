@@ -48,7 +48,11 @@ import {
   isValidMarkPoints,
 } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
-import { sweepExpiredSessions, snapshotTemplateIntoSession } from '../lib/sessionLifecycle.js';
+import {
+  sweepExpiredSessions,
+  snapshotTemplateIntoSession,
+  collectExamSubmissions,
+} from '../lib/sessionLifecycle.js';
 import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
 import {
   MAX_SEAT_NUMBER,
@@ -117,7 +121,7 @@ const q = {
   // Reopening restarts the section clock now (time while submitted doesn't count).
   reopenExam: db.prepare(
     `UPDATE participants SET submitted_at = NULL, completed_at = NULL, finished_at = NULL,
-            section_entered_at = ? WHERE id = ?`,
+            auto_submitted = 0, section_entered_at = ? WHERE id = ?`,
   ),
 };
 
@@ -913,9 +917,14 @@ router.post('/:id/terminate', (req, res) => {
     running.end = now;
     q.setBreaks.run(JSON.stringify(breaks), row.id);
   }
-  q.terminate.run(now, row.id);
+  const collected = db.transaction(() => {
+    q.terminate.run(now, row.id);
+    return isExam(row)
+      ? collectExamSubmissions({ ...row, breaks: JSON.stringify(breaks) }, now)
+      : 0;
+  })();
   log.info('session.terminated', { session: row.id, instructor: req.instructor.id });
-  res.json({ id: row.id, status: 'ended' });
+  res.json({ id: row.id, status: 'ended', auto_submitted: collected });
 });
 
 /**
@@ -1187,6 +1196,7 @@ function examExport(row) {
       name: v.name,
       submitted: v.submitted,
       submitted_at: v.submitted_at,
+      auto_submitted: v.auto_submitted,
       answered: v.answered,
       question_count: v.question_count,
       score: v.score,
