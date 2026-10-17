@@ -77,9 +77,10 @@ try {
         process.exit(1);
       }
       const { password, generated } = pickPassword();
-      db.prepare(
-        'INSERT INTO instructors (username, password_hash, password_changed_at) VALUES (?, ?, NULL)',
-      ).run(username, bcrypt.hashSync(password, 10));
+      db.prepare('INSERT INTO instructors (username, password_hash, password_changed_at) VALUES (?, ?, NULL)').run(
+        username,
+        bcrypt.hashSync(password, 10),
+      );
       console.log(`Created instructor "${username}".`);
       if (generated) console.log(`Temporary password (shown once): ${password}`);
       console.log('Ask them to change it from Account → Change password.');
