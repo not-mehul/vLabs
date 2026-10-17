@@ -93,6 +93,7 @@ import {
   LIMITS,
   normaliseMinutes,
   optionalFlag,
+  withItemId,
   BUILTIN_PLACEHOLDERS,
   BUILTIN_IDENTIFIERS,
   PLACEHOLDER_RE,
@@ -376,6 +377,10 @@ export function normaliseQuestion(raw) {
 /** Normalise one item (a step or a question) into canonical shape. Never throws. */
 export function normaliseItem(raw) {
   const it = raw && typeof raw === 'object' ? raw : {};
+  return withItemId(normaliseItemFields(it), it.id);
+}
+
+function normaliseItemFields(it) {
   if (it.type !== 'info' && it.type !== 'checklist') return normaliseQuestion(it);
   const step = {
     type: it.type,
@@ -431,20 +436,26 @@ function normaliseSection(raw) {
   const s = raw && typeof raw === 'object' ? raw : {};
   const title = str(s.title, EXAM_LIMITS.sectionTitle);
   if (isSubmitSection(s)) {
-    return {
-      type: 'submit',
-      title,
-      minutes: null,
-      body: str(s.body, EXAM_LIMITS.body),
-      review: toBool(s.review) !== false,
-    };
+    return withItemId(
+      {
+        type: 'submit',
+        title,
+        minutes: null,
+        body: str(s.body, EXAM_LIMITS.body),
+        review: toBool(s.review) !== false,
+      },
+      s.id,
+    );
   }
-  return {
-    title,
-    minutes: normaliseMinutes(s.minutes),
-    optional: optionalFlag(s.optional) === true,
-    items: sectionItems(s).slice(0, EXAM_LIMITS.itemsPerSection).map(normaliseItem),
-  };
+  return withItemId(
+    {
+      title,
+      minutes: normaliseMinutes(s.minutes),
+      optional: optionalFlag(s.optional) === true,
+      items: sectionItems(s).slice(0, EXAM_LIMITS.itemsPerSection).map(normaliseItem),
+    },
+    s.id,
+  );
 }
 
 /**

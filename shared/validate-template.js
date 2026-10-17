@@ -7,6 +7,7 @@ import {
   findMissingImages,
   compileMask,
   optionalFlag,
+  assignItemIds,
 } from './template-schema.js';
 import { resolveVariables, RESERVED_NAMES, FUNCTION_NAMES } from './templating.js';
 
@@ -112,7 +113,11 @@ export function validateTemplatePayload(payload, opts = {}) {
 
   const captures = new Map(); // name -> where first captured
   const content = tpl.content.map((section, si) => {
-    const clean = { title: section.title.trim(), steps: [] };
+    const clean = {
+      ...(section.id ? { id: section.id } : {}),
+      title: section.title.trim(),
+      steps: [],
+    };
     // Storage shape: `minutes` only when set (keeps older consumers unaffected).
     if (section.minutes) clean.minutes = section.minutes;
     if (section.optional) clean.optional = true;
@@ -143,7 +148,7 @@ export function validateTemplatePayload(payload, opts = {}) {
   }
 
   if (errors.length) return fail(errors);
-  return { title, description, content, variables };
+  return { title, description, content: assignItemIds(content, (s) => s.steps), variables };
 }
 
 /**
@@ -201,6 +206,7 @@ export function cleanVariables(list, errors) {
 function toStorageStep(s, sectionIndex, stepIndex, errors, variableNames, captures) {
   const at = `Section ${sectionIndex + 1} · step ${stepIndex + 1}`;
   const step = {
+    ...(s.id ? { id: s.id } : {}),
     type: s.type,
     title: s.title.trim(),
     body: s.body,

@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import config from '../config.js';
 import { log } from './logger.js';
 import { breaksOf, closeOpenVisit } from './sectionTiming.js';
+import { contentRemap, remapParticipant, remapEventKey } from './contentRemap.js';
 
 const q = {
   expired: db.prepare(
@@ -20,6 +21,20 @@ const q = {
         SET content = ?, variables = ?, template_version = ?, template_title = ?
       WHERE id = ?`,
   ),
+  session: db.prepare('SELECT id, kind, content, template_version FROM sessions WHERE id = ?'),
+  seats: db.prepare('SELECT * FROM participants WHERE session_id = ?'),
+  moveSeat: db.prepare(
+    `UPDATE participants
+        SET completed_checkpoints = ?, hints_taken = ?, revealed_solutions = ?,
+            checkpoint_log = ?, answers = ?, grades = ?, section_times = ?,
+            current_section = ?, max_section = ?
+      WHERE id = ?`,
+  ),
+  events: db.prepare(
+    `SELECT e.id, e.question_key FROM exam_answer_events e
+       JOIN participants p ON p.id = e.participant_id WHERE p.session_id = ?`,
+  ),
+  moveEvent: db.prepare('UPDATE exam_answer_events SET question_key = ? WHERE id = ?'),
   clampParticipants: db.prepare(
     `UPDATE participants
         SET current_section = MIN(current_section, ?),
@@ -74,9 +89,10 @@ export function collectExamSubmissions(session, at) {
 /**
  * Copy the CURRENT master template (title/content/variables/version) into a
  * session. Used at launch and by the instructor's "push latest version".
- * Participant progress keys (section.step) are recomputed against the new
- * content on their next request; section pointers are clamped so nobody is
- * left pointing past the end of a shorter manual.
+ * On a push, every participant's progress, answers, marks and timings move
+ * with their sections and items (matched by stable id, lib/contentRemap.js),
+ * so reordering, inserting or removing never misfiles anyone's work; section
+ * pointers are clamped so nobody is left past the end of a shorter manual.
  *
  * @returns {{version:number, section_count:number}}
  */
@@ -89,7 +105,34 @@ export function snapshotTemplateIntoSession(sessionId, templateId) {
   }
   const sections = JSON.parse(t.content);
   const lastIndex = Math.max(sections.length - 1, 0);
+  const before = q.session.get(sessionId);
   const tx = db.transaction(() => {
+    const remap = before
+      ? contentRemap(JSON.parse(before.content || '[]'), sections, before.kind || 'lab')
+      : null;
+    if (remap) {
+      for (const p of q.seats.all(sessionId)) {
+        const m = remapParticipant(p, remap);
+        q.moveSeat.run(
+          m.completed_checkpoints,
+          m.hints_taken,
+          m.revealed_solutions,
+          m.checkpoint_log,
+          m.answers,
+          m.grades,
+          m.section_times,
+          m.current_section,
+          m.max_section,
+          p.id,
+        );
+      }
+      if (before.kind === 'exam') {
+        for (const e of q.events.all(sessionId)) {
+          const key = remapEventKey(remap, e.question_key, before.template_version);
+          if (key !== e.question_key) q.moveEvent.run(key, e.id);
+        }
+      }
+    }
     q.push.run(t.content, t.variables, t.version, t.title, sessionId);
     q.clampParticipants.run(lastIndex, lastIndex, sessionId);
   });

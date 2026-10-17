@@ -1287,3 +1287,86 @@ test('day two of a lab takes its seats from day one; Change seat works in labs t
   assert.equal(detail.data.lab_seat, null);
   assert.equal(detail.data.seat_number, 2);
 });
+
+test('pushing a reordered exam moves answers and marks with their questions', async () => {
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Reorder me',
+      content: [
+        {
+          title: 'Q',
+          items: [
+            { type: 'truefalse', prompt: 'First?', correct: true },
+            { type: 'long', prompt: 'Explain', points: 4 },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const [sec] = tpl.data.content;
+  assert.ok(sec.id && sec.items.every((it) => it.id), 'ids given on save');
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.data.id },
+  });
+  const me = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Ro', last_name: 'Order' },
+  });
+  const t = me.data.token;
+  const answer = (key, value) =>
+    call('/api/participant/exam/answer', { method: 'PUT', token: t, body: { key, value } });
+  await answer('0.0', true);
+  await answer('0.1', 'Because');
+  const pid = (await call(`/api/sessions/${sess.data.id}`, { token })).data.participants[0].id;
+  await call(`/api/sessions/${sess.data.id}/participants/${pid}/marks/0.1`, {
+    method: 'PUT',
+    token,
+    body: { points: 3, comment: 'Good' },
+  });
+
+  // New question first, the two old ones swapped.
+  const updated = await call(`/api/templates/${tpl.data.id}`, {
+    method: 'PUT',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Reorder me',
+      content: [
+        {
+          ...sec,
+          items: [
+            { type: 'single', prompt: 'New?', options: ['a', 'b'], correct: 0 },
+            sec.items[1],
+            sec.items[0],
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(updated.status, 200, JSON.stringify(updated.data));
+  const pushed = await call(`/api/sessions/${sess.data.id}/push-template`, {
+    method: 'POST',
+    token,
+  });
+  assert.equal(pushed.status, 200);
+
+  const exam = (await call('/api/participant/exam', { token: t })).data;
+  assert.deepEqual(exam.answers, { 0.1: 'Because', 0.2: true });
+  const detail = await call(`/api/sessions/${sess.data.id}/participants/${pid}`, { token });
+  const byKey = Object.fromEntries(detail.data.questions.map((x) => [x.key, x]));
+  assert.equal(byKey['0.0'].answered, false, 'the new question starts unanswered');
+  assert.equal(byKey['0.1'].points_awarded, 3, 'the mark moved with its answer');
+  assert.equal(byKey['0.1'].comment, 'Good');
+  assert.equal(byKey['0.2'].correct, true);
+  assert.deepEqual(
+    byKey['0.1'].history.map((h) => h.response),
+    ['Because'],
+    'answer history moved too',
+  );
+});

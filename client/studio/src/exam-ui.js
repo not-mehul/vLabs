@@ -590,6 +590,7 @@ function examHandleClick(action, target, sIdx) {
     if (items.length >= EXAM_LIMITS.itemsPerSection) return;
     const copy = JSON.parse(JSON.stringify(it));
     delete copy.capture; // a saved name must stay unique
+    delete copy.id; // a copy gets its own id when saved
     items.splice(ii + 1, 0, copy);
     examCommit();
   } else if (action === 'exam-move-item-up' || action === 'exam-move-item-down') {

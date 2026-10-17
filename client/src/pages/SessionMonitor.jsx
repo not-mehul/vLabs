@@ -467,12 +467,11 @@ export default function SessionMonitor() {
       confirmText:
         `Push template v${data.latest_template_version} to this live session?\n\n` +
         (data.kind === 'exam'
-          ? 'Participants will see the updated exam within a few seconds. Saved answers are ' +
-            'kept by question position, so only push corrections that do not add, remove or ' +
-            'reorder questions.'
-          : 'Participants will see the updated manual within a few seconds. Progress is kept, ' +
-            'but if sections or checkpoints were added, removed or reordered, some participants ' +
-            'may move forwards or backwards to match the new structure.'),
+          ? 'Participants will see the updated exam within a few seconds. Answers and marks move ' +
+            'with their questions, wherever they now are; answers to removed questions are dropped.'
+          : 'Participants will see the updated manual within a few seconds. Progress moves with ' +
+            'its sections and checkpoints, wherever they now are; progress on removed ones is ' +
+            'dropped, so some participants may move back.'),
       okMessage: `Session updated to template v${data.latest_template_version}.`,
     });
 

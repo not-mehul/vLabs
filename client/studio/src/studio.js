@@ -1037,6 +1037,9 @@ function duplicateSection(sIdx) {
   if (isExamMode() && examIsSubmit(templateData.content[sIdx])) return;
   const clone = JSON.parse(JSON.stringify(templateData.content[sIdx]));
   clone.title += " (Copy)";
+  // A copy is new: it gets its own ids when saved (vLabs matches by id on push).
+  delete clone.id;
+  (clone.steps || clone.items || []).forEach(it => { delete it.id; });
   templateData.content.splice(sIdx + 1, 0, clone);
   pushHistorySnapshot(true);
   renderBuilder();
@@ -1045,6 +1048,7 @@ function duplicateSection(sIdx) {
 function duplicateStep(sIdx, stepIdx) {
   const clone = JSON.parse(JSON.stringify(templateData.content[sIdx].steps[stepIdx]));
   clone.title += " (Copy)";
+  delete clone.id; // a copy gets its own id when saved
   templateData.content[sIdx].steps.splice(stepIdx + 1, 0, clone);
   pushHistorySnapshot(true);
   renderBuilder();
