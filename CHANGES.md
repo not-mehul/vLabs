@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.14.1). The first section is the original code
+Newest entry at the bottom (1.15.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -831,6 +831,42 @@ sessions are unchanged.
 - **Admin layout:** **Your password** and **Add an instructor** sit side
   by side at the same height, and the instructor list runs full width below
   them. Its password and added columns now use the same text style.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration.
+
+## 1.15.0 — exam progress, optional sections, unlock a checkpoint, admin account
+
+- **Exams track progress like labs.** The exam monitor gains a **Progress**
+  column and an **Avg progress** figure. A section counts as completed once
+  the participant has opened it, answered every question in it and ticked
+  every checklist item. Before, a section only counted once they moved past
+  it, and **Answered** (questions only) was the closest thing to progress.
+  The submit section is no longer counted in the **Section** column (it read
+  *3 / 3* on the last questions section of a two-section exam; it now reads
+  *2 / 2*, and *Submit* on the submit section). Submitting completes only
+  the submit section, and clearing an answer makes its section incomplete
+  again (nothing locks).
+- **Fixed: optional sections showed as completed.** Once a participant
+  finished a lab or submitted an exam, the **Sections** panel and section
+  details counted them as having completed every section, including
+  optional or wrap-up sections they never opened. An optional section now
+  counts only once that participant has opened it and cleared its
+  checkpoints. Exam sections whose title marks them optional are left out
+  of progress, as in labs.
+- **Unlock a checkpoint for a stuck participant** (labs). In the
+  participant panel, the checkpoint they have reached has **Unlock for this
+  participant**. It is marked as cleared by you (*unlocked by instructor*),
+  their page moves on within about 15 seconds, and clearing the last one
+  completes the lab as usual. A pattern checkpoint that saves the answer as
+  a variable asks you for the value, since later steps show it.
+  Participants can never skip a checkpoint themselves.
+- **Admin account.** Only the bootstrap `instructor` account (or the oldest
+  account if it has been removed) can reset another instructor's password
+  or remove an account. Everyone can still add accounts and change their
+  own password. The Admin page tags the admin and hides those buttons from
+  everyone else.
 
 ### Upgrading
 

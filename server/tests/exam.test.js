@@ -488,7 +488,20 @@ test('exam sections are timed like lab sections; submitting stops the clock', as
     body: { section_index: 1 },
   });
   assert.equal(nav.status, 200);
-  // Clearing an earlier answer never re-locks a section already opened.
+  // A section is complete once opened and fully answered; the submit section
+  // and unfinished sections are not.
+  const done = await call(`/api/sessions/${sessionId}`, { token });
+  const tessDone = done.data.participants.find((p) => p.name === 'Tess Timer');
+  assert.deepEqual(tessDone.sections_done, [true, false, false]);
+  assert.equal(tessDone.counting_sections, 2, 'the submit section does not count');
+  assert.equal(tessDone.completed_sections, 1);
+  assert.equal(tessDone.progress_pct, 50);
+  assert.equal(done.data.part_count, 2);
+  assert.ok(done.data.section_distribution[0].completed_count >= 1);
+  const drawer = await call(`/api/sessions/${sessionId}/sections/0`, { token });
+  assert.ok(drawer.data.completed.some((p) => p.name === 'Tess Timer'));
+  // Clearing an earlier answer never re-locks a section already opened, but
+  // the section is no longer complete.
   await put('0.0', null);
   const view = await call('/api/participant/exam', { token: t });
   assert.equal(view.data.unlocked_section, 2);
@@ -499,12 +512,15 @@ test('exam sections are timed like lab sections; submitting stops the clock', as
   const detail = await call(`/api/sessions/${sessionId}`, { token });
   const tess = detail.data.participants.find((p) => p.name === 'Tess Timer');
   assert.equal(tess.furthest_section, 1);
-  assert.deepEqual(tess.sections_done, [true, false, false]);
-  assert.equal(detail.data.section_distribution[0].completed_count >= 1, true);
+  assert.deepEqual(tess.sections_done, [false, false, false]);
+  assert.equal(tess.progress_pct, 0);
 
   await call('/api/participant/exam/submit', { method: 'POST', token: t });
   const after = await call(`/api/sessions/${sessionId}/participants/${tess.id}`, { token });
   assert.equal(after.data.submitted, true);
+  // Submitting completes the submit section only, not the unfinished ones.
+  assert.deepEqual(after.data.sections_done, [false, false, true]);
+  assert.equal(after.data.progress_pct, 0);
   assert.equal(after.data.time_status, 'ok');
   assert.ok(Array.isArray(after.data.section_times));
 });
@@ -519,7 +535,6 @@ test('section drawer for exams: timing plus that section’s question results', 
     ['0.0', '0.1', '0.2'],
   );
   assert.ok(d.data.completed_count >= 1);
-  assert.ok(d.data.completed.some((p) => p.name === 'Tess Timer'));
   assert.equal(d.data.questions[0].expected !== undefined, true);
   const second = await call(`/api/sessions/${sessionId}/sections/1`, { token });
   assert.ok(second.data.questions.every((q) => q.section_index === 1));

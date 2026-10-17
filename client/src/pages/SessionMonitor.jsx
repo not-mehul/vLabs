@@ -65,6 +65,7 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +86,7 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [call, sessionId, participantId]);
+  }, [call, sessionId, participantId, reload]);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -99,6 +100,28 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
   }, [onClose]);
 
   const maxSectionSeconds = d ? Math.max(1, ...d.section_times.map((s) => s.seconds)) : 1;
+
+  async function unlock(c) {
+    let value = null;
+    if (c.capture && c.mode === 'pattern') {
+      value = window.prompt(
+        `This checkpoint saves the answer as {{ ${c.capture} }} for later steps.\n\nEnter the value for ${d?.name || 'this participant'}:`,
+      );
+      if (value === null) return;
+    } else if (
+      !window.confirm(
+        `Unlock "${c.step_title}" for ${d?.name || 'this participant'}?\n\nThe checkpoint is marked as cleared by you and the next steps open for them.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await call((t) => api.unlockCheckpoint(t, sessionId, participantId, c.key, value));
+      setReload((n) => n + 1);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function remove() {
     if (
@@ -263,7 +286,19 @@ function ParticipantDrawer({ sessionId, participantId, onClose, onRemoved }) {
                           {c.cleared_at && (
                             <span className="muted small"> · {formatDateTime(c.cleared_at)}</span>
                           )}
+                          {c.cleared_by && (
+                            <span className="muted small"> · unlocked by {c.cleared_by}</span>
+                          )}
                         </p>
+                      )}
+                      {c.can_unlock && !d.complete && (
+                        <button
+                          type="button"
+                          className="btn btn--xs btn--ghost"
+                          onClick={() => unlock(c)}
+                        >
+                          <Icon name="unlock" size={13} /> Unlock for this participant
+                        </button>
                       )}
                       {c.wrong_attempts.length > 0 && (
                         <ul className="cplist__wrong">
@@ -584,6 +619,10 @@ export default function SessionMonitor() {
                 <span className="muted">/{data.participants.length}</span>
               </span>
               <span className="stat__label">Submitted</span>
+            </div>
+            <div className="stat">
+              <span className="stat__num">{avg('progress_pct')}%</span>
+              <span className="stat__label">Avg progress</span>
             </div>
             <div className="stat" title="Provisional while answers still need marking">
               <span className="stat__num">{avg('score_pct')}%</span>

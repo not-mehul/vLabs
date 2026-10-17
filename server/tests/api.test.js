@@ -1100,3 +1100,74 @@ test('the portal is told the current join addresses (follows the Pi across netwo
   assert.deepEqual(r.data.urls, ['https://vlabs.local', 'https://172.16.4.9']);
   fs.rmSync(tmpAddresses, { force: true });
 });
+
+test('an instructor can unlock a stuck checkpoint; a skipped optional section is not completed', async () => {
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  const sid = s.data.id;
+  const joined = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: s.data.room_code, first_name: 'Sam', last_name: 'Stuck' },
+  });
+  const t = joined.data.token;
+  const pid = (await call(`/api/sessions/${sid}`, { token: instructorToken })).data.participants[0]
+    .id;
+  const unlock = (key, body, token = instructorToken) =>
+    call(`/api/sessions/${sid}/participants/${pid}/checkpoints/${key}/unlock`, {
+      method: 'POST',
+      token,
+      body,
+    });
+
+  // Instructor side only: a participant token is not an instructor token.
+  assert.equal((await unlock('0.3', { value: 'abcd1234wxyz' }, t)).status, 401);
+  // Only the checkpoint the participant has reached.
+  assert.equal((await unlock('1.1', {})).status, 409);
+  assert.equal((await unlock('9.9', {})).status, 404);
+  // A pattern checkpoint that saves the answer needs a value in its format.
+  const missing = await unlock('0.3', {});
+  assert.equal(missing.status, 400);
+  assert.equal(missing.data.code, 'VALUE_REQUIRED');
+
+  const st0 = await call('/api/participant/status', { token: t });
+  assert.equal(st0.data.checkpoints_cleared, 0);
+  assert.equal((await unlock('0.3', { value: 'abcd1234wxyz' })).status, 200);
+  const st1 = await call('/api/participant/status', { token: t });
+  assert.equal(st1.data.checkpoints_cleared, 1, 'the participant page sees the change');
+
+  const pd = await call(`/api/sessions/${sid}/participants/${pid}`, { token: instructorToken });
+  const serial = pd.data.checkpoints.find((c) => c.key === '0.3');
+  assert.equal(serial.cleared, true);
+  assert.equal(serial.cleared_by, 'instructor');
+  assert.equal(pd.data.captured.SERIAL, 'ABCD.1234.WXYZ');
+  // Section 2 is open now, so its checkpoint is the next one to unlock.
+  assert.equal(pd.data.checkpoints.find((c) => c.key === '1.1').can_unlock, true);
+
+  const moved = await call('/api/participant/progress', {
+    method: 'POST',
+    token: t,
+    body: { section_index: 1 },
+  });
+  assert.equal(moved.status, 200);
+  assert.equal((await unlock('1.1', {})).status, 200);
+  assert.equal((await unlock('1.1', {})).data.already, true);
+
+  // Finishing the lab does not complete the wrap-up section they never opened.
+  const d = await call(`/api/sessions/${sid}`, { token: instructorToken });
+  const row = d.data.participants[0];
+  assert.equal(row.complete, true);
+  assert.deepEqual(row.sections_done, [true, true, false]);
+  assert.equal(d.data.section_distribution[2].seats_past, 0);
+  const wrap = await call(`/api/sessions/${sid}/sections/2`, { token: instructorToken });
+  assert.equal(wrap.data.completed_count, 0);
+  assert.equal(wrap.data.not_reached_count, 1);
+
+  // Opening it (it has no checkpoints) completes it.
+  await call('/api/participant/progress', { method: 'POST', token: t, body: { section_index: 2 } });
+  const d2 = await call(`/api/sessions/${sid}`, { token: instructorToken });
+  assert.deepEqual(d2.data.participants[0].sections_done, [true, true, true]);
+  assert.equal(d2.data.section_distribution[2].seats_past, 1);
+});
