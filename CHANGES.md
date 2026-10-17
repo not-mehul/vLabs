@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.16.0). The first section is the original code
+Newest entry at the bottom (1.17.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -952,3 +952,36 @@ builds the Studio; CI checks that the committed offline file is current.
 
 `deploy/pi/update.sh` as usual. Migration 9 adds `participants.auto_submitted`
 (runs on start).
+
+## 1.17.0 — optional flag, shared monitors, stable ids
+
+- **Optional is a box, not a word in the title.** Lab and exam sections have
+  an **Optional** checkbox in the Studio (Markdown `> optional: true` under
+  the `#` heading; JSON `"optional": true`). An optional section is left out
+  of progress and isn't needed to finish, as before. Before, a title
+  containing *wrap up*, *bonus*, *optional*, *stretch* or *extra credit*
+  made a section optional, so renaming one could quietly change progress.
+  Upgrading ticks the box on every section those words used to mark, in
+  templates and running sessions, so nothing changes on day one; after
+  that only the box counts.
+- **Watch a colleague's session.** The Sessions page lists *Other
+  instructors' sessions*, and any instructor can open their monitor, read
+  only: no ending, extending, breaks, pushes, marking, seat changes or
+  unlocks (the server answers `403 NOT_SESSION_OWNER`). A banner says whose
+  session it is.
+- **Push latest version moves work with it.** Every section, step and exam
+  item now carries a hidden stable id, given on save and kept by the Studio
+  (copies get new ones). When you push an update into a running session,
+  each participant's cleared checkpoints, hints, solutions, answers, marks,
+  comments, answer history and section times move to wherever their
+  section or item now is. Before, they were matched by position, so adding
+  or reordering questions in a live exam misfiled answers. Work on deleted
+  items is dropped. Ids aren't written to Markdown: a template re-imported
+  from Markdown gets new ids and the next push matches by position, as
+  before.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. Migrations 10 (optional flags from titles)
+and 11 (ids on every template, and on sessions running a template's
+current version) run on start.

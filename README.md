@@ -314,9 +314,10 @@ so:
 - The session monitor shows _"Template v3 is available — this session is
   running v2"_ with a **Push latest version** button. Pushing copies the new
   version into the session; participants' status poll notices the version
-  change and reloads the manual within ~15 s. Cleared checkpoints are
-  re-evaluated against the new structure (the UI warns that reordering can move
-  people forwards or backwards), and section pointers are clamped to the new
+  change and reloads the manual within ~15 s. Progress, answers, marks and
+  section times move with their sections and items, matched by the stable
+  ids every saved template carries (`server/src/lib/contentRemap.js`); work on
+  removed items is dropped, and section pointers are clamped to the new
   length.
 - Exports and analytics of ended sessions keep working even if the template is
   later archived or permanently deleted.
@@ -492,6 +493,10 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 
 ### Instructor (Bearer instructor token)
 
+Templates are shared by every instructor. Any instructor can **read** any
+session (its monitor, participants, sections, questions and export); only the
+instructor who launched it can **change** it (`403 NOT_SESSION_OWNER`).
+
 | Method   | Path                                         | Description                                                                                                                                                                                                                                                                                               |
 | -------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/auth/me`                                   | Current instructor                                                                                                                                                                                                                                                                                        |
@@ -511,7 +516,7 @@ All routes are under `/api`. Errors are `{ error, code?, details? }`.
 | `POST`   | `/templates/:id/duplicate`                   | `{ title? }` → a new template (v1) with the same kind, content and variables, titled "… (copy)" by default |
 | `GET`    | `/templates/:id/audit`                       | Change history (newest first)                                                                                                                                                                                                                                                                             |
 | `POST`   | `/templates/:id/preview`                     | `{ seat_id, first_name?, last_name?, draft? }` → rendered manual for one seat (solutions inline; captures stood in by mask examples). Exams: `{ context, sections }` with tokens resolved for that seat; saved answers stand in as `[answer to …]`                                                        |
-| `GET`    | `/sessions`                                  | This instructor's sessions with `participant_count`, `template_version`, `update_available`                                                                                                                                                                                                               |
+| `GET`    | `/sessions`                                  | This instructor's sessions (`?scope=all`: everyone's, with `owner` and `can_manage`) with `participant_count`, `template_version`, `update_available`                                                                                                                                                                                                               |
 | `POST`   | `/sessions`                                  | `{ template_id, title?, duration_minutes?, seat_source_session_id? }` → session (snapshot taken; `409` if template archived). Default length: 480 min for a lab, 60 for an exam                                                                                                                                                    |
 | `GET`    | `/sessions/:id`                              | Detail + live analytics (`section_distribution` with `minutes` / `avg_seconds` / `completed_count` / `final`, `on_break`, per-participant `time_status` against the section's allocation, `participants[]` incl. `captured`, `capture_names`, `template_exists`, `template_archived`)                     |
 | `POST`   | `/sessions/:id/terminate`                    | End now; participant tokens rejected immediately. Exams: every exam not yet submitted is handed in as it stands (`auto_submitted` count in the response) |
