@@ -7,7 +7,7 @@ import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
 import { seatExam } from '../lib/examSeat.js';
-import { injectImages } from '../lib/templating.js';
+import { injectImages } from '../../../shared/templating.js';
 import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
 import {
   QUESTION_TYPES,

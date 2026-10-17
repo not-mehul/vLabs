@@ -55,7 +55,8 @@ export function createApp() {
           connectSrc: ["'self'"],
           objectSrc: ["'none'"],
           baseUri: ["'none'"],
-          frameAncestors: ["'none'"],
+          // 'self': the template editor frames vLabs Template Studio (/studio/).
+          frameAncestors: ["'self'"],
           formAction: ["'self'"],
           upgradeInsecureRequests: config.plainHttp ? null : [],
         },

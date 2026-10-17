@@ -1,16 +1,16 @@
-import { IMAGE_MD_RE, imageRefName, LIMITS } from '../../../shared/template-schema.js';
-import { minutesInvalid, cleanVariables } from './validateTemplate.js';
+import { IMAGE_MD_RE, imageRefName, LIMITS } from './template-schema.js';
+import { minutesInvalid, cleanVariables, utf8Bytes } from './validate-template.js';
 import {
   EXAM_LIMITS,
   normaliseExam,
   examErrors,
   sectionItems,
   sectionLayout,
-} from '../../../shared/exam-schema.js';
+} from './exam-schema.js';
 
 /**
  * Validate & normalise an instructor-authored EXAM payload (the counterpart of
- * validateTemplate.js for labs). Returns { kind, title, description, content,
+ * validate-template.js for labs). Returns { kind, title, description, content,
  * variables } in storage shape or throws a 400 listing every problem.
  *
  * @param {object} payload
@@ -22,7 +22,7 @@ export function validateExamPayload(payload, opts = {}) {
   const errors = [];
   let serialised = 0;
   try {
-    serialised = Buffer.byteLength(JSON.stringify(payload ?? null), 'utf8');
+    serialised = utf8Bytes(JSON.stringify(payload ?? null));
   } catch {
     errors.push('Exam payload is not serialisable');
   }

@@ -29,7 +29,7 @@ import {
   countSteps,
   injectVariables,
   stepHasCheckpoint,
-} from '../lib/templating.js';
+} from '../../../shared/templating.js';
 
 const router = Router();
 

@@ -11,7 +11,7 @@ import {
   parseJsonTemplate,
   templateToJson,
   SAMPLE_MARKDOWN,
-} from '../src/lib/templateFormat.js';
+} from '../../shared/template-format.js';
 import { normaliseTemplate, findUnknownPlaceholders } from '../../shared/template-schema.js';
 
 const FULL = normaliseTemplate({

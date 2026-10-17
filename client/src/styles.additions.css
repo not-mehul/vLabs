@@ -1784,3 +1784,39 @@ input.field__input--sm[type='number'] {
     right: auto;
   }
 }
+
+/* Template editor: vLabs Template Studio framed under the portal nav,
+   filling the rest of the viewport. */
+.portal--fill {
+  height: 100vh;
+  height: 100dvh;
+}
+.portal__main--fill {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+.portal__main--fill > .page-head {
+  margin-bottom: 0;
+}
+.studio-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.studio-head__status.is-dirty {
+  color: var(--warn);
+}
+.studio-frame {
+  flex: 1;
+  min-height: 420px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}

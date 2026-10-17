@@ -9,7 +9,7 @@ import {
   stepHasCheckpoint,
   checkpointMode,
   injectImages,
-} from '../lib/templating.js';
+} from '../../../shared/templating.js';
 import { imageUrlMap } from '../lib/images.js';
 import { labProgress } from '../lib/labProgress.js';
 import {

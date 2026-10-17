@@ -1,0 +1,729 @@
+<body class="h-full flex flex-col font-sans text-slate-800 dark:text-slate-100 antialiased bg-[#F8FAFC] dark:bg-surface-950 overflow-hidden transition-colors duration-150 selection:bg-brand-500/20 selection:text-brand-600 dark:selection:text-brand-300">
+
+  <!-- Top Navigation Header -->
+  <header class="h-13 py-2 border-b border-slate-200/80 dark:border-white/[0.07] bg-white/90 dark:bg-surface-900/90 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center space-x-2.5">
+      <!-- Sidebar Toggle Button -->
+      <button data-on-click="toggleSidebarCollapse()" id="sidebarCollapseBtn" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Toggle Sidebar">
+        <i class="ph ph-sidebar-simple text-base"></i>
+      </button>
+
+      <div class="flex items-center space-x-2">
+        <div class="w-7 h-7 rounded-lg bg-slate-900 dark:bg-brand-600 flex items-center justify-center text-white shadow-2xs">
+          <i class="ph-bold ph-cube text-sm"></i>
+        </div>
+        <div class="hidden sm:flex items-baseline space-x-1.5">
+          <span class="text-xs font-semibold tracking-tight text-slate-900 dark:text-white">vLabs</span>
+          <span class="text-xs font-normal text-slate-400 dark:text-slate-500">Studio</span>
+        </div>
+      </div>
+
+      <span class="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.06]">
+        %STUDIO_VERSION%
+      </span>
+
+      <div class="h-4 w-px bg-slate-200 dark:bg-white/[0.08] mx-1 hidden sm:block"></div>
+
+      <!-- Undo / Redo History Buttons -->
+      <div class="flex items-center bg-slate-100/80 dark:bg-surface-850 p-0.5 rounded-lg border border-slate-200/70 dark:border-white/[0.07]">
+        <button id="undoBtn" data-on-click="performUndo()" disabled class="p-1 rounded-md text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-surface-800 disabled:opacity-30 disabled:pointer-events-none transition" title="Undo (Ctrl+Z)">
+          <i class="ph ph-arrow-u-up-left"></i>
+        </button>
+        <button id="redoBtn" data-on-click="performRedo()" disabled class="p-1 rounded-md text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-surface-800 disabled:opacity-30 disabled:pointer-events-none transition" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">
+          <i class="ph ph-arrow-u-up-right"></i>
+        </button>
+      </div>
+
+      <!-- Auto-save Status Indicator -->
+      <div id="saveStatusIndicator" class="hidden md:flex items-center space-x-1.5 px-2 py-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span>Saved</span>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <!-- Global Search / Filter Input -->
+      <div class="relative w-36 sm:w-56">
+        <i class="ph ph-magnifying-glass absolute left-2.5 top-2 text-xs text-slate-400"></i>
+        <input type="text" id="globalStepSearch" placeholder="Filter steps, tokens..."
+          data-on-input="handleGlobalSearch(this.value)"
+          class="w-full text-xs pl-8 pr-7 py-1.5 bg-slate-100/70 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.07] rounded-lg text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:bg-white dark:focus:bg-surface-800 focus:border-brand-500 dark:focus:border-brand-500 transition">
+        <button id="clearSearchBtn" data-on-click="clearGlobalSearch()" class="hidden absolute right-2 top-2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+
+      <!-- New: blank lab or blank exam -->
+      <div class="relative" id="newDropdownContainer">
+        <button data-on-click="toggleNewMenu()" class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs" title="Start a new lab or exam">
+          <i class="ph ph-plus text-slate-500 dark:text-slate-400"></i>
+          <span class="hidden lg:inline">New</span>
+          <i class="ph ph-caret-down text-[10px] text-slate-400"></i>
+        </button>
+        <div id="newMenu" class="hidden absolute right-0 mt-1.5 w-56 bg-white dark:bg-surface-850 border border-slate-200/90 dark:border-white/[0.09] rounded-xl shadow-elevated py-1.5 z-50 text-xs">
+          <button data-on-click="promptNewBlankLab()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200">
+            <i class="ph ph-flask text-sm text-sky-500"></i>
+            <div><span class="block font-medium">New Lab</span><span class="text-[10px] text-slate-400">Steps, hints, checkpoints, variables</span></div>
+          </button>
+          <button data-on-click="promptNewBlankExam()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-700 dark:text-slate-200">
+            <i class="ph ph-exam text-sm text-violet-500"></i>
+            <div><span class="block font-medium">New Exam</span><span class="text-[10px] text-slate-400">Questions, steps and checklists</span></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Preset Selector Dropdown -->
+      <div class="relative" id="presetDropdownContainer">
+        <button data-on-click="togglePresetMenu()" class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs">
+          <i class="ph ph-book-open-text text-slate-500 dark:text-slate-400"></i>
+          <span class="hidden sm:inline">Examples</span>
+          <i class="ph ph-caret-down text-[10px] text-slate-400"></i>
+        </button>
+        <div id="presetMenu" class="hidden absolute right-0 mt-1.5 w-64 bg-white dark:bg-surface-850 border border-slate-200/90 dark:border-white/[0.09] rounded-xl shadow-elevated py-1.5 z-50 text-xs">
+          <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Workspace
+          </div>
+          <button data-on-click="promptNewBlankLab()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 border-b border-slate-100 dark:border-white/[0.06] text-slate-700 dark:text-slate-200">
+            <i class="ph ph-file-plus text-sm text-slate-400"></i>
+            <div>
+              <span class="block font-medium">Blank Lab Template</span>
+              <span class="text-[10px] text-slate-400">Reset workspace to clean starter</span>
+            </div>
+          </button>
+          <button data-on-click="promptNewBlankExam()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 border-b border-slate-100 dark:border-white/[0.06] text-slate-700 dark:text-slate-200">
+            <i class="ph ph-exam text-sm text-slate-400"></i>
+            <div>
+              <span class="block font-medium">Blank Exam</span>
+              <span class="text-[10px] text-slate-400">Start a new exam template</span>
+            </div>
+          </button>
+          <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Reference Presets (§17)
+          </div>
+          <button data-on-click="loadTemplatePreset('minimal')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">A. Minimal Skeleton</span>
+            <span class="text-[10px] text-slate-400">Exercises every core feature</span>
+          </button>
+          <button data-on-click="loadTemplatePreset('network')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">B. Network Bench Lab</span>
+            <span class="text-[10px] text-slate-400">Seat-derived IPs, VLANs & solutions</span>
+          </button>
+          <button data-on-click="loadTemplatePreset('device')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">C. Camera Provisioning</span>
+            <span class="text-[10px] text-slate-400">Pattern masks, serials & captures</span>
+          </button>
+          <button data-on-click="loadTemplatePreset('software')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">D. Developer Onboarding</span>
+            <span class="text-[10px] text-slate-400">Git branches, PRs & wildcard masks</span>
+          </button>
+          <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Exams (EXAM_GUIDE.md)
+          </div>
+          <button data-on-click="loadTemplatePreset('exam')" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex flex-col">
+            <span class="font-medium text-slate-800 dark:text-slate-200">E. Network Fundamentals Quiz</span>
+            <span class="text-[10px] text-slate-400">Every question type, timed sections</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Import Button -->
+      <button data-on-click="openImportModal()" class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-lg hover:bg-slate-50 dark:hover:bg-surface-800 transition shadow-2xs">
+        <i class="ph ph-upload-simple text-slate-500 dark:text-slate-400"></i>
+        <span class="hidden sm:inline">Import</span>
+      </button>
+
+      <!-- Export Dropdown -->
+      <div class="relative" id="exportDropdownContainer">
+        <button data-on-click="toggleExportMenu()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 rounded-lg transition shadow-2xs">
+          <i class="ph ph-download-simple"></i>
+          <span>Export</span>
+          <i class="ph ph-caret-down text-[10px] opacity-80"></i>
+        </button>
+        <div id="exportMenu" class="hidden absolute right-0 mt-1.5 w-56 bg-white dark:bg-surface-850 border border-slate-200/90 dark:border-white/[0.09] rounded-xl shadow-elevated py-1.5 z-50 text-xs">
+          <button data-on-click="exportAsZipPackage()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-800 dark:text-slate-100 font-medium">
+            <i class="ph ph-file-zip text-sm text-brand-600 dark:text-brand-400"></i>
+            <span>Package Archive (.zip)</span>
+          </button>
+          <button data-on-click="exportAsMarkdown()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-600 dark:text-slate-300">
+            <i class="ph ph-file-md text-sm text-slate-400"></i>
+            <span>Markdown File (.md)</span>
+          </button>
+          <button data-on-click="exportAsJson()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-600 dark:text-slate-300">
+            <i class="ph ph-brackets-curly text-sm text-slate-400"></i>
+            <span>Canonical JSON (.json)</span>
+          </button>
+          <div class="my-1 border-t border-slate-100 dark:border-white/[0.06]"></div>
+          <button data-on-click="copyMarkdownToClipboard()" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-white/[0.04] flex items-center space-x-2.5 text-slate-600 dark:text-slate-300">
+            <i class="ph ph-copy text-sm text-slate-400"></i>
+            <span>Copy Markdown</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="headerThemeDivider" class="h-4 w-px bg-slate-200 dark:bg-white/[0.08] mx-0.5 hidden sm:block"></div>
+
+      <!-- Direct Theme Toggle Button -->
+      <button data-on-click="toggleDarkMode()" id="headerThemeBtn" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition" title="Toggle Light/Dark Theme">
+        <i id="headerThemeIcon" class="ph ph-moon text-base"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Left Navigation & Workspace Sidebar -->
+    <aside id="mainSidebar" class="w-60 border-r border-slate-200/80 dark:border-white/[0.07] bg-white dark:bg-surface-900 flex flex-col shrink-0 transition-all duration-200 ease-in-out select-none">
+      <!-- Workspace Navigation Tabs -->
+      <div class="p-2.5 border-b border-slate-100 dark:border-white/[0.06] space-y-0.5">
+        <button data-on-click="switchView('builder')" id="nav-builder" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-white/[0.08] text-slate-900 dark:text-white transition">
+          <i class="ph ph-sliders-horizontal text-sm shrink-0 text-brand-600 dark:text-brand-400"></i>
+          <span class="sidebar-label">Content Builder</span>
+        </button>
+        <button data-on-click="switchView('variables')" id="nav-variables" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
+          <i class="ph ph-function text-sm shrink-0"></i>
+          <span class="sidebar-label">Variables & Formulas</span>
+          <span id="varCountBadge" class="sidebar-label ml-auto text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400">0</span>
+        </button>
+        <button data-on-click="switchView('dependencies')" id="nav-dependencies" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
+          <i class="ph ph-git-branch text-sm shrink-0"></i>
+          <span class="sidebar-label">Lineage Matrix</span>
+        </button>
+        <button data-on-click="switchView('images')" id="nav-images" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
+          <i class="ph ph-image text-sm shrink-0"></i>
+          <span class="sidebar-label">Image Library</span>
+          <span id="imgCountBadge" class="sidebar-label ml-auto text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400">0</span>
+        </button>
+        <button data-on-click="switchView('preview')" id="nav-preview" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
+          <i class="ph ph-eye text-sm shrink-0"></i>
+          <span class="sidebar-label">Participant Preview</span>
+        </button>
+        <button data-on-click="switchView('validate')" id="nav-validate" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition">
+          <i class="ph ph-check-circle text-sm shrink-0"></i>
+          <span class="sidebar-label">Validation Audit</span>
+          <span id="validationErrorBadge" class="sidebar-label ml-auto text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">0</span>
+        </button>
+      </div>
+
+      <!-- Quick Jump Outline -->
+      <div id="sidebarOutlineContainer" class="flex-1 overflow-y-auto p-3 flex flex-col">
+        <div class="flex items-center justify-between mb-2 px-1">
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Document Outline</span>
+          <span id="outlineStepCount" class="text-[10px] text-slate-400 dark:text-slate-500 font-mono">0 steps</span>
+        </div>
+        <div id="outlineSearchContainer" class="mb-2.5">
+          <input type="text" id="outlineQuickFilter" placeholder="Jump to step..." data-on-input="filterOutline(this.value)"
+            class="w-full text-[11px] px-2.5 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200/70 dark:border-white/[0.07] rounded-md focus:outline-none focus:border-brand-500 text-slate-800 dark:text-slate-200 placeholder:text-slate-400">
+        </div>
+        <div id="outlineList" class="space-y-0.5 text-xs flex-1 overflow-y-auto pr-1"></div>
+      </div>
+
+      <!-- Bottom Utility Bar -->
+      <div class="p-2.5 border-t border-slate-100 dark:border-white/[0.06] flex items-center gap-1.5">
+        <button id="tokensBtn" data-on-click="openTokenCheatsheet()" class="flex-1 flex items-center justify-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-surface-850 hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg transition" title="Placeholders & Captures Reference">
+          <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i>
+          <span class="sidebar-label">Tokens</span>
+        </button>
+        <button data-on-click="openSettingsModal()" class="p-1.5 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-surface-850 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg transition" title="AI & Studio Settings">
+          <i class="ph ph-gear text-sm"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Content Area -->
+    <main class="flex-1 flex flex-col overflow-y-auto bg-[#F8FAFC] dark:bg-surface-950" id="mainScrollContainer">
+
+      <!-- VIEW 1: Builder Canvas -->
+      <section id="view-builder" class="p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-6">
+        <!-- Lab Metadata Header Box -->
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-3">
+            <div class="flex items-center space-x-2">
+              <span id="kindBadge" class="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">Lab</span>
+              <span id="specKindLabel" class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Lab Specification</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <button data-on-click="toggleAllStepPreviews()" id="toggleAllPreviewsBtn" class="px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-md border border-slate-200/70 dark:border-white/[0.07] transition flex items-center gap-1">
+                <i class="ph ph-columns text-xs"></i>
+                <span>Split Previews</span>
+              </button>
+              <button data-on-click="toggleAllSections(true)" class="px-2 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-md transition" title="Collapse All Sections">
+                Collapse
+              </button>
+              <button data-on-click="toggleAllSections(false)" class="px-2 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-md transition" title="Expand All Sections">
+                Expand
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Title</label>
+                <div class="flex items-center space-x-2">
+                  <span id="titleCharCounter" class="text-[10px] font-mono text-slate-400 dark:text-slate-500">0 / 200</span>
+                  <button type="button" data-on-click="triggerAiPolish('templateTitle', 'title')" class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/[0.05] transition" title="Polish title with AI">
+                    <i class="ph ph-sparkle"></i>
+                    <span>Polish</span>
+                  </button>
+                </div>
+              </div>
+              <input type="text" id="templateTitle" placeholder="e.g. Switch & Host Addressing — Bench Lab"
+                class="w-full text-base font-semibold tracking-tight text-slate-900 dark:text-white bg-slate-50/70 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.07] rounded-lg px-3 py-2 focus:bg-white dark:focus:bg-surface-800 focus:border-brand-500 focus:outline-none placeholder:text-slate-400 transition"
+                data-on-input="onMetadataChanged()">
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Description</label>
+                <div class="flex items-center space-x-2">
+                  <span id="descCharCounter" class="text-[10px] font-mono text-slate-400 dark:text-slate-500">0 / 1000</span>
+                  <button type="button" data-on-click="triggerAiPolish('templateDescription', 'description')" class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/[0.05] transition" title="Polish description with AI">
+                    <i class="ph ph-sparkle"></i>
+                    <span>Polish</span>
+                  </button>
+                </div>
+              </div>
+              <textarea id="templateDescription" rows="2" placeholder="Concise summary of audience, duration, and seat capacity..."
+                class="autogrow-textarea w-full text-xs leading-relaxed text-slate-700 dark:text-slate-200 bg-slate-50/70 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.07] rounded-lg px-3 py-2 focus:bg-white dark:focus:bg-surface-800 focus:border-brand-500 focus:outline-none placeholder:text-slate-400 min-h-[3.5rem] transition"
+                data-on-input="onMetadataChanged()"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div id="searchNoticeBanner" class="hidden bg-slate-900 text-white dark:bg-surface-800 border border-slate-800 dark:border-white/10 rounded-xl px-4 py-2.5 text-xs flex items-center justify-between shadow-xs">
+          <div class="flex items-center space-x-2">
+            <i class="ph ph-funnel text-brand-400"></i>
+            <span id="searchNoticeText">Filtering active</span>
+          </div>
+          <button data-on-click="clearGlobalSearch()" class="text-[11px] font-medium text-slate-300 hover:text-white underline">Reset filter</button>
+        </div>
+
+        <!-- Section List Container -->
+        <div id="sectionsContainer" class="space-y-5"></div>
+
+        <!-- Add Section Button -->
+        <button data-on-click="addNewSection()" class="w-full py-3 border border-dashed border-slate-300 dark:border-white/[0.12] hover:border-brand-500 dark:hover:border-brand-500 rounded-xl flex items-center justify-center space-x-2 text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition group text-xs font-medium bg-white/50 dark:bg-surface-900/40">
+          <i class="ph ph-plus text-sm"></i>
+          <span id="addSectionLabel">Add Section</span>
+        </button>
+      </section>
+
+      <!-- VIEW 2: Variables & Formulas -->
+      <section id="view-variables" class="hidden p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-4">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
+                Variables & Formulas
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Evaluated sequentially per seat using <code class="font-mono text-slate-700 dark:text-slate-300">seat</code>, <code class="font-mono text-slate-700 dark:text-slate-300">first_name</code>, <code class="font-mono text-slate-700 dark:text-slate-300">last_name</code>, and variables declared above.
+              </p>
+            </div>
+            <button data-on-click="addNewVariable()" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center gap-1.5">
+              <i class="ph ph-plus"></i>
+              <span>Add Variable</span>
+            </button>
+          </div>
+
+          <!-- Formula Helpers Quick Reference -->
+          <div class="bg-slate-50 dark:bg-surface-850 border border-slate-200/70 dark:border-white/[0.06] rounded-lg p-3 text-[11px] text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span class="font-medium text-slate-700 dark:text-slate-300 shrink-0">Built-in Functions:</span>
+            <code class="font-mono text-[10px] text-slate-600 dark:text-slate-400">
+              pad(val, width [, char]) · hex(n) · floor(n) · ceil(n) · round(n) · abs(n) · mod(a, b) · min(…) · max(…) · upper(s) · lower(s) · str(v) · slug(s) · initials(s)
+            </code>
+          </div>
+
+          <div id="variablesList" class="space-y-2.5"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: Dependency Graph -->
+      <section id="view-dependencies" class="hidden p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-4">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
+                Lineage & Usage Matrix
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Trace formula chains, <span id="dependencyCapturesHint">checkpoint captures</span>, step references, and unused or undeclared tokens.
+              </p>
+            </div>
+            <button data-on-click="renderDependencyGraph()" class="px-2.5 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200/70 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 transition flex items-center gap-1.5">
+              <i class="ph ph-arrows-clockwise"></i> Refresh
+            </button>
+          </div>
+          <div id="dependencyGraphContent" class="space-y-6 text-xs"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: Image Library Management -->
+      <section id="view-images" class="hidden p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-4">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
+                Image Asset Library
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                PNG, JPEG, GIF, WebP up to 3MB. Reference via <code class="font-mono text-slate-700 dark:text-slate-300">![alt](filename.png)</code>.
+              </p>
+            </div>
+            <button data-on-click="generateMissingMockAssets()" id="generateMocksBtn" class="hidden px-3 py-1.5 bg-slate-900 dark:bg-brand-600 hover:opacity-90 text-white rounded-lg text-xs font-medium shadow-2xs transition">
+              Generate Mock Assets
+            </button>
+          </div>
+          <div id="missingImagesNotice" class="hidden bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-800/40 rounded-lg p-3 text-xs text-rose-800 dark:text-rose-300"></div>
+          <div id="dropZone"
+               data-on-dragover="handleLibraryDragOver(event)"
+               data-on-dragleave="handleLibraryDragLeave(event)"
+               data-on-drop="handleLibraryDrop(event)"
+               data-on-click="document.getElementById('imageFileInput').click()"
+               class="border border-dashed border-slate-300 dark:border-white/[0.12] hover:border-brand-500 dark:hover:border-brand-500 rounded-xl p-8 text-center cursor-pointer transition bg-slate-50/50 dark:bg-surface-850/40">
+            <input type="file" id="imageFileInput" class="hidden" multiple accept="image/png,image/jpeg,image/gif,image/webp" data-on-change="handleImageFileSelect(event)">
+            <div class="w-9 h-9 rounded-lg bg-white dark:bg-surface-800 border border-slate-200/80 dark:border-white/[0.08] flex items-center justify-center mx-auto mb-2.5 text-slate-500 dark:text-slate-400 shadow-2xs">
+              <i class="ph ph-upload-simple text-base"></i>
+            </div>
+            <p class="text-xs font-medium text-slate-700 dark:text-slate-200">Drop images here or <span class="text-brand-600 dark:text-brand-400 underline underline-offset-2">browse files</span></p>
+            <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">PNG, JPEG, GIF, WebP · Max 3MB per file</p>
+          </div>
+          <div id="imagesGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3.5"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: Participant Preview -->
+      <section id="view-preview" class="hidden p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-5">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-4 shadow-2xs space-y-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <i class="ph ph-user-focus text-brand-600 dark:text-brand-400 text-sm"></i>
+              <span>Participant Simulator</span>
+            </span>
+            <div id="previewLabControls" class="contents">
+            <div class="h-3.5 w-px bg-slate-200 dark:bg-white/[0.08] hidden sm:block"></div>
+            <div class="flex items-center space-x-1.5">
+              <label class="text-[11px] text-slate-400">Seat</label>
+              <input type="number" id="previewSeat" value="7" min="1" max="100" class="w-14 text-xs font-mono px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md text-center focus:outline-none focus:border-brand-500" data-on-input="renderParticipantPreview()">
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <label class="text-[11px] text-slate-400">First</label>
+              <input type="text" id="previewFirstName" value="Mary-Jane" class="w-24 text-xs px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md focus:outline-none focus:border-brand-500" data-on-input="renderParticipantPreview()">
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <label class="text-[11px] text-slate-400">Last</label>
+              <input type="text" id="previewLastName" value="O'Neil" class="w-24 text-xs px-2 py-1 bg-slate-50 dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.08] rounded-md focus:outline-none focus:border-brand-500" data-on-input="renderParticipantPreview()">
+            </div>
+
+            <div id="previewGateControls" class="flex items-center space-x-2 ml-auto">
+              <label class="inline-flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none bg-slate-50 dark:bg-surface-850 px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-white/[0.07]">
+                <input type="checkbox" id="previewProgressiveGateToggle" data-on-change="togglePreviewGateMode(this.checked)" class="rounded text-brand-600 focus:ring-0">
+                <span>Progressive Gating</span>
+              </label>
+              <button data-on-click="resetPreviewSimulation()" class="px-2.5 py-1 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200/70 dark:hover:bg-surface-800 text-slate-600 dark:text-slate-300 rounded-md text-xs font-medium transition" title="Reset checkpoints, hints, and captured values">
+                Reset
+              </button>
+            </div>
+            </div>
+          </div>
+
+          <!-- Active Variables & Captures Bar in Preview -->
+          <div id="previewVariablesBar" class="pt-2.5 border-t border-slate-100 dark:border-white/[0.06] flex flex-wrap items-center gap-1.5 text-[11px]"></div>
+        </div>
+        <div id="previewManualContainer" class="space-y-5"></div>
+      </section>
+
+      <!-- VIEW 6: Validation Engine -->
+      <section id="view-validate" class="hidden p-4 sm:p-8 max-w-4xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-5 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-4">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900 dark:text-white">
+                Specification Audit (vLabs %STUDIO_VERSION%)
+              </h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Verifies structural limits, formulas across Seats 1/24/100, placeholder resolution, capture order, pattern masks, and image assets.
+              </p>
+            </div>
+            <button data-on-click="runFullValidation(true)" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center gap-1.5 shrink-0">
+              <i class="ph ph-check-circle"></i> Run Audit
+            </button>
+          </div>
+          <div id="validationResultsList" class="space-y-2 text-xs"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: Settings -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph ph-gear text-brand-600"></i> Template Studio Settings
+        </h3>
+        <button data-on-click="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- Appearance Toggle -->
+        <div>
+          <label class="block text-[11px] font-bold uppercase text-slate-400 mb-1">Appearance</label>
+          <button type="button" id="settingsThemeToggleBtn" data-on-click="toggleDarkMode()"
+            class="flex items-center space-x-2 px-3 py-2 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 w-full justify-between">
+            <span class="flex items-center gap-2">
+              <i id="settingsThemeIcon" class="ph ph-moon"></i>
+              <span id="settingsThemeText">Dark Mode</span>
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">Toggle Theme</span>
+          </button>
+        </div>
+
+        <!-- AI Provider Configuration -->
+        <div class="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <label class="block text-[11px] font-bold uppercase text-slate-400">AI Text Polish Provider</label>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Provider</label>
+              <select id="settingsAiProvider" data-on-change="onAiProviderChanged()" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200">
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic Claude</option>
+                <option value="custom">Custom Endpoint</option>
+              </select>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block text-[10px] text-slate-400">Model</label>
+                <button type="button" data-on-click="fetchLiveModelsForProvider()" id="refreshModelsBtn" class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-0.5" title="Fetch latest models from provider API">
+                  <i class="ph ph-arrows-clockwise text-[11px]"></i>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <select id="settingsAiModel" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200"></select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-0.5">API Key</label>
+            <input type="password" id="settingsAiApiKey" placeholder="sk-... or AIza..." class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
+          </div>
+
+          <div id="customEndpointRow" class="hidden">
+            <label class="block text-[10px] text-slate-400 mb-0.5">Custom Base URL</label>
+            <input type="text" id="settingsAiCustomUrl" placeholder="http://localhost:11434/v1" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-0.5">Default System / Polish Instruction</label>
+            <textarea id="settingsAiSystemPrompt" rows="2" class="autogrow-textarea w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-800 dark:text-slate-200 min-h-[3rem]"></textarea>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <button type="button" data-on-click="testAiConnection()" id="testConnectionBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+              <i class="ph ph-plugs-connected text-sm"></i>
+              <span>Test Connection</span>
+            </button>
+            <span id="testConnectionStatus" class="text-[11px] font-medium text-slate-400 max-w-xs truncate text-right"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <button data-on-click="saveAppSettingsModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-xs">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AI Text Polish -->
+  <div id="aiPolishModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph ph-sparkle text-purple-600"></i> Polish Lab Content
+        </h3>
+        <button data-on-click="closeAiPolishModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Specific Polish Instruction</label>
+          <input type="text" id="aiCustomInstructionInput" placeholder="e.g. Make it more concise, emphasize safety"
+            class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Original Text</label>
+            <div id="aiPolishOriginalPreview" class="p-3 bg-slate-50 dark:bg-surface-850/80 border border-slate-200 dark:border-slate-700 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap"></div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400">Polished Result</label>
+              <span id="aiPolishStatusBadge" class="text-[10px] text-slate-400"></span>
+            </div>
+            <textarea id="aiPolishResultPreview" class="autogrow-textarea w-full p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+        <button type="button" data-on-click="runAiPolishGeneration()" id="regenerateAiPolishBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+          <i class="ph ph-sparkle text-purple-600"></i> Polish with AI
+        </button>
+        <div class="flex items-center space-x-2">
+          <button data-on-click="closeAiPolishModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium">Discard</button>
+          <button data-on-click="applyAiPolishedText()" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs">Accept & Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Tokens & Captures Cheatsheet -->
+  <div id="tokenModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph ph-brackets-curly text-brand-600"></i> Placeholders & Captures
+        </h3>
+        <button data-on-click="closeTokenCheatsheet()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs max-h-96 overflow-y-auto pr-1">
+        <div>
+          <span class="text-[10px] font-bold uppercase text-slate-400">Built-In Participant Tokens</span>
+          <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="builtInTokensList"></div>
+        </div>
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase text-slate-400">Declared Formulas</span>
+          <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="declaredTokensList"></div>
+        </div>
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <span id="captureTokensHead" class="text-[10px] font-bold uppercase text-slate-400">Captured Checkpoint Values</span>
+          <div class="grid grid-cols-2 gap-1.5 mt-1.5" id="captureTokensList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Image Picker -->
+  <div id="imagePickerModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph ph-images text-brand-600"></i> Insert Image from Library
+        </h3>
+        <button data-on-click="closeImagePickerModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div id="imagePickerGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1 text-xs"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Import Markdown / ZIP / JSON -->
+  <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header (Pinned) -->
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph-bold ph-upload-simple text-brand-600 dark:text-brand-400"></i> Import vLabs Template (.md, .zip, .json)
+        </h3>
+        <button data-on-click="closeImportModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg p-1">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        <!-- Primary Drag & Drop Zone -->
+        <div id="importDropZone"
+             data-on-dragover="handleImportDragOver(event)"
+             data-on-dragleave="handleImportDragLeave(event)"
+             data-on-drop="handleImportDrop(event)"
+             data-on-click="document.getElementById('importFileInput').click()"
+             class="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-50/50 dark:bg-surface-850/50 flex flex-col items-center justify-center">
+          <input type="file" id="importFileInput" accept=".md,.markdown,.txt,.zip,.json" class="hidden" data-on-change="handleImportFileSelect(event)">
+          <div class="w-12 h-12 rounded-xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center text-2xl mb-2">
+            <i class="ph ph-file-arrow-up"></i>
+          </div>
+          <p class="text-xs font-semibold text-slate-800 dark:text-slate-200">Drag & drop a <span class="text-brand-600 dark:text-brand-400">.md</span>, <span class="text-brand-600 dark:text-brand-400">.zip</span> package, or <span class="text-brand-600 dark:text-brand-400">.json</span> file here, or <span class="text-brand-600 dark:text-brand-400 underline">browse</span></p>
+          <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Importing a .zip archive restores both template.md and all embedded /images/* assets</p>
+        </div>
+
+        <!-- Loaded File Summary Card -->
+        <div id="importLoadedFileCard" class="hidden bg-brand-50/60 dark:bg-brand-950/20 border border-brand-200/60 dark:border-brand-800/40 rounded-xl p-3 flex items-center justify-between">
+          <div class="flex items-center space-x-3 overflow-hidden">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center shrink-0">
+              <i id="importFileIcon" class="ph-bold ph-file-text text-base"></i>
+            </div>
+            <div class="truncate">
+              <span id="importFileName" class="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">template.md</span>
+              <span id="importFileDetails" class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">0 KB · Ready to import</span>
+            </div>
+          </div>
+          <button type="button" data-on-click="clearImportedFile()" class="p-1 text-slate-400 hover:text-rose-600 transition" title="Remove file">
+            <i class="ph ph-trash text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Collapsible Raw Paste Toggle -->
+        <div>
+          <button type="button" data-on-click="toggleRawPasteAccordion()" class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1">
+            <i id="rawPasteAccordionIcon" class="ph ph-caret-right text-xs"></i>
+            <span>Or paste raw Markdown / JSON text directly</span>
+          </button>
+
+          <div id="rawPasteContainer" class="hidden mt-2">
+            <textarea id="importMarkdownTextarea" rows="6"
+              placeholder="Paste raw vLabs template Markdown (with --- front matter) or canonical JSON here..."
+              data-on-input="onImportTextareaInput()"
+              class="w-full font-mono text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-800 dark:text-slate-200 h-36 max-h-48 overflow-y-auto resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer (Pinned, Guaranteed Visibility) -->
+      <div class="flex items-center justify-between px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-surface-850/60 shrink-0">
+        <span id="importStatusText" class="text-[11px] text-slate-400 truncate max-w-xs">Select or drop a file to begin.</span>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button type="button" data-on-click="closeImportModal()" class="px-3.5 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium transition">
+            Cancel
+          </button>
+          <button type="button" id="executeImportBtn" data-on-click="executeImport()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed">
+            Import Template
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Custom Confirmation Dialog (replaces window.confirm) -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 id="confirmModalTitle" class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <i class="ph-bold ph-warning text-amber-500"></i> Confirm Action
+        </h3>
+        <button data-on-click="closeConfirmModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <p id="confirmModalMessage" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed"></p>
+      <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button data-on-click="closeConfirmModal()" class="px-3.5 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium transition">
+          Cancel
+        </button>
+        <button id="confirmModalActionBtn" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>

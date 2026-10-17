@@ -218,7 +218,7 @@ export function ensureSeed() {
         title: exam.title,
         description: exam.description,
         content: exam.content,
-        variables: [],
+        variables: exam.variables,
       },
     ];
     const insert = db.prepare(

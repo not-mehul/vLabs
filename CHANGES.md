@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.14.1). The first section is the original code
+Newest entry at the bottom (1.15.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -835,3 +835,41 @@ sessions are unchanged.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.15.0 — Template Studio is the template editor
+
+- **vLabs Template Studio replaces the portal's lab and exam editors.**
+  Opening a template, **New lab** or **New exam** edits it in the Studio
+  inside the portal. **Save** (or Ctrl+S) stores a new version, images go to
+  the portal's library, **History** lists every version with revert, and an
+  archived template can be restored from the banner. Unsaved changes are
+  flagged and a leave warns first.
+- **The offline Studio stays.** **Templates → Offline Studio** downloads it
+  as one file (also `docs/vlabs_template_studio.html`) that now works with no
+  network at all: styles, fonts, icons and libraries are inside it, nothing
+  is loaded from the web. Import its `.zip`, `.md` or `.json` as before.
+- **One Studio, vLabs' own rules.** Both are built from `client/studio/` and
+  read, write, check and grade through the same shared modules vLabs saves
+  with (`shared/`). The Studio's own copy of the lab rules and formula engine
+  is gone (formulas no longer run through `new Function`), and the
+  Validation Audit ends with vLabs' save check, so **Ready to save** means
+  vLabs will accept it. A `.zip` with both `template.json` and `template.md`
+  now reads the JSON, as the portal does.
+- **Exams and labs work alike in the Studio.** Exams now have the
+  **Lineage Matrix** (where each variable and saved answer is used, and
+  answers used before they are saved) and a **Preview** beside each item;
+  exam sections are called sections, as in the portal. Checkpoint gating in
+  the preview stays a lab feature.
+- In the portal the Studio hides what needs the open internet or its own
+  storage: AI Polish, the mock image generator, its theme switch (it follows
+  the portal's) and **New** (use **New lab** / **New exam**).
+- **Fixed: the sample exam on a fresh install had no variables,** so its
+  `{{ SUBNET }}` step could not be saved unchanged.
+- Security: the portal's CSP still allows no inline scripts or `eval`; the
+  Studio's buttons run through a small interpreter instead of inline
+  handlers. `frame-ancestors` is now `'self'` so the portal can frame it.
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. No migration. `npm run build` (client) also
+builds the Studio; CI checks that the committed offline file is current.
