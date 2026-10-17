@@ -41,6 +41,8 @@ export default function Lab() {
   // Checkpoints cleared at the last status poll: a rise the participant did not
   // cause (an instructor unlock) reloads the manual.
   const clearedRef = useRef(null);
+  // Seat number at the last poll: the instructor may change it (new values).
+  const seatRef = useRef(null);
   const remaining = useCountdown(liveExpiry || data?.expires_at || session?.expires_at, {
     offsetMs,
   });
@@ -61,7 +63,7 @@ export default function Lab() {
       // Keep the persisted session's expiry fresh so resume shows the right time.
       participantSession.set({
         token,
-        seatNumber,
+        seatNumber: res.seat_number ?? seatNumber,
         name,
         session: { ...session, expires_at: res.expires_at, section_count: res.total_sections },
       });
@@ -109,8 +111,11 @@ export default function Lab() {
       const cleared = res.checkpoints_cleared;
       const unlocked = clearedRef.current !== null && cleared > clearedRef.current;
       clearedRef.current = cleared ?? null;
+      const reseated = seatRef.current !== null && res.seat_number !== seatRef.current;
+      seatRef.current = res.seat_number ?? null;
       if (
         unlocked ||
+        reseated ||
         (versionRef.current !== null && res.template_version !== versionRef.current)
       ) {
         load();
@@ -190,6 +195,9 @@ export default function Lab() {
     navigate('/', { replace: true });
   }
 
+  // The server's number wins: the instructor may have changed the seat.
+  const seat = data?.seat_number ?? seatNumber;
+
   if (ended) {
     return (
       <div className="ended-screen">
@@ -235,7 +243,7 @@ export default function Lab() {
             <Icon name="check-circle" size={44} strokeWidth={1.9} />
           </span>
           <h1>Lab complete</h1>
-          <p>Nice work, {displayName || `#${seatNumber}`}. You completed the lab.</p>
+          <p>Nice work, {displayName || `#${seat}`}. You completed the lab.</p>
           <div className="ended-actions">
             <button className="btn btn--ghost" onClick={() => setReviewing(true)}>
               Review sections
@@ -254,7 +262,7 @@ export default function Lab() {
       <div className="lab__header">
         <header className="lab__bar">
           <div className="lab__bar-left">
-            <span className="lab__seat">#{seatNumber}</span>
+            <span className="lab__seat">#{seat}</span>
             <span className="lab__name">{displayName}</span>
             <span className="lab__session">{session?.title}</span>
           </div>

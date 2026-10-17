@@ -1057,7 +1057,7 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
   assert.equal((await detail(byName('bob LAB').id)).data.questions[0].correct, true);
   assert.equal((await detail(typoId)).data.questions[0].correct, false);
 
-  // Change seat: refused when taken or out of range, exams only.
+  // Change seat: refused when taken or out of range.
   const seat = (sid, pid, n) =>
     call(`/api/sessions/${sid}/participants/${pid}/seat`, {
       method: 'PUT',
@@ -1070,8 +1070,6 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
   assert.match(taken.data.error, /bob LAB/);
   assert.equal((await seat(examSid, typoId, 0)).status, 400);
   assert.equal((await seat(examSid, typoId, 1.5)).status, 400);
-  const labDetail = await call(`/api/sessions/${lab.data.id}`, { token });
-  assert.equal((await seat(lab.data.id, labDetail.data.participants[0].id, 9)).status, 409);
 
   // Moving the typo to Cy's lab seat switches their values and marking at once.
   const moved = await seat(examSid, typoId, 3);
@@ -1211,4 +1209,81 @@ test('ending an exam session hands in every open exam; the expiry sweep does the
   const swept = await call(`/api/sessions/${two.id}`, { token });
   assert.equal(swept.data.submitted_count, 2);
   assert.ok(swept.data.participants.every((p) => p.auto_submitted && p.submitted_at === expiredAt));
+});
+
+test('day two of a lab takes its seats from day one; Change seat works in labs too', async () => {
+  const join = (code, first, last) =>
+    call('/api/participant/join', {
+      method: 'POST',
+      body: { room_code: code, first_name: first, last_name: last },
+    });
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'lab',
+      title: 'Two days',
+      variables: [{ name: 'IP', expression: '"10.0.0." + seat' }],
+      content: [
+        {
+          title: 'Network',
+          steps: [
+            {
+              title: 'Your address',
+              body: 'Ping {{ IP }}',
+              checkpoint: { prompt: 'Your IP?', answer: '{{ IP }}' },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const launch = (source) =>
+    call('/api/sessions', {
+      method: 'POST',
+      token,
+      body: { template_id: tpl.data.id, seat_source_session_id: source },
+    });
+  const day1 = await launch(null);
+  for (const [first, last] of [
+    ['Ann', 'One'],
+    ['Ben', 'Two'],
+    ['Cat', 'Three'],
+  ]) {
+    await join(day1.data.room_code, first, last);
+  }
+
+  const day2 = await launch(day1.data.id);
+  assert.equal(day2.status, 201);
+  const cat = await join(day2.data.room_code, 'Cat', 'Three');
+  assert.equal(cat.data.seat_number, 3, 'same seat as day one');
+  const typo = await join(day2.data.room_code, 'Bne', 'Two');
+  assert.equal(typo.data.seat_number, 4, 'above day one’s highest seat');
+
+  const monitor = await call(`/api/sessions/${day2.data.id}`, { token });
+  assert.equal(monitor.data.seat_source.id, day1.data.id);
+  const typoRow = monitor.data.participants.find((p) => p.first_name === 'Bne');
+  assert.equal(typoRow.lab_seat, null, 'not found in day one');
+  const content = (t) => call('/api/participant/content', { token: t });
+  assert.match(JSON.stringify((await content(typo.data.token)).data), /10\.0\.0\.4/);
+
+  const seat = (n) =>
+    call(`/api/sessions/${day2.data.id}/participants/${typoRow.id}/seat`, {
+      method: 'PUT',
+      token,
+      body: { seat_number: n },
+    });
+  assert.equal((await seat(3)).status, 409, 'Cat holds seat 3');
+  const moved = await seat(2);
+  assert.equal(moved.status, 200);
+  const after = await content(typo.data.token);
+  assert.equal(after.data.seat_number, 2);
+  assert.match(JSON.stringify(after.data), /10\.0\.0\.2/);
+  assert.doesNotMatch(JSON.stringify(after.data), /10\.0\.0\.4/);
+  const st = await call('/api/participant/status', { token: typo.data.token });
+  assert.equal(st.data.seat_number, 2);
+  const detail = await call(`/api/sessions/${day2.data.id}/participants/${typoRow.id}`, { token });
+  assert.equal(detail.data.lab_seat, null);
+  assert.equal(detail.data.seat_number, 2);
 });

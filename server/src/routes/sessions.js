@@ -450,10 +450,9 @@ router.post(
       24 * 60,
     );
 
-    // Exams only: reuse the seat numbers of one of the instructor's labs.
-    const seatSource = exam
-      ? checkSeatSource(req.body?.seat_source_session_id, req.instructor.id)
-      : null;
+    // Optional: reuse the seat numbers of one of the instructor's labs (an exam
+    // after a lab, or day two of a multi-day lab).
+    const seatSource = checkSeatSource(req.body?.seat_source_session_id, req.instructor.id);
 
     const roomCode = generateRoomCode();
     const info = q.insert.run(
@@ -499,7 +498,12 @@ router.get('/:id/participants/:pid', (req, res) => {
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
   if (!p) throw httpError(404, 'Participant not found');
   const content = JSON.parse(row.content);
-  if (!isExam(row)) return res.json(participantDetail(p, content, breaksOf(row)));
+  if (!isExam(row)) {
+    return res.json({
+      ...participantDetail(p, content, breaksOf(row)),
+      lab_seat: labSeatOf(labSeatMap(row), p),
+    });
+  }
   const detail = examParticipantDetail(p, content, breaksOf(row), variablesOf(row));
   res.json({
     ...detail,
@@ -509,16 +513,15 @@ router.get('/:id/participants/:pid', (req, res) => {
 });
 
 /**
- * PUT /api/sessions/:id/participants/:pid/seat — EXAM sessions: body
- * { seat_number }. Gives the participant another seat number (a typo or a
- * name clash kept them from their lab seat). Refused when someone else holds
- * that number. Their exam and marking use the new seat's values at once,
- * because both are worked out from the seat whenever they are read; answers
- * already given are kept as they are.
+ * PUT /api/sessions/:id/participants/:pid/seat — body { seat_number }. Gives
+ * the participant another seat number (a typo or a name clash kept them from
+ * their lab seat). Refused when someone else holds that number. Their exam or
+ * manual, its checks and the marking use the new seat's values at once,
+ * because all are worked out from the seat whenever they are read; answers
+ * and checkpoints already given are kept as they are.
  */
 router.put('/:id/participants/:pid/seat', (req, res) => {
   const row = ownedOr404(req);
-  if (!isExam(row)) throw httpError(409, 'Seats can only be changed in exam sessions');
   const p = participantOr404(req, row);
   const seat = Number(req.body?.seat_number);
   if (!Number.isInteger(seat) || seat < 1 || seat > MAX_SEAT_NUMBER) {
@@ -848,7 +851,11 @@ router.get('/:id', (req, res) => {
   const sections = JSON.parse(row.content);
   const sectionCount = sections.length;
   const breaks = breaksOf(row);
-  const participants = q.participants.all(row.id).map((p) => participantView(p, sections, breaks));
+  const labSeats = labSeatMap(row);
+  const participants = q.participants.all(row.id).map((p) => ({
+    ...participantView(p, sections, breaks),
+    lab_seat: labSeatOf(labSeats, p),
+  }));
 
   // Aggregate: how many seats have got to each section. Seats are placed by
   // their FURTHEST section, so reviewing an earlier one doesn't move them back.
@@ -864,6 +871,7 @@ router.get('/:id', (req, res) => {
     ...summarise(row),
     ...breakView(row),
     capture_names: captureNamesOf(sections),
+    seat_source: seatSourceSummary(row),
     complete_count: completeCount,
     template_exists: row.latest_template_version != null,
     template_archived: Boolean(row.template_archived_at),

@@ -3,10 +3,11 @@ import { log } from './logger.js';
 import { httpError } from '../middleware/errorHandler.js';
 
 /**
- * Exam seats from a lab session.
+ * Seats from a lab session.
  *
- * An exam session may name a lab session as its seat source. Someone joining
- * the exam under the same name (compared like a rejoin: lower-cased, spaces
+ * An exam or lab session may name a lab session as its seat source (an exam
+ * after a lab, or day two of a multi-day lab). Someone joining under the same
+ * name (compared like a rejoin: lower-cased, spaces
  * collapsed) gets the seat number they had in that lab, so every per-seat
  * formula gives them the same values. Anyone else gets the next number above
  * both the exam's and the lab's highest seat, so they never take a seat a
@@ -49,7 +50,7 @@ export function nextSeatNumber(session, nameKey, maxSeat) {
   const labSeat = q.labSeat.get(sourceId, nameKey)?.seat_number;
   if (labSeat) {
     if (!seatHolder(session.id, labSeat)) return labSeat;
-    // Only possible when a seat was changed by hand, or the lab gained people
+    // Only possible when a seat was changed by hand, or the source lab gained people
     // after newcomers had been given numbers above it.
     log.warn('participant.labseat.taken', { session: session.id, seat: labSeat });
   }

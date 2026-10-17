@@ -5,6 +5,7 @@ import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import Markdown from './Markdown.jsx';
 import Icon from './Icon.jsx';
+import SeatChange from './SeatChange.jsx';
 import SectionFlow, { timeRowClass, timeAgainst } from './SectionFlow.jsx';
 import SectionDrawer from './SectionDrawer.jsx';
 
@@ -249,33 +250,6 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
   }
 
   const [actionError, setActionError] = useState('');
-  const [seatDraft, setSeatDraft] = useState(null); // the number being typed, or null when closed
-
-  /** Give the participant another seat number (fixes a typo or a name clash). */
-  async function changeSeat(e) {
-    e.preventDefault();
-    const seat = Number(seatDraft);
-    if (seat === d.seat_number) {
-      setSeatDraft(null);
-      return;
-    }
-    if (
-      !window.confirm(
-        `Move ${d.name} to seat ${seat}?\n\nTheir exam and marking switch to seat ${seat}'s values at once. Answers already given are kept as they are.`,
-      )
-    )
-      return;
-    setActionError('');
-    try {
-      await call((t) => api.changeSeat(t, sessionId, participantId, seat));
-      setSeatDraft(null);
-      await reload();
-      onChanged();
-    } catch (err) {
-      setActionError(err.message);
-    }
-  }
-
   /** Seat-level actions (reopen / move device / remove), each confirmed first. */
   async function seatAction(kind) {
     const name = d?.name || 'this participant';
@@ -369,41 +343,18 @@ function ParticipantExamDrawer({ sessionId, participantId, active, onClose, onCh
           </div>
 
           <div className="drawer__actions">
-            {seatDraft === null ? (
-              <button
-                className="btn btn--sm btn--ghost"
-                onClick={() => setSeatDraft(String(d.seat_number))}
-                title="Give them another seat number, and so that seat's values"
-              >
-                <Icon name="edit" size={14} /> Change seat
-              </button>
-            ) : (
-              <form className="seat-change" onSubmit={changeSeat}>
-                <label className="seat-change__label" htmlFor="seat-change-input">
-                  Seat
-                </label>
-                <input
-                  id="seat-change-input"
-                  className="field__input seat-change__input"
-                  type="number"
-                  min={1}
-                  max={999}
-                  step={1}
-                  required
-                  autoFocus
-                  value={seatDraft}
-                  onChange={(e) => setSeatDraft(e.target.value)}
-                />
-                <button className="btn btn--sm btn--primary">Save</button>
-                <button
-                  type="button"
-                  className="btn btn--sm btn--ghost"
-                  onClick={() => setSeatDraft(null)}
-                >
-                  Cancel
-                </button>
-              </form>
-            )}
+            <SeatChange
+              name={d.name}
+              seatNumber={d.seat_number}
+              what="Their exam and marking"
+              onSave={async (seat) => {
+                setActionError('');
+                await call((t) => api.changeSeat(t, sessionId, participantId, seat));
+                await reload();
+                onChanged();
+              }}
+              onError={setActionError}
+            />
             {active && d.submitted && (
               <button className="btn btn--sm btn--ghost" onClick={() => seatAction('reopen')}>
                 <Icon name="undo" size={14} /> Reopen exam
