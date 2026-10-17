@@ -9,7 +9,7 @@ any answer by hand, and exports everything.
 Exams have their **own** format (`shared/exam-schema.js`,
 `shared/exam-format.js`). The lab format and its parser are not involved.
 
-Applies to vLabs **1.13.0**.
+Applies to vLabs **1.13.1**.
 
 ---
 

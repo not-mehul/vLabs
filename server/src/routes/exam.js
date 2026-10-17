@@ -101,6 +101,17 @@ function closeOpenVisit(p, now, breaks) {
   return times;
 }
 
+/**
+ * Sections this seat has opened: every section with a recorded visit, plus
+ * the one on screen. A section with nothing to answer only shows as done
+ * once it has been opened.
+ */
+function visitedSections(p) {
+  const opened = new Set(Object.keys(parseObject(p.section_times)).map(Number));
+  opened.add(p.current_section);
+  return [...opened].filter(Number.isInteger).sort((a, b) => a - b);
+}
+
 /** Store one answer change: latest value on the seat, history as one small row. */
 const recordAnswer = db.transaction((p, answers, key, response, now) => {
   q.saveAnswers.run(JSON.stringify(answers), now, p.id);
@@ -231,6 +242,7 @@ router.get(
       answered_count: questions.filter(({ key }) => isAnswered(all[key])).length,
       unlocked_section: unlocked,
       current_section: Math.min(p.current_section, unlocked),
+      visited_sections: visitedSections(p),
       sections,
       answers,
     });

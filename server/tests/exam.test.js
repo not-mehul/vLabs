@@ -1034,3 +1034,54 @@ test('an exam linked to a lab gives matching names their lab seat; the monitor c
   assert.equal(after.data.participants[0].lab_seat, undefined);
   assert.equal((await join(code, 'Dee', 'Absent')).data.seat_number, 7);
 });
+
+test('the exam lists the sections a seat has opened (an info-only section is not done unseen)', async () => {
+  const tpl = await call('/api/templates', {
+    method: 'POST',
+    token,
+    body: {
+      kind: 'exam',
+      title: 'Visited',
+      content: [
+        { title: 'Q', items: [{ type: 'truefalse', prompt: 'True?', correct: true }] },
+        { title: 'Read me', items: [{ type: 'info', title: 'Note', body: 'Nothing to answer' }] },
+        { title: 'Q2', items: [{ type: 'truefalse', prompt: 'Also?', correct: true }] },
+      ],
+    },
+  });
+  assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
+  const sess = await call('/api/sessions', {
+    method: 'POST',
+    token,
+    body: { template_id: tpl.data.id },
+  });
+  const me = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: sess.data.room_code, first_name: 'Vi', last_name: 'Sited' },
+  });
+  const t = me.data.token;
+  const exam = () => call('/api/participant/exam', { token: t });
+  assert.deepEqual((await exam()).data.visited_sections, [0]);
+
+  await call('/api/participant/exam/answer', {
+    method: 'PUT',
+    token: t,
+    body: { key: '0.0', value: true },
+  });
+  const opened = await exam();
+  // The info-only section unlocks the next at once, but has not been seen.
+  assert.ok(opened.data.unlocked_section >= 2);
+  assert.equal(opened.data.sections[1].complete, true);
+  assert.deepEqual(opened.data.visited_sections, [0]);
+
+  const go = (i) =>
+    call('/api/participant/exam/progress', {
+      method: 'POST',
+      token: t,
+      body: { section_index: i },
+    });
+  await go(2);
+  assert.deepEqual((await exam()).data.visited_sections, [0, 2]);
+  await go(1);
+  assert.deepEqual((await exam()).data.visited_sections, [0, 1, 2]);
+});
