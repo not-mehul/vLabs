@@ -13,10 +13,10 @@
     "test": "node --test \"tests/*.test.js\""
   },
   "dependencies": {
-    "@fontsource/inter": "^5.2.5",
-    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "dompurify": "^3.2.4",
-    "jszip": "^3.10.1",
+    "jszip": "^3.10.2",
     "marked": "^15.0.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -25,8 +25,8 @@
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "esbuild": "^0.25.12",
-    "postcss": "^8.5.30",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.5.31",
     "tailwindcss": "^3.4.19",
     "vite": "^6.0.7"
   }
