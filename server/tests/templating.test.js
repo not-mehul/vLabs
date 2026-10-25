@@ -5,9 +5,6 @@ import {
   injectVariables,
   evaluateExpression,
   renderStep,
-  checkpointAnswer,
-  checkpointAnswers,
-  isCorrectAnswer,
   matchCheckpoint,
   stepHasCheckpoint,
   injectImages,
@@ -20,7 +17,7 @@ import {
   countSteps,
   FUNCTION_NAMES,
 } from '../../shared/templating.js';
-import { validateTemplatePayload } from '../../shared/validate-template.js';
+import { validateTemplatePayload, variableIssues } from '../../shared/validate-template.js';
 import {
   normaliseTemplate,
   findUnknownPlaceholders,
@@ -130,6 +127,62 @@ test('resolveVariables handles non-numeric seat ids gracefully', () => {
   assert.equal(ctx.X, 13); // digits extracted -> 12
 });
 
+test('formulas are checked for every seat 1–100; only the first failure is reported', () => {
+  assert.deepEqual(variableIssues([{ name: 'A', expression: 'seat' }]), []);
+  assert.deepEqual(variableIssues([{ name: 'V', expression: '10 / (seat - 37)' }]), [
+    { index: 0, name: 'V', message: 'Error in variable "V" for seat 37: Division by zero' },
+  ]);
+  // A later formula failing only because of an earlier one is not reported twice.
+  assert.deepEqual(
+    variableIssues([
+      { name: 'A', expression: 'seat' },
+      { name: 'B', expression: '1 / (A - 1)' },
+      { name: 'C', expression: 'B * 2' },
+    ]),
+    [{ index: 1, name: 'B', message: 'Error in variable "B": Division by zero' }],
+  );
+  // Name problems come first, with their position.
+  assert.deepEqual(
+    variableIssues([
+      { name: 'ok', expression: 'seat' },
+      { name: 'ok', expression: '2' },
+      { name: '', expression: '3' },
+    ]).map((i) => [i.index, i.message]),
+    [
+      [1, 'Variable "ok" is declared more than once'],
+      [2, 'Variable #3 is missing a name'],
+    ],
+  );
+});
+
+test('resolveVariables with onError reads a failing variable as ⟨error:NAME⟩ and goes on', () => {
+  const failed = [];
+  const ctx = resolveVariables(
+    [
+      { name: 'V', expression: '10 / (seat - 3)' },
+      { name: 'W', expression: 'seat * 2' },
+    ],
+    3,
+    { onError: (name, err) => failed.push([name, err.message]) },
+  );
+  assert.equal(ctx.V, '⟨error:V⟩');
+  assert.equal(ctx.W, 6);
+  assert.deepEqual(failed, [['V', 'Error in variable "V": Division by zero']]);
+  // Without onError the first failure still throws (validation, the Studio's audit).
+  assert.throws(
+    () => resolveVariables([{ name: 'V', expression: '10 / (seat - 3)' }], 3),
+    /Division by zero/,
+  );
+});
+
+test('formula text is capped so composing formulas cannot grow it without bound', () => {
+  const vars = [{ name: 'A0', expression: "'xxxxxxxxxxxxxxxx'" }];
+  for (let i = 1; i <= 25; i += 1)
+    vars.push({ name: `A${i}`, expression: `A${i - 1} + A${i - 1}` });
+  assert.throws(() => resolveVariables(vars, 1), /Text is too long \(max 1000 characters\)/);
+  assert.equal(evaluateExpression("pad('', 3) + 'x'", {}), '000x');
+});
+
 test('resolveVariables rejects names that clash with helper functions', () => {
   assert.throws(() => resolveVariables([{ name: 'pad', expression: '1' }], 1), /clashes/);
 });
@@ -163,18 +216,21 @@ test('renderStep strips checkpoint answers but keeps the prompt', () => {
   assert.equal(rendered.checkpoint.prompt, 'Enter the MAC');
   assert.equal(rendered.checkpoint.answer, undefined); // never leaked
   assert.equal(rendered.checkpoint.answers, undefined); // never leaked
-  assert.equal(checkpointAnswer(step, ctx), 'de:ad:be:ef:00:03');
-  assert.deepEqual(checkpointAnswers(step, ctx), ['de:ad:be:ef:00:03']); // de-duplicated
+  assert.deepEqual(matchCheckpoint(step, ctx, 'DE:AD:BE:EF:00:03'), {
+    ok: true,
+    value: 'de:ad:be:ef:00:03',
+  });
 });
 
-test('isCorrectAnswer accepts any authored alternative, normalised', () => {
+test('matchCheckpoint accepts any authored alternative, normalised', () => {
   const ctx = resolveVariables([{ name: 'HOST_IP', expression: "'10.0.0.' + (100 + seat)" }], 1);
   const step = { checkpoint: { answer: '{{ HOST_IP }}', answers: ['{{ HOST_IP }}/24', 'done'] } };
-  assert.equal(isCorrectAnswer(step, ctx, '10.0.0.101'), true);
-  assert.equal(isCorrectAnswer(step, ctx, ' 10.0.0.101/24 '), true);
-  assert.equal(isCorrectAnswer(step, ctx, 'DONE'), true);
-  assert.equal(isCorrectAnswer(step, ctx, '10.0.0.102'), false);
-  assert.equal(isCorrectAnswer({}, ctx, ''), false);
+  const ok = (entry) => matchCheckpoint(step, ctx, entry).ok;
+  assert.equal(ok('10.0.0.101'), true);
+  assert.equal(ok(' 10.0.0.101/24 '), true);
+  assert.equal(ok('DONE'), true);
+  assert.equal(ok('10.0.0.102'), false);
+  assert.equal(matchCheckpoint({}, ctx, '').ok, false);
 });
 
 test('renderStep never leaks a step-level solution', () => {
@@ -483,8 +539,7 @@ test('pattern checkpoints match on format and return the canonical value', () =>
     value: 'ABCD.1234.WXYZ',
   });
   assert.deepEqual(matchCheckpoint(step, ctx, 'nope'), { ok: false, value: null });
-  assert.equal(isCorrectAnswer(step, ctx, 'ABCD.1234.WXYZ'), true);
-  assert.deepEqual(checkpointAnswers(step, ctx), [], 'no enumerable answers');
+  assert.equal(matchCheckpoint(step, ctx, 'ABCD.1234.WXYZ').ok, true);
   // Rendered shape ships the mode but never the mask.
   const r = renderStep(step, ctx, 0);
   assert.equal(r.checkpoint.mode, 'pattern');
@@ -609,6 +664,15 @@ test('validateTemplatePayload: pattern + capture rules and order-aware placehold
 });
 
 /* -------------------------------- Images --------------------------------- */
+
+test('an image reference with a bare % is read as written, not a decoding error', () => {
+  assert.equal(imageRefName('50%-done.png'), '50--done.png');
+  assert.equal(imageRefName('rack%20a.png'), 'rack-a.png');
+  assert.equal(
+    injectImages('![c](50%-done.png)', new Map([['x.png', '/u']])),
+    '![c](50%-done.png)',
+  );
+});
 
 test('image names and references: base name, URL detection, dynamic names', () => {
   assert.equal(normaliseImageName('images/Rack Diagram (v2).PNG'), 'Rack-Diagram-v2.PNG');

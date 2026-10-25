@@ -8,11 +8,13 @@ import assert from 'node:assert/strict';
 import {
   parseMarkdownTemplate,
   templateToMarkdown,
-  parseJsonTemplate,
   templateToJson,
-  SAMPLE_MARKDOWN,
 } from '../../shared/template-format.js';
 import { normaliseTemplate, findUnknownPlaceholders } from '../../shared/template-schema.js';
+import { SAMPLE_MARKDOWN } from './fixtures.js';
+
+/** JSON import as the Studio does it: parse, then the shared normaliser. */
+const fromJson = (text) => normaliseTemplate(JSON.parse(text));
 
 const FULL = normaliseTemplate({
   title: 'Round trip',
@@ -74,7 +76,7 @@ test('markdown export → import is lossless', () => {
 });
 
 test('json export → import is lossless', () => {
-  assert.deepEqual(parseJsonTemplate(templateToJson(FULL)), FULL);
+  assert.deepEqual(fromJson(templateToJson(FULL)), FULL);
 });
 
 test('fenced code blocks are not interpreted as headings or directives', () => {
@@ -173,7 +175,7 @@ test('frontmatter variables are parsed', () => {
   ]);
 });
 
-test('the bundled sample imports cleanly with no unknown placeholders', () => {
+test('a full sample imports cleanly with no unknown placeholders', () => {
   const t = parseMarkdownTemplate(SAMPLE_MARKDOWN);
   assert.equal(t.content.length, 2);
   assert.deepEqual(findUnknownPlaceholders(t), []);
@@ -186,8 +188,7 @@ test('the bundled sample imports cleanly with no unknown placeholders', () => {
 
 test('invalid inputs are rejected', () => {
   assert.throws(() => parseMarkdownTemplate('just some text'), /No sections/);
-  assert.throws(() => parseJsonTemplate('[]'), /Not a template/);
-  assert.throws(() => parseJsonTemplate('nope'));
+  assert.throws(() => fromJson('nope'));
 });
 
 test('info steps and pattern checkpoints round-trip through markdown', () => {
@@ -242,7 +243,7 @@ You entered {{ SERIAL }}.
     /^> checkpoint: Enter the serial\n> pattern: XXXX\.XXXX\.XXXX\n> capture: SERIAL$/m,
   );
   assert.deepEqual(parseMarkdownTemplate(out), tpl, 'lossless');
-  assert.deepEqual(parseJsonTemplate(templateToJson(tpl)), tpl, 'json lossless');
+  assert.deepEqual(fromJson(templateToJson(tpl)), tpl, 'json lossless');
 });
 
 test('a capture referenced before its checkpoint is flagged as early', () => {
@@ -281,7 +282,7 @@ Text.
   assert.equal(t.content[0].steps[0].body, 'Plug in.');
   const again = parseMarkdownTemplate(templateToMarkdown(t));
   assert.deepEqual(again, t);
-  assert.deepEqual(parseJsonTemplate(templateToJson(t)), t);
+  assert.deepEqual(fromJson(templateToJson(t)), t);
   // Out-of-range or non-integer allocations normalise to "none".
   assert.equal(
     normaliseTemplate({ content: [{ title: 'x', minutes: 0, steps: [] }] }).content[0].minutes,

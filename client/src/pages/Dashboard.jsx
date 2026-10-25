@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { rowLink, stopRowClick } from '../lib/rowLink.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
+import { usePolling } from '../hooks/usePolling.js';
 import PortalShell from '../components/PortalShell.jsx';
 import Icon from '../components/Icon.jsx';
 import DurationField from '../components/editor/DurationField.jsx';
@@ -252,11 +253,7 @@ export default function Dashboard() {
     }
   }, [call]);
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10000);
-    return () => clearInterval(id);
-  }, [refresh]);
+  usePolling(refresh, 10000);
 
   const mine = sessions.filter((s) => s.can_manage !== false);
   const others = sessions.filter((s) => s.can_manage === false);

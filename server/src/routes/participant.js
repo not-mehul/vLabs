@@ -9,16 +9,19 @@ import {
   contentLimiter,
   actionLimiter,
 } from '../middleware/rateLimit.js';
-import { asyncHandler, httpError } from '../middleware/errorHandler.js';
+import { httpError } from '../middleware/errorHandler.js';
 import { signParticipantToken } from '../lib/tokens.js';
 import { nowIso, parseUtc } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 import { imageUrlMap } from '../lib/images.js';
 import { nextSeatNumber } from '../lib/seatSource.js';
 import { labProgress } from '../lib/labProgress.js';
-import { breaksOf, currentBreak, activeSecondsBetween } from '../lib/sectionTiming.js';
+import { breaksOf, currentBreak, closeOpenVisit } from '../lib/sectionTiming.js';
+import { completeLabSeat } from '../lib/sessionLifecycle.js';
+import { jsonArray, jsonObject } from '../lib/json.js';
+import { freshSeat, noStore, touchSeat } from '../lib/seatRequest.js';
+import { seatContext } from '../lib/seatContext.js';
 import {
-  resolveVariables,
   matchCheckpoint,
   renderSection,
   isSectionCleared,
@@ -47,10 +50,6 @@ const q = {
        (session_id, seat_number, first_name, last_name, name_key, section_entered_at, joined_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
-  // Presence heartbeat, written at most every TOUCH_EVERY_MS per seat: with
-  // synchronous=FULL every write is an fsync, and status polls would otherwise
-  // add a write per seat every 15 s for no information gain.
-  touch: db.prepare('UPDATE participants SET last_seen_at = ? WHERE id = ? AND last_seen_at < ?'),
   setResume: db.prepare('UPDATE participants SET resume_hash = ? WHERE id = ?'),
   setCheckpoints: db.prepare(
     `UPDATE participants
@@ -66,10 +65,6 @@ const q = {
             section_times = ?, section_entered_at = ?, last_seen_at = ?
       WHERE id = ?`,
   ),
-  complete: db.prepare(
-    `UPDATE participants SET completed_at = ?, section_times = ?, last_seen_at = ?
-      WHERE id = ? AND completed_at IS NULL`,
-  ),
   setHints: db.prepare('UPDATE participants SET hints_taken = ?, last_seen_at = ? WHERE id = ?'),
   setRevealed: db.prepare(
     'UPDATE participants SET revealed_solutions = ?, last_seen_at = ? WHERE id = ?',
@@ -83,32 +78,8 @@ const q = {
  * template, so mid-class edits can't shift step indices under participants.
  */
 function loadManual(session) {
-  return {
-    sections: JSON.parse(session.content || '[]'),
-    variables: JSON.parse(session.variables || '[]'),
-  };
+  return { sections: jsonArray(session.content), variables: jsonArray(session.variables) };
 }
-
-/** No-store headers so rendered lab content is never cached to disk. */
-function noStore(res) {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.set('Pragma', 'no-cache');
-}
-
-const TOUCH_EVERY_MS = 10_000;
-
-/** Record presence (throttled; see q.touch). */
-function touchSeat(id, now = nowIso()) {
-  q.touch.run(now, id, new Date(Date.parse(now) - TOUCH_EVERY_MS).toISOString());
-}
-
-/**
- * The participant row as it is NOW. req.participant was loaded by the auth
- * guard before the (async) rate limiter ran; handlers that read-modify-write
- * JSON columns re-read it so two near-simultaneous requests from one seat can
- * never overwrite each other's change.
- */
-const fresh = (req) => q.byId.get(req.participant.id) || req.participant;
 
 /* Exam seats are bound to the device that joined via a random resume key. */
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
@@ -125,72 +96,27 @@ const parseIndex = (v) => {
   return Number.isInteger(n) && n >= 0 ? n : NaN;
 };
 
-const completedSetOf = (p) => new Set(JSON.parse(p.completed_checkpoints || '[]'));
+const completedSetOf = (p) => new Set(jsonArray(p.completed_checkpoints));
 
-/** Values captured at pattern checkpoints so far (name → canonical value). */
-function capturedOf(p) {
-  try {
-    const v = JSON.parse(p.captured_values || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Checkpoint attempt log (newest last). Capped so a guessing seat can't grow it unbounded. */
+/** Checkpoint attempt log entries kept per seat (newest last), so a guessing seat can't grow it unbounded. */
 const MAX_LOG = 200;
-function logOf(p) {
-  try {
-    const v = JSON.parse(p.checkpoint_log || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Seconds spent per section on CLOSED visits ({ "0": 412 }). */
-function sectionTimesOf(p) {
-  try {
-    const v = JSON.parse(p.section_times || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Fold the open visit (section_entered_at → now) into the per-section totals. */
-function closeOpenVisit(p, times, now, breaks = []) {
-  const key = String(p.current_section);
-  // Break time (instructor-toggled, class-wide) never counts towards a section.
-  times[key] = (Number(times[key]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaks);
-  return times;
-}
-
-/**
- * Record completion the moment the manual is cleared: freezes the clock
- * (total time = joined → completed) and lets the monitor show "Complete" even
- * if the participant keeps reviewing instead of pressing Finish.
- */
-function markCompleted(p, now, breaks = []) {
-  if (p.completed_at) return false;
-  const times = closeOpenVisit(p, sectionTimesOf(p), now, breaks);
-  const { changes } = q.complete.run(now, JSON.stringify(times), now, p.id);
-  if (changes) {
-    log.info('participant.completed', { participant: p.id, session: p.session_id });
-    p.completed_at = now;
-  }
-  return Boolean(changes);
-}
 
 /** The participant's full placeholder context: seat, names, formulas, captures. */
 function contextFor(p, variables) {
-  return resolveVariables(variables, p.seat_number, {
+  return seatContext(variables, p.seat_number, {
     firstName: p.first_name,
     lastName: p.last_name,
-    captured: capturedOf(p),
+    captured: jsonObject(p.captured_values),
     images: imageUrlMap(),
   });
 }
+
+/** Names as typed, one Unicode form (so "José" matches however it was typed), spaces collapsed. */
+const cleanName = (v) =>
+  String(v || '')
+    .normalize('NFC')
+    .trim()
+    .replace(/\s+/g, ' ');
 
 /** 400/403 unless (section, step) exists and is reachable for this seat. */
 function requireReachableStep(sections, si, sti, completed) {
@@ -264,76 +190,67 @@ const registerParticipant = db.transaction((session, firstName, lastName, nameKe
  * back in. Returns a participant token plus lightweight session metadata —
  * never the manual body.
  */
-router.post(
-  '/join',
-  joinFloodLimiter,
-  joinFailLimiter,
-  asyncHandler(async (req, res) => {
-    const roomCode = String(req.body?.room_code || '').trim();
-    const firstName = String(req.body?.first_name || '')
-      .trim()
-      .replace(/\s+/g, ' ');
-    const lastName = String(req.body?.last_name || '')
-      .trim()
-      .replace(/\s+/g, ' ');
-    if (!/^\d{6}$/.test(roomCode)) {
-      throw httpError(400, 'Enter a valid 6-digit room code');
-    }
-    if (!firstName || firstName.length > 60) {
-      throw httpError(400, 'Enter your first name');
-    }
-    if (!lastName || lastName.length > 60) {
-      throw httpError(400, 'Enter your last name');
-    }
+router.post('/join', joinFloodLimiter, joinFailLimiter, (req, res) => {
+  const roomCode = String(req.body?.room_code || '').trim();
+  const firstName = cleanName(req.body?.first_name);
+  const lastName = cleanName(req.body?.last_name);
+  if (!/^\d{6}$/.test(roomCode)) {
+    throw httpError(400, 'Enter a valid 6-digit room code');
+  }
+  if (!firstName || firstName.length > 60) {
+    throw httpError(400, 'Enter your first name');
+  }
+  if (!lastName || lastName.length > 60) {
+    throw httpError(400, 'Enter your last name');
+  }
 
-    const session = q.sessionByCode.get(roomCode);
-    // Uniform error for "wrong code" vs "expired" to avoid leaking which codes
-    // exist (anti-enumeration).
-    if (!session || parseUtc(session.expires_at) < Date.now()) {
-      throw httpError(401, 'Invalid or expired room code');
-    }
+  const session = q.sessionByCode.get(roomCode);
+  // Uniform error for "wrong code" vs "expired" to avoid leaking which codes
+  // exist (anti-enumeration).
+  if (!session || parseUtc(session.expires_at) < Date.now()) {
+    throw httpError(401, 'Invalid or expired room code');
+  }
 
-    const nameKey = `${firstName} ${lastName}`.toLowerCase();
-    const resumeKeyIn =
-      typeof req.body?.resume_key === 'string' ? req.body.resume_key.slice(0, 100) : '';
-    let registered;
-    try {
-      registered = registerParticipant(session, firstName, lastName, nameKey, resumeKeyIn);
-    } catch (err) {
-      if (err.code === 'SEAT_TAKEN') {
-        log.warn('participant.resume.refused', { session: session.id, ip: req.ip });
-      }
-      throw err;
+  const nameKey = `${firstName} ${lastName}`.toLowerCase();
+  const resumeKeyIn =
+    typeof req.body?.resume_key === 'string' ? req.body.resume_key.slice(0, 100) : '';
+  let registered;
+  try {
+    registered = registerParticipant(session, firstName, lastName, nameKey, resumeKeyIn);
+  } catch (err) {
+    if (err.code === 'SEAT_TAKEN') {
+      log.warn('participant.resume.refused', { session: session.id, ip: req.ip });
     }
-    const { participant, resumed, resumeKey } = registered;
+    throw err;
+  }
+  const { participant, resumed, resumeKey } = registered;
 
-    const sections = JSON.parse(session.content || '[]');
-    const token = signParticipantToken(participant, session);
-    log.info(resumed ? 'participant.resumed' : 'participant.joined', {
-      session: session.id,
-      participant: participant.id,
-      seat: participant.seat_number,
-    });
-    noStore(res);
-    res.json({
-      token,
-      resumed,
-      // Exam seats only: keep this on the device to resume the same seat later.
-      resume_key: resumeKey,
-      seat_number: participant.seat_number,
-      first_name: participant.first_name,
-      last_name: participant.last_name,
-      session: {
-        kind: session.kind || 'lab',
-        title: session.title,
-        expires_at: session.expires_at,
-        section_count: sections.length,
-        step_count: session.kind === 'exam' ? 0 : countSteps(sections),
-        template_version: session.template_version,
-      },
-    });
-  }),
-);
+  const sections = jsonArray(session.content);
+  const token = signParticipantToken(participant, session);
+  log.info(resumed ? 'participant.resumed' : 'participant.joined', {
+    session: session.id,
+    participant: participant.id,
+    seat: participant.seat_number,
+  });
+  noStore(res);
+  res.json({
+    token,
+    resumed,
+    // Exam seats only: keep this on the device to resume the same seat later.
+    resume_key: resumeKey,
+    seat_number: participant.seat_number,
+    first_name: participant.first_name,
+    last_name: participant.last_name,
+    session: {
+      kind: session.kind || 'lab',
+      title: session.title,
+      expires_at: session.expires_at,
+      section_count: sections.length,
+      step_count: session.kind === 'exam' ? 0 : countSteps(sections),
+      template_version: session.template_version,
+    },
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /*  Everything below requires a live seat. Per-seat rate limiters are mounted */
@@ -358,88 +275,82 @@ router.use((req, res, next) => {
  * delivery is the anti-scraping / IP-protection core: a seat can never pull
  * sections it has not legitimately reached.
  */
-router.get(
-  '/content',
-  contentLimiter,
-  asyncHandler(async (req, res) => {
-    const p = req.participant;
-    const { sections, variables } = loadManual(req.session);
-    const context = contextFor(p, variables);
-    const completed = completedSetOf(p);
-    const unlockedSection = computeUnlockedSection(sections, completed);
+router.get('/content', contentLimiter, (req, res) => {
+  const p = req.participant;
+  const { sections, variables } = loadManual(req.session);
+  const context = contextFor(p, variables);
+  const completed = completedSetOf(p);
+  const unlockedSection = computeUnlockedSection(sections, completed);
 
-    touchSeat(p.id);
+  touchSeat(p.id);
 
-    const hintsTaken = new Set(JSON.parse(p.hints_taken || '[]'));
-    const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
+  const hintsTaken = new Set(jsonArray(p.hints_taken));
+  const revealed = new Set(jsonArray(p.revealed_solutions));
 
-    // Send sections 0..unlockedSection. Cleared sections send all steps; the
-    // furthest (current) section reveals steps up to its first open checkpoint.
-    const rendered = [];
-    for (let s = 0; s <= unlockedSection && s < sections.length; s += 1) {
-      const cleared = isSectionCleared(sections[s], s, completed);
-      const stepLimit = cleared
-        ? undefined
-        : computeSectionVisibleThrough(sections[s], s, completed);
-      const section = renderSection(sections[s], context, s, completed, stepLimit);
-      section.cleared = cleared;
+  // Send sections 0..unlockedSection. Cleared sections send all steps; the
+  // furthest (current) section reveals steps up to its first open checkpoint.
+  const rendered = [];
+  for (let s = 0; s <= unlockedSection && s < sections.length; s += 1) {
+    const cleared = isSectionCleared(sections[s], s, completed);
+    const stepLimit = cleared ? undefined : computeSectionVisibleThrough(sections[s], s, completed);
+    const section = renderSection(sections[s], context, s, completed, stepLimit);
+    section.cleared = cleared;
 
-      // Augment each step with hint-taken state and step-level solution
-      // metadata. A solution (if authored) can be revealed once every hint on
-      // the step has been opened — vacuously true when the step has no hints —
-      // and only ships to the browser once the participant reveals it.
-      section.steps.forEach((step) => {
-        const raw = sections[s].steps[step.index];
-        step.hints = (step.hints || []).map((h, hi) => ({
-          ...h,
-          taken: hintsTaken.has(`${s}.${step.index}.${hi}`),
-        }));
-        if (raw.solution) {
-          const allHintsTaken = step.hints.every((h) => h.taken);
-          step.has_solution = true;
-          step.solution_available = allHintsTaken;
-          if (revealed.has(`${s}.${step.index}`)) {
-            step.solution = injectVariables(String(raw.solution), context);
-          }
+    // Augment each step with hint-taken state and step-level solution
+    // metadata. A solution (if authored) can be revealed once every hint on
+    // the step has been opened — vacuously true when the step has no hints —
+    // and only ships to the browser once the participant reveals it.
+    section.steps.forEach((step) => {
+      const raw = sections[s].steps[step.index];
+      step.hints = (step.hints || []).map((h, hi) => ({
+        ...h,
+        taken: hintsTaken.has(`${s}.${step.index}.${hi}`),
+      }));
+      if (raw.solution) {
+        const allHintsTaken = step.hints.every((h) => h.taken);
+        step.has_solution = true;
+        step.solution_available = allHintsTaken;
+        if (revealed.has(`${s}.${step.index}`)) {
+          step.solution = injectVariables(String(raw.solution), context);
         }
-      });
-      rendered.push(section);
-    }
-
-    // Progress for the bar and stepper — the same computation the instructor
-    // monitor uses. Optional / wrap-up sections are flagged and not counted.
-    const total = sections.length;
-    const progress = labProgress(sections, p, completed);
-
-    noStore(res);
-    res.json({
-      seat_number: p.seat_number,
-      first_name: p.first_name,
-      last_name: p.last_name,
-      total_sections: total,
-      unlocked_section: unlockedSection,
-      current_section: Math.min(p.current_section, Math.max(total - 1, 0)),
-      completed_sections: progress.completedCounting,
-      counting_sections: progress.countingTotal,
-      progress_pct: progress.progressPct,
-      // Per section index: { optional, done } — titles of locked sections are
-      // deliberately not included.
-      section_flags: sections.map((_, i) => ({
-        optional: progress.optional[i],
-        done: progress.done[i],
-      })),
-      completed_checkpoints: [...completed],
-      completed: progress.complete,
-      finished: Boolean(p.finished_at),
-      expires_at: req.session.expires_at,
-      // Lets the client correct its countdown for device clock skew.
-      server_time: nowIso(),
-      on_break: Boolean(currentBreak(breaksOf(req.session))),
-      template_version: req.session.template_version,
-      sections: rendered,
+      }
     });
-  }),
-);
+    rendered.push(section);
+  }
+
+  // Progress for the bar and stepper — the same computation the instructor
+  // monitor uses. Optional / wrap-up sections are flagged and not counted.
+  const total = sections.length;
+  const progress = labProgress(sections, p, completed);
+
+  noStore(res);
+  res.json({
+    seat_number: p.seat_number,
+    first_name: p.first_name,
+    last_name: p.last_name,
+    total_sections: total,
+    unlocked_section: unlockedSection,
+    current_section: Math.min(p.current_section, Math.max(total - 1, 0)),
+    completed_sections: progress.completedCounting,
+    counting_sections: progress.countingTotal,
+    progress_pct: progress.progressPct,
+    // Per section index: { optional, done } — titles of locked sections are
+    // deliberately not included.
+    section_flags: sections.map((_, i) => ({
+      optional: progress.optional[i],
+      done: progress.done[i],
+    })),
+    completed_checkpoints: [...completed],
+    completed: progress.complete,
+    finished: Boolean(p.finished_at),
+    expires_at: req.session.expires_at,
+    // Lets the client correct its countdown for device clock skew.
+    server_time: nowIso(),
+    on_break: Boolean(currentBreak(breaksOf(req.session))),
+    template_version: req.session.template_version,
+    sections: rendered,
+  });
+});
 
 /**
  * POST /api/participant/checkpoint
@@ -450,77 +361,73 @@ router.get(
  * the next). When the checkpoint captures a variable, the canonical value is
  * stored so later steps can reference it as {{ NAME }}.
  */
-router.post(
-  '/checkpoint',
-  checkpointLimiter,
-  asyncHandler(async (req, res) => {
-    const p = fresh(req);
-    const si = parseIndex(req.body?.section_index);
-    const sti = parseIndex(req.body?.step_index);
-    const answer = req.body?.answer;
-    if (typeof answer !== 'string' || answer.length > 500) {
-      throw httpError(400, 'Answer must be a short string');
-    }
+router.post('/checkpoint', checkpointLimiter, (req, res) => {
+  const p = freshSeat(req);
+  const si = parseIndex(req.body?.section_index);
+  const sti = parseIndex(req.body?.step_index);
+  const answer = req.body?.answer;
+  if (typeof answer !== 'string' || answer.length > 500) {
+    throw httpError(400, 'Answer must be a short string');
+  }
 
-    const { sections, variables } = loadManual(req.session);
-    const completed = completedSetOf(p);
-    const step = requireReachableStep(sections, si, sti, completed);
-    if (!stepHasCheckpoint(step)) throw httpError(400, 'This step has no checkpoint');
+  const { sections, variables } = loadManual(req.session);
+  const completed = completedSetOf(p);
+  const step = requireReachableStep(sections, si, sti, completed);
+  if (!stepHasCheckpoint(step)) throw httpError(400, 'This step has no checkpoint');
 
-    const context = contextFor(p, variables);
-    const key = checkpointKey(si, sti);
-    const now = nowIso();
-    // Already cleared? Idempotent success; don't log a duplicate attempt.
-    if (completed.has(key)) {
-      noStore(res);
-      return res.json({
-        correct: true,
-        section_cleared: isSectionCleared(sections[si], si, completed),
-        unlocked_section: computeUnlockedSection(sections, completed),
-      });
-    }
-    const { ok, value } = matchCheckpoint(step, context, answer);
-
-    // Attempt log for the instructor's per-participant view (what was typed,
-    // right or wrong). Bounded length; the text is capped too.
-    const entries = logOf(p);
-    entries.push({ k: key, a: answer.trim().slice(0, 200), ok: ok ? 1 : 0, at: now });
-    const trimmed = entries.slice(-MAX_LOG);
-
+  const context = contextFor(p, variables);
+  const key = checkpointKey(si, sti);
+  const now = nowIso();
+  // Already cleared? Idempotent success; don't log a duplicate attempt.
+  if (completed.has(key)) {
     noStore(res);
-    if (!ok) {
-      q.logAttempt.run(JSON.stringify(trimmed), now, p.id);
-      log.debug('checkpoint.wrong', { participant: p.id, section: si, step: sti });
-      return res.status(200).json({ correct: false });
-    }
-
-    completed.add(key);
-    const captured = capturedOf(p);
-    if (step.checkpoint.capture && value !== null) captured[step.checkpoint.capture] = value;
-    q.setCheckpoints.run(
-      JSON.stringify([...completed]),
-      JSON.stringify(captured),
-      JSON.stringify(trimmed),
-      now,
-      p.id,
-    );
-    log.info('checkpoint.cleared', {
-      participant: p.id,
-      session: req.session.id,
-      section: si,
-      step: sti,
-    });
-    if (labProgress(sections, p, completed, si).complete) {
-      markCompleted(p, now, breaksOf(req.session));
-    }
-    res.json({
+    return res.json({
       correct: true,
       section_cleared: isSectionCleared(sections[si], si, completed),
       unlocked_section: computeUnlockedSection(sections, completed),
-      completed: Boolean(p.completed_at),
     });
-  }),
-);
+  }
+  const { ok, value } = matchCheckpoint(step, context, answer);
+
+  // Attempt log for the instructor's per-participant view (what was typed,
+  // right or wrong). Bounded length; the text is capped too.
+  const entries = jsonArray(p.checkpoint_log);
+  entries.push({ k: key, a: answer.trim().slice(0, 200), ok: ok ? 1 : 0, at: now });
+  const trimmed = entries.slice(-MAX_LOG);
+
+  noStore(res);
+  if (!ok) {
+    q.logAttempt.run(JSON.stringify(trimmed), now, p.id);
+    log.debug('checkpoint.wrong', { participant: p.id, section: si, step: sti });
+    return res.status(200).json({ correct: false });
+  }
+
+  completed.add(key);
+  const captured = jsonObject(p.captured_values);
+  if (step.checkpoint.capture && value !== null) captured[step.checkpoint.capture] = value;
+  q.setCheckpoints.run(
+    JSON.stringify([...completed]),
+    JSON.stringify(captured),
+    JSON.stringify(trimmed),
+    now,
+    p.id,
+  );
+  log.info('checkpoint.cleared', {
+    participant: p.id,
+    session: req.session.id,
+    section: si,
+    step: sti,
+  });
+  if (labProgress(sections, p, completed, si).complete) {
+    completeLabSeat(p, now, breaksOf(req.session));
+  }
+  res.json({
+    correct: true,
+    section_cleared: isSectionCleared(sections[si], si, completed),
+    unlocked_section: computeUnlockedSection(sections, completed),
+    completed: Boolean(p.completed_at),
+  });
+});
 
 /**
  * POST /api/participant/progress
@@ -528,38 +435,34 @@ router.post(
  * Records the section a seat is actively viewing (drives instructor analytics:
  * time-on-section and section distribution).
  */
-router.post(
-  '/progress',
-  actionLimiter,
-  asyncHandler(async (req, res) => {
-    const p = fresh(req);
-    const si = parseIndex(req.body?.section_index);
-    const { sections } = loadManual(req.session);
-    if (Number.isNaN(si) || si >= sections.length) throw httpError(400, 'Invalid section index');
-    const completed = completedSetOf(p);
-    if (si > computeUnlockedSection(sections, completed)) throw httpError(403, 'Section is locked');
+router.post('/progress', actionLimiter, (req, res) => {
+  const p = freshSeat(req);
+  const si = parseIndex(req.body?.section_index);
+  const { sections } = loadManual(req.session);
+  if (Number.isNaN(si) || si >= sections.length) throw httpError(400, 'Invalid section index');
+  const completed = completedSetOf(p);
+  if (si > computeUnlockedSection(sections, completed)) throw httpError(403, 'Section is locked');
 
-    const now = nowIso();
-    if (si !== p.current_section) {
-      // Close the visit to the section being left (time-per-section analytics),
-      // then move. max_section is a monotonic high-water mark so progress never
-      // drops when a participant navigates back to review an earlier section.
-      // Once complete the clock is frozen: later visits are not accumulated.
-      const times = p.completed_at
-        ? sectionTimesOf(p)
-        : closeOpenVisit(p, sectionTimesOf(p), now, breaksOf(req.session));
-      q.setSection.run(si, si, JSON.stringify(times), now, now, p.id);
-      p.current_section = si;
-      p.section_entered_at = now;
-      p.max_section = Math.max(p.max_section, si);
-    } else {
-      touchSeat(p.id, now);
-    }
-    // Reaching a checkpoint-free last counting section is what completes such a manual.
-    if (labProgress(sections, p, completed).complete) markCompleted(p, now, breaksOf(req.session));
-    res.json({ current_section: si, completed: Boolean(p.completed_at) });
-  }),
-);
+  const now = nowIso();
+  if (si !== p.current_section) {
+    // Close the visit to the section being left (time-per-section analytics),
+    // then move. max_section is a monotonic high-water mark so progress never
+    // drops when a participant navigates back to review an earlier section.
+    // Once complete the clock is frozen: later visits are not accumulated.
+    const times = p.completed_at
+      ? jsonObject(p.section_times)
+      : closeOpenVisit(p, now, breaksOf(req.session));
+    q.setSection.run(si, si, JSON.stringify(times), now, now, p.id);
+    p.current_section = si;
+    p.section_entered_at = now;
+    p.max_section = Math.max(p.max_section, si);
+  } else {
+    touchSeat(p.id, now);
+  }
+  // Reaching a checkpoint-free last counting section is what completes such a manual.
+  if (labProgress(sections, p, completed).complete) completeLabSeat(p, now, breaksOf(req.session));
+  res.json({ current_section: si, completed: Boolean(p.completed_at) });
+});
 
 /**
  * POST /api/participant/hint
@@ -568,26 +471,22 @@ router.post(
  * gates the reveal-solution feature). The step must be reachable — the same
  * gate every other participant action applies.
  */
-router.post(
-  '/hint',
-  actionLimiter,
-  asyncHandler(async (req, res) => {
-    const p = fresh(req);
-    const si = parseIndex(req.body?.section_index);
-    const sti = parseIndex(req.body?.step_index);
-    const hi = parseIndex(req.body?.hint_index);
-    const { sections } = loadManual(req.session);
-    const completed = completedSetOf(p);
-    const step = requireReachableStep(sections, si, sti, completed);
-    if (Number.isNaN(hi) || !step.hints || hi >= step.hints.length) {
-      throw httpError(400, 'Invalid hint');
-    }
-    const taken = new Set(JSON.parse(p.hints_taken || '[]'));
-    taken.add(`${si}.${sti}.${hi}`);
-    q.setHints.run(JSON.stringify([...taken]), nowIso(), p.id);
-    res.json({ ok: true, hints_taken: taken.size });
-  }),
-);
+router.post('/hint', actionLimiter, (req, res) => {
+  const p = freshSeat(req);
+  const si = parseIndex(req.body?.section_index);
+  const sti = parseIndex(req.body?.step_index);
+  const hi = parseIndex(req.body?.hint_index);
+  const { sections } = loadManual(req.session);
+  const completed = completedSetOf(p);
+  const step = requireReachableStep(sections, si, sti, completed);
+  if (Number.isNaN(hi) || !step.hints || hi >= step.hints.length) {
+    throw httpError(400, 'Invalid hint');
+  }
+  const taken = new Set(jsonArray(p.hints_taken));
+  taken.add(`${si}.${sti}.${hi}`);
+  q.setHints.run(JSON.stringify([...taken]), nowIso(), p.id);
+  res.json({ ok: true, hints_taken: taken.size });
+});
 
 /**
  * POST /api/participant/solution
@@ -596,38 +495,34 @@ router.post(
  * that step has been opened (vacuously satisfied when the step has no hints).
  * Until then the solution never leaves the server.
  */
-router.post(
-  '/solution',
-  contentLimiter,
-  asyncHandler(async (req, res) => {
-    const p = fresh(req);
-    const si = parseIndex(req.body?.section_index);
-    const sti = parseIndex(req.body?.step_index);
-    const { sections, variables } = loadManual(req.session);
-    const completed = completedSetOf(p);
-    const step = requireReachableStep(sections, si, sti, completed);
-    if (!step.solution) throw httpError(404, 'No solution authored for this step');
+router.post('/solution', contentLimiter, (req, res) => {
+  const p = freshSeat(req);
+  const si = parseIndex(req.body?.section_index);
+  const sti = parseIndex(req.body?.step_index);
+  const { sections, variables } = loadManual(req.session);
+  const completed = completedSetOf(p);
+  const step = requireReachableStep(sections, si, sti, completed);
+  if (!step.solution) throw httpError(404, 'No solution authored for this step');
 
-    const taken = new Set(JSON.parse(p.hints_taken || '[]'));
-    const allTaken = (step.hints || []).every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
-    if (!allTaken) throw httpError(403, 'Open all hints before revealing the solution');
+  const taken = new Set(jsonArray(p.hints_taken));
+  const allTaken = (step.hints || []).every((_, hi) => taken.has(`${si}.${sti}.${hi}`));
+  if (!allTaken) throw httpError(403, 'Open all hints before revealing the solution');
 
-    const revealed = new Set(JSON.parse(p.revealed_solutions || '[]'));
-    revealed.add(`${si}.${sti}`);
-    q.setRevealed.run(JSON.stringify([...revealed]), nowIso(), p.id);
+  const revealed = new Set(jsonArray(p.revealed_solutions));
+  revealed.add(`${si}.${sti}`);
+  q.setRevealed.run(JSON.stringify([...revealed]), nowIso(), p.id);
 
-    const context = contextFor(p, variables);
-    const solution = injectVariables(String(step.solution), context);
-    log.info('solution.revealed', {
-      participant: p.id,
-      session: req.session.id,
-      section: si,
-      step: sti,
-    });
-    noStore(res);
-    res.json({ solution });
-  }),
-);
+  const context = contextFor(p, variables);
+  const solution = injectVariables(String(step.solution), context);
+  log.info('solution.revealed', {
+    participant: p.id,
+    session: req.session.id,
+    section: si,
+    step: sti,
+  });
+  noStore(res);
+  res.json({ solution });
+});
 
 /**
  * POST /api/participant/finish
@@ -635,27 +530,23 @@ router.post(
  * complete (optional / wrap-up sections are not required). Powers the
  * completion screen and the instructor "finished" status.
  */
-router.post(
-  '/finish',
-  actionLimiter,
-  asyncHandler(async (req, res) => {
-    const p = fresh(req);
-    const { sections } = loadManual(req.session);
-    const completed = completedSetOf(p);
-    // Require genuine completion: every counting section cleared and reached.
-    if (!labProgress(sections, p, completed).complete) {
-      throw httpError(400, 'Lab is not complete yet');
-    }
+router.post('/finish', actionLimiter, (req, res) => {
+  const p = freshSeat(req);
+  const { sections } = loadManual(req.session);
+  const completed = completedSetOf(p);
+  // Require genuine completion: every counting section cleared and reached.
+  if (!labProgress(sections, p, completed).complete) {
+    throw httpError(400, 'Lab is not complete yet');
+  }
 
-    const now = nowIso();
-    markCompleted(p, now, breaksOf(req.session));
-    if (!p.finished_at) {
-      q.finish.run(now, now, p.id);
-      log.info('participant.finished', { participant: p.id, session: req.session.id });
-    }
-    res.json({ finished: true });
-  }),
-);
+  const now = nowIso();
+  completeLabSeat(p, now, breaksOf(req.session));
+  if (!p.finished_at) {
+    q.finish.run(now, now, p.id);
+    log.info('participant.finished', { participant: p.id, session: req.session.id });
+  }
+  res.json({ finished: true });
+});
 
 /**
  * GET /api/participant/status

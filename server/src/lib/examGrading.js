@@ -16,10 +16,12 @@ import {
   QUESTION_TYPES,
   isSubmitSection,
   isExamSectionComplete,
+  sectionItems,
 } from '../../../shared/exam-schema.js';
 import { isOptionalSection } from '../../../shared/lab-progress.js';
 import { visitedSections } from './labProgress.js';
-import { seatExam } from './examSeat.js';
+import { seatExam, seatItem } from './examSeat.js';
+import { jsonObject } from './json.js';
 
 /**
  * Instructor-side grading for EXAM sessions: per-participant scores, the
@@ -32,16 +34,11 @@ import { seatExam } from './examSeat.js';
  * participants). Each participant
  * is graded against their own seat's exam (`variables`: the session's
  * per-seat formulas), so accepted answers may use {{ PLACEHOLDERS }}.
+ *
+ * Rendering a seat's exam is the costly part, so a request grades each
+ * participant once (gradeParticipant) and hands the result to the views and
+ * statistics below instead of letting each of them grade again.
  */
-
-export function parseObject(json) {
-  try {
-    const v = JSON.parse(json || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
 
 const eventsOf = db.prepare(
   `SELECT question_key AS k, response AS a, at FROM exam_answer_events
@@ -69,45 +66,50 @@ export function sessionAnswerLog(sessionId) {
   }));
 }
 
-export function parseArray(json) {
-  try {
-    const v = JSON.parse(json || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-
 const overrideOf = (grades, key) => {
   const g = grades[key];
   if (!g || (g.correct !== 0 && g.correct !== 1)) return undefined;
   return g.correct === 1;
 };
 
-/** Every question graded for one participant, in exam order. */
-export function gradeParticipant(p, content, variables = []) {
-  const answers = parseObject(p.answers);
-  const grades = parseObject(p.grades);
-  return listQuestions(seatExam(content, variables, p)).map(({ key, si, qi, number, q }) => {
-    const value = answers[key];
-    const mark = grades[key];
-    const g = gradeResponse(q, value, overrideOf(grades, key), mark?.points ?? null);
-    return {
-      key,
-      section_index: si,
-      question_index: qi,
-      number,
-      type: q.type,
-      points: q.points,
-      manual: isManualQuestion(q),
-      value: value ?? null,
-      response: describeResponse(q, value),
-      marked_by: grades[key]?.by ?? null,
-      marked_at: grades[key]?.at ?? null,
-      comment: grades[key]?.comment ?? null,
-      ...g,
-    };
-  });
+/** One participant's questions as their seat reads them, in exam order (listQuestions). */
+export const seatQuestions = (p, content, variables = []) =>
+  listQuestions(seatExam(content, variables, p));
+
+/** One question (a listQuestions entry for this seat) graded from the seat's answers and marks. */
+function gradeEntry({ key, si, qi, number, q }, answers, grades) {
+  const value = answers[key];
+  const mark = grades[key];
+  return {
+    key,
+    section_index: si,
+    question_index: qi,
+    number,
+    type: q.type,
+    points: q.points,
+    manual: isManualQuestion(q),
+    value: value ?? null,
+    response: describeResponse(q, value),
+    marked_by: mark?.by ?? null,
+    marked_at: mark?.at ?? null,
+    comment: mark?.comment ?? null,
+    ...gradeResponse(q, value, overrideOf(grades, key), mark?.points ?? null),
+  };
+}
+
+/**
+ * Every question graded for one participant, in exam order. Pass `questions`
+ * (seatQuestions) when the caller already rendered the seat's exam.
+ */
+export function gradeParticipant(
+  p,
+  content,
+  variables = [],
+  questions = seatQuestions(p, content, variables),
+) {
+  const answers = jsonObject(p.answers);
+  const grades = jsonObject(p.grades);
+  return questions.map((entry) => gradeEntry(entry, answers, grades));
 }
 
 /**
@@ -120,7 +122,7 @@ export function gradeParticipant(p, content, variables = []) {
  */
 export function examProgress(content, p) {
   const sections = Array.isArray(content) ? content : [];
-  const answers = parseObject(p.answers);
+  const answers = jsonObject(p.answers);
   const visited = visitedSections(p);
   const submitted = Boolean(p.submitted_at);
   const done = sections.map((sec, i) =>
@@ -141,10 +143,15 @@ export function examProgress(content, p) {
   };
 }
 
-/** Score summary for one participant. */
-export function examParticipantView(p, content, breaks = [], variables = []) {
+/** Score summary for one participant (`graded`: gradeParticipant's result, when already known). */
+export function examParticipantView(
+  p,
+  content,
+  breaks = [],
+  variables = [],
+  graded = gradeParticipant(p, content, variables),
+) {
   const now = nowIso();
-  const graded = gradeParticipant(p, content, variables);
   const secondsSinceSeen = secondsBetween(p.last_seen_at, now);
   const score = graded.reduce((n, g) => n + g.points_awarded, 0);
   const maxScore = totalPoints(content);
@@ -201,11 +208,11 @@ export function examParticipantView(p, content, breaks = [], variables = []) {
  * manual mark, and the history of changes to that answer.
  */
 export function examParticipantDetail(p, content, breaks = [], variables = []) {
-  const view = examParticipantView(p, content, breaks, variables);
+  // Prompts and expected answers as this participant saw them, rendered once.
+  const questions = seatQuestions(p, content, variables);
+  const graded = gradeParticipant(p, content, variables, questions);
+  const view = examParticipantView(p, content, breaks, variables, graded);
   const history = answerHistory(p.id);
-  // Prompts and expected answers as this participant saw them.
-  const questions = listQuestions(seatExam(content, variables, p));
-  const graded = gradeParticipant(p, content, variables);
   return {
     ...view,
     section_times: content.map((sec, i) => ({
@@ -231,9 +238,16 @@ export function examParticipantDetail(p, content, breaks = [], variables = []) {
   };
 }
 
-/** Class-wide statistics per question (answered / correct / awaiting marking). */
-export function examQuestionStats(participants, content, variables = []) {
-  const perParticipant = participants.map((p) => gradeParticipant(p, content, variables));
+/**
+ * Class-wide statistics per question (answered / correct / awaiting marking).
+ * `perParticipant`: gradeParticipant's result for each participant, in order.
+ */
+export function examQuestionStats(
+  participants,
+  content,
+  variables = [],
+  perParticipant = participants.map((p) => gradeParticipant(p, content, variables)),
+) {
   return listQuestions(content).map(({ key, si, number, q }, i) => {
     const rows = perParticipant.map((g) => g[i]);
     const answered = rows.filter((r) => r.answered).length;
@@ -262,12 +276,14 @@ export function examQuestionStats(participants, content, variables = []) {
   });
 }
 
-/** Every participant's response to one question (grade-by-question view). */
+/**
+ * Every participant's response to one question (grade-by-question view). Only
+ * that question is rendered and graded for each seat.
+ */
 export function examQuestionResponses(participants, content, key, variables = []) {
-  const all = listQuestions(content);
-  const i = all.findIndex((x) => x.key === key);
-  if (i < 0) return null;
-  const entry = all[i];
+  const entry = listQuestions(content).find((x) => x.key === key);
+  if (!entry) return null;
+  const ii = sectionItems(content[entry.si]).indexOf(entry.q);
   return {
     key,
     number: entry.number,
@@ -282,7 +298,8 @@ export function examQuestionResponses(participants, content, key, variables = []
     manual: isManualQuestion(entry.q),
     expected: describeExpected(entry.q),
     responses: participants.map((p) => {
-      const g = gradeParticipant(p, content, variables)[i];
+      const q = seatItem(content, variables, p, entry.si, ii) || entry.q;
+      const g = gradeEntry({ ...entry, q }, jsonObject(p.answers), jsonObject(p.grades));
       return {
         participant_id: p.id,
         seat_number: p.seat_number,

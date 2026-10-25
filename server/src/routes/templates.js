@@ -1,26 +1,14 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
-import { asyncHandler, httpError } from '../middleware/errorHandler.js';
+import { httpError, idParam } from '../middleware/errorHandler.js';
 import { validateTemplatePayload } from '../../../shared/validate-template.js';
 import { validateExamPayload } from '../../../shared/validate-exam.js';
-import {
-  listQuestions,
-  totalPoints,
-  isSubmitSection,
-  isQuestion,
-  examCaptures,
-} from '../../../shared/exam-schema.js';
-import {
-  renderManual,
-  countSteps,
-  injectVariables,
-  injectImages,
-  FUNCTION_NAMES,
-} from '../../../shared/templating.js';
-import { maskExample } from '../../../shared/template-schema.js';
-import { imageNames, imageUrlMap } from '../lib/images.js';
-import { examContext, examForSeat } from '../lib/examSeat.js';
+import { listQuestions, totalPoints } from '../../../shared/exam-schema.js';
+import { countSteps } from '../../../shared/templating.js';
+import { historyChanges } from '../../../shared/template-history.js';
+import { imageNames } from '../lib/images.js';
+import { jsonArray, jsonObject } from '../lib/json.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
 
@@ -47,6 +35,9 @@ const q = {
   audit: db.prepare(
     `SELECT id, action, version, snapshot, instructor_username, at
        FROM template_audit WHERE template_id = ? ORDER BY id DESC`,
+  ),
+  auditEntry: db.prepare(
+    'SELECT id, action, version, snapshot FROM template_audit WHERE id = ? AND template_id = ?',
   ),
   insert: db.prepare(
     `INSERT INTO templates (kind, title, description, content, variables, version, created_by)
@@ -89,8 +80,8 @@ function rowToTemplate(row) {
     kind: kindOf(row),
     title: row.title,
     description: row.description,
-    content: JSON.parse(row.content),
-    variables: JSON.parse(row.variables),
+    content: jsonArray(row.content),
+    variables: jsonArray(row.variables),
     version: row.version,
     archived_at: row.archived_at,
     created_at: row.created_at,
@@ -111,26 +102,35 @@ function recordAudit(instructor, { templateId, title, action, version, snapshot 
   );
 }
 
+/** Insert a template (version 1) and its "created" audit entry together. */
+const insertTemplate = db.transaction((instructor, t) => {
+  const info = q.insert.run(t.kind, t.title, t.description, t.content, t.variables, instructor.id);
+  const row = q.get.get(info.lastInsertRowid);
+  recordAudit(instructor, {
+    templateId: row.id,
+    title: row.title,
+    action: 'created',
+    version: row.version,
+    snapshot: snapshotOf(row),
+  });
+  return row;
+});
+
 /** Build a snapshot object from a template row. */
 function snapshotOf(row) {
   return {
     kind: kindOf(row),
     title: row.title,
     description: row.description,
-    content: JSON.parse(row.content),
-    variables: JSON.parse(row.variables),
+    content: jsonArray(row.content),
+    variables: jsonArray(row.variables),
   };
 }
 
-/** Parse and validate a numeric :id param. */
-function idParam(req) {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) throw httpError(404, 'Template not found');
-  return id;
-}
+const templateId = (req) => idParam(req, 'Template not found');
 
 function loadOr404(req) {
-  const row = q.get.get(idParam(req));
+  const row = q.get.get(templateId(req));
   if (!row) throw httpError(404, 'Template not found');
   return row;
 }
@@ -144,7 +144,7 @@ router.get('/', (req, res) => {
   const rows = q.list.all(includeArchived);
   res.json(
     rows.map((r) => {
-      const content = JSON.parse(r.content);
+      const content = jsonArray(r.content);
       const exam = kindOf(r) === 'exam';
       return {
         id: r.id,
@@ -166,24 +166,40 @@ router.get('/', (req, res) => {
   );
 });
 
-/** GET /api/templates/functions — formula helper names for the editor. */
-router.get('/functions', (req, res) => {
-  res.json({ functions: FUNCTION_NAMES });
-});
-
-/** GET /api/templates/:id/audit — read-only change history (with snapshots). */
+/**
+ * GET /api/templates/:id/audit — read-only change history, newest first, each
+ * entry with what it changed in words. Snapshots stay on the server (a long
+ * history of full snapshots made this response megabytes); revert fetches
+ * the one it needs from /audit/:entryId.
+ */
 router.get('/:id/audit', (req, res) => {
-  const rows = q.audit.all(idParam(req));
+  const rows = q.audit
+    .all(templateId(req))
+    .map((r) => ({ ...r, snapshot: r.snapshot ? jsonObject(r.snapshot) : null }));
+  const changes = historyChanges(rows);
   res.json(
-    rows.map((r) => ({
+    rows.map((r, i) => ({
       id: r.id,
       action: r.action,
       version: r.version,
       instructor_username: r.instructor_username,
       at: r.at,
-      snapshot: r.snapshot ? JSON.parse(r.snapshot) : null,
+      has_snapshot: Boolean(r.snapshot),
+      changes: changes[i],
     })),
   );
+});
+
+/** GET /api/templates/:id/audit/:entryId — one history entry with its full snapshot (revert). */
+router.get('/:id/audit/:entryId', (req, res) => {
+  const row = q.auditEntry.get(Number(req.params.entryId), templateId(req));
+  if (!row || !row.snapshot) throw httpError(404, 'Version not found');
+  res.json({
+    id: row.id,
+    action: row.action,
+    version: row.version,
+    snapshot: jsonObject(row.snapshot),
+  });
 });
 
 /** GET /api/templates/:id — full template. */
@@ -192,31 +208,19 @@ router.get('/:id', (req, res) => {
 });
 
 /** POST /api/templates — create. Body `kind: 'exam'` creates an exam; default lab. */
-router.post(
-  '/',
-  asyncHandler(async (req, res) => {
-    const kind = req.body?.kind === 'exam' ? 'exam' : 'lab';
-    const clean = validateFor(kind, req.body);
-    const info = q.insert.run(
-      kind,
-      clean.title,
-      clean.description,
-      JSON.stringify(clean.content),
-      JSON.stringify(clean.variables),
-      req.instructor.id,
-    );
-    const row = q.get.get(info.lastInsertRowid);
-    recordAudit(req.instructor, {
-      templateId: row.id,
-      title: row.title,
-      action: 'created',
-      version: row.version,
-      snapshot: snapshotOf(row),
-    });
-    log.info('template.created', { template: row.id, instructor: req.instructor.id });
-    res.status(201).json(rowToTemplate(row));
-  }),
-);
+router.post('/', (req, res) => {
+  const kind = req.body?.kind === 'exam' ? 'exam' : 'lab';
+  const clean = validateFor(kind, req.body);
+  const row = insertTemplate(req.instructor, {
+    kind,
+    title: clean.title,
+    description: clean.description,
+    content: JSON.stringify(clean.content),
+    variables: JSON.stringify(clean.variables),
+  });
+  log.info('template.created', { template: row.id, instructor: req.instructor.id });
+  res.status(201).json(rowToTemplate(row));
+});
 
 /**
  * PUT /api/templates/:id — update (bumps version). The kind is fixed at
@@ -224,22 +228,21 @@ router.post(
  * Running sessions are NOT affected: they render from their own snapshot until
  * the instructor pushes the new version from the session monitor.
  */
-router.put(
-  '/:id',
-  asyncHandler(async (req, res) => {
-    const existing = loadOr404(req);
-    // Optimistic concurrency: templates are shared, so an editor sends the
-    // version it loaded and a save over someone else's newer save is refused
-    // instead of silently discarding their change.
-    const expected = req.body?.expected_version;
-    if (expected !== undefined && expected !== null && Number(expected) !== existing.version) {
-      throw httpError(
-        409,
-        `This template was changed by someone else (now v${existing.version}, you loaded v${expected}). Reload it and apply your edits again.`,
-        'VERSION_CONFLICT',
-      );
-    }
-    const clean = validateFor(kindOf(existing), req.body);
+router.put('/:id', (req, res) => {
+  const existing = loadOr404(req);
+  // Optimistic concurrency: templates are shared, so an editor sends the
+  // version it loaded and a save over someone else's newer save is refused
+  // instead of silently discarding their change.
+  const expected = req.body?.expected_version;
+  if (expected !== undefined && expected !== null && Number(expected) !== existing.version) {
+    throw httpError(
+      409,
+      `This template was changed by someone else (now v${existing.version}, you loaded v${expected}). Reload it and apply your edits again.`,
+      'VERSION_CONFLICT',
+    );
+  }
+  const clean = validateFor(kindOf(existing), req.body);
+  const row = db.transaction(() => {
     q.update.run(
       clean.title,
       clean.description,
@@ -248,22 +251,23 @@ router.put(
       nowIso(),
       existing.id,
     );
-    const row = q.get.get(existing.id);
+    const updated = q.get.get(existing.id);
     recordAudit(req.instructor, {
-      templateId: row.id,
-      title: row.title,
+      templateId: updated.id,
+      title: updated.title,
       action: 'updated',
-      version: row.version,
-      snapshot: snapshotOf(row),
+      version: updated.version,
+      snapshot: snapshotOf(updated),
     });
-    log.info('template.updated', {
-      template: row.id,
-      version: row.version,
-      instructor: req.instructor.id,
-    });
-    res.json(rowToTemplate(row));
-  }),
-);
+    return updated;
+  })();
+  log.info('template.updated', {
+    template: row.id,
+    version: row.version,
+    instructor: req.instructor.id,
+  });
+  res.json(rowToTemplate(row));
+});
 
 /**
  * DELETE /api/templates/:id — ARCHIVE by default.
@@ -280,13 +284,15 @@ router.delete('/:id', (req, res) => {
 
   if (!permanent) {
     if (existing.archived_at) return res.status(204).end();
-    q.archive.run(nowIso(), nowIso(), existing.id);
-    recordAudit(req.instructor, {
-      templateId: existing.id,
-      title: existing.title,
-      action: 'archived',
-      version: existing.version,
-    });
+    db.transaction(() => {
+      q.archive.run(nowIso(), nowIso(), existing.id);
+      recordAudit(req.instructor, {
+        templateId: existing.id,
+        title: existing.title,
+        action: 'archived',
+        version: existing.version,
+      });
+    })();
     log.info('template.archived', { template: existing.id, instructor: req.instructor.id });
     return res.status(204).end();
   }
@@ -297,15 +303,17 @@ router.delete('/:id', (req, res) => {
       'Cannot permanently delete a template with active sessions — end them first',
     );
   }
-  q.remove.run(existing.id);
   // Audit survives the deletion (no cascading FK on the audit table).
-  recordAudit(req.instructor, {
-    templateId: existing.id,
-    title: existing.title,
-    action: 'deleted',
-    version: existing.version,
-    snapshot: snapshotOf(existing),
-  });
+  db.transaction(() => {
+    q.remove.run(existing.id);
+    recordAudit(req.instructor, {
+      templateId: existing.id,
+      title: existing.title,
+      action: 'deleted',
+      version: existing.version,
+      snapshot: snapshotOf(existing),
+    });
+  })();
   log.warn('template.deleted', {
     template: existing.id,
     sessions_detached: counts.total || 0,
@@ -318,13 +326,15 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/restore', (req, res) => {
   const existing = loadOr404(req);
   if (existing.archived_at) {
-    q.restore.run(nowIso(), existing.id);
-    recordAudit(req.instructor, {
-      templateId: existing.id,
-      title: existing.title,
-      action: 'restored',
-      version: existing.version,
-    });
+    db.transaction(() => {
+      q.restore.run(nowIso(), existing.id);
+      recordAudit(req.instructor, {
+        templateId: existing.id,
+        title: existing.title,
+        action: 'restored',
+        version: existing.version,
+      });
+    })();
     log.info('template.restored', { template: existing.id, instructor: req.instructor.id });
   }
   res.json(rowToTemplate(q.get.get(existing.id)));
@@ -340,21 +350,12 @@ router.post('/:id/duplicate', (req, res) => {
   const src = loadOr404(req);
   const wanted = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   const title = (wanted || `${src.title} (copy)`).slice(0, 200);
-  const info = q.insert.run(
-    kindOf(src),
+  const row = insertTemplate(req.instructor, {
+    kind: kindOf(src),
     title,
-    src.description,
-    src.content,
-    src.variables,
-    req.instructor.id,
-  );
-  const row = q.get.get(info.lastInsertRowid);
-  recordAudit(req.instructor, {
-    templateId: row.id,
-    title: row.title,
-    action: 'created',
-    version: row.version,
-    snapshot: snapshotOf(row),
+    description: src.description,
+    content: src.content,
+    variables: src.variables,
   });
   log.info('template.duplicated', {
     template: row.id,
@@ -363,121 +364,5 @@ router.post('/:id/duplicate', (req, res) => {
   });
   res.status(201).json(rowToTemplate(row));
 });
-
-/**
- * POST /api/templates/:id/preview
- * Authoring aid: render the manual for a chosen seat so instructors can see the
- * resolved output without a live session. Also accepts an inline draft body so
- * unsaved edits can be previewed (draft is fully validated first, so authoring
- * errors such as unknown placeholders surface here too). Optional
- * `first_name` / `last_name` stand in for the participant; values captured by
- * pattern checkpoints are stood in by an example matching each mask.
- */
-router.post(
-  '/:id/preview',
-  asyncHandler(async (req, res) => {
-    const seatRaw = parseInt(req.body?.seat_id, 10);
-    const seatId = Number.isInteger(seatRaw) ? Math.min(Math.max(seatRaw, 0), 9999) : 1;
-    let content;
-    let variables;
-    let kind;
-
-    if (req.body?.draft) {
-      kind = req.body.draft.kind === 'exam' ? 'exam' : 'lab';
-      const clean = validateFor(kind, req.body.draft);
-      content = clean.content;
-      variables = clean.variables;
-    } else {
-      const row = loadOr404(req);
-      kind = kindOf(row);
-      content = JSON.parse(row.content);
-      variables = JSON.parse(row.variables);
-    }
-
-    const name = (v, fallback) =>
-      String(v ?? '')
-        .trim()
-        .slice(0, 60) || fallback;
-
-    if (kind === 'exam') {
-      // The exam as the chosen seat sees it (answers included — instructor-only
-      // route), placeholders and library images resolved.
-      const images = imageUrlMap();
-      // Saved answers stand in as a label until a participant gives them.
-      const captured = {};
-      for (const c of examCaptures({ content })) {
-        if (!(c.name in captured)) captured[c.name] = `[answer to ${c.where}]`;
-      }
-      const context = examContext(
-        variables,
-        {
-          seat_number: seatId,
-          first_name: name(req.body?.first_name, 'Sample'),
-          last_name: name(req.body?.last_name, 'Participant'),
-        },
-        undefined,
-        captured,
-      );
-      return res.json({
-        kind,
-        seat_id: seatId,
-        context,
-        sections: examForSeat(content, context).map((sec, si) =>
-          isSubmitSection(sec)
-            ? { ...sec, index: si, body: injectImages(sec.body, images) }
-            : {
-                ...sec,
-                index: si,
-                type: 'part',
-                items: sec.items.map((it) =>
-                  isQuestion(it)
-                    ? {
-                        ...it,
-                        prompt: injectImages(it.prompt, images),
-                        options: it.options.map((o) => injectImages(o, images)),
-                      }
-                    : {
-                        ...it,
-                        body: injectImages(it.body, images),
-                        ...(it.tasks
-                          ? { tasks: it.tasks.map((t) => injectImages(t, images)) }
-                          : {}),
-                      },
-                ),
-              },
-        ),
-      });
-    }
-
-    const who = {
-      firstName: name(req.body?.first_name, 'Sample'),
-      lastName: name(req.body?.last_name, 'Participant'),
-      captured: {},
-      images: imageUrlMap(),
-    };
-    for (const section of content) {
-      for (const step of section.steps || []) {
-        const cp = step.checkpoint;
-        if (cp?.capture) {
-          who.captured[cp.capture] = cp.pattern ? maskExample(cp.pattern) : cp.answer || '';
-        }
-      }
-    }
-    const { context, sections } = renderManual(content, variables, seatId, who);
-    // Instructor preview shows authored solutions inline (unlocked) so the
-    // author can see the rendered walkthrough — this path is instructor-only,
-    // so it never leaks to a participant.
-    sections.forEach((section) => {
-      section.steps.forEach((step) => {
-        const raw = content[section.index]?.steps?.[step.index];
-        if (raw?.solution) {
-          step.has_solution = true;
-          step.solution = injectVariables(String(raw.solution), context);
-        }
-      });
-    });
-    res.json({ seat_id: seatId, context, sections });
-  }),
-);
 
 export default router;

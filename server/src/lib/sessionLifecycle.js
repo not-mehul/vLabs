@@ -3,6 +3,7 @@ import config from '../config.js';
 import { log } from './logger.js';
 import { breaksOf, closeOpenVisit } from './sectionTiming.js';
 import { contentRemap, remapParticipant, remapEventKey } from './contentRemap.js';
+import { jsonArray } from './json.js';
 
 const q = {
   expired: db.prepare(
@@ -14,6 +15,11 @@ const q = {
     `UPDATE participants SET submitted_at = ?, completed_at = COALESCE(completed_at, ?),
             finished_at = COALESCE(finished_at, ?), section_times = ?, auto_submitted = 1
       WHERE id = ? AND submitted_at IS NULL`,
+  ),
+  // The open section visit is closed at the same moment, so the clock stops.
+  completeLab: db.prepare(
+    `UPDATE participants SET completed_at = ?, section_times = ?
+      WHERE id = ? AND completed_at IS NULL`,
   ),
   template: db.prepare('SELECT id, title, content, variables, version FROM templates WHERE id = ?'),
   push: db.prepare(
@@ -87,6 +93,25 @@ export function collectExamSubmissions(session, at) {
 }
 
 /**
+ * Record that a LAB seat is complete, the moment its last counting section is
+ * cleared (by the participant, or by an instructor unlocking a checkpoint).
+ * Freezes its clock (total time = joined → completed) and lets the monitor
+ * show "Complete" even if the participant keeps reviewing instead of
+ * pressing Finish. Sets `p.completed_at` when recorded.
+ *
+ * @returns {boolean} true when this call recorded it
+ */
+export function completeLabSeat(p, now, breaks = []) {
+  if (p.completed_at) return false;
+  const times = closeOpenVisit(p, now, breaks);
+  const { changes } = q.completeLab.run(now, JSON.stringify(times), p.id);
+  if (!changes) return false;
+  log.info('participant.completed', { participant: p.id, session: p.session_id });
+  p.completed_at = now;
+  return true;
+}
+
+/**
  * Copy the CURRENT master template (title/content/variables/version) into a
  * session. Used at launch and by the instructor's "push latest version".
  * On a push, every participant's progress, answers, marks and timings move
@@ -103,12 +128,12 @@ export function snapshotTemplateIntoSession(sessionId, templateId) {
     err.status = 409;
     throw err;
   }
-  const sections = JSON.parse(t.content);
+  const sections = jsonArray(t.content);
   const lastIndex = Math.max(sections.length - 1, 0);
   const before = q.session.get(sessionId);
   const tx = db.transaction(() => {
     const remap = before
-      ? contentRemap(JSON.parse(before.content || '[]'), sections, before.kind || 'lab')
+      ? contentRemap(jsonArray(before.content), sections, before.kind || 'lab')
       : null;
     if (remap) {
       for (const p of q.seats.all(sessionId)) {

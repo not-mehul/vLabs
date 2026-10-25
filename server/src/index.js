@@ -1,8 +1,5 @@
-import { createApp } from './app.js';
 import config from './config.js';
-import db from './db/index.js';
-import { ensureSeed, needsBootstrapInstructor, accountsOnDefaultPassword } from './db/seed.js';
-import { sweepExpiredSessions } from './lib/sessionLifecycle.js';
+import db, { schema } from './db/index.js';
 import { log } from './lib/logger.js';
 
 const RED = '\x1b[31m';
@@ -17,6 +14,31 @@ function fatal(lines) {
 }
 
 const isProd = config.env === 'production';
+
+// A database written by a newer vLabs (an update rolled back without
+// restoring its backup) must not be run by this code: it would read and
+// write a schema it does not know. Any environment.
+if (schema.ahead) {
+  fatal([
+    `the database is at schema version ${schema.version}; this vLabs understands up to ${schema.latest}.`,
+    `It was migrated by a newer release: ${config.dbPath}`,
+    'Restore the backup taken before that update (on the Pi: /var/lib/vlabs/backups),',
+    'or start the newer release again.',
+  ]);
+}
+
+// Loaded only now: the route modules prepare their SQL when imported, which
+// would fail with a bare SQLite error on a schema from a newer release.
+const { createApp } = await import('./app.js');
+const { ensureSeed, needsBootstrapInstructor, accountsOnDefaultPassword } =
+  await import('./db/seed.js');
+const { sweepExpiredSessions } = await import('./lib/sessionLifecycle.js');
+
+for (const { name, value, fallback } of config.invalidSettings) {
+  log.warn('config.invalid', {
+    msg: `${name}=${JSON.stringify(value)} is not valid; using ${fallback}`,
+  });
+}
 
 /* ---------------------------------------------------------------------- */
 /*  Production guard rails — fail fast instead of running insecurely.      */

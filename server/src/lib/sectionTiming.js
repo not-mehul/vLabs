@@ -1,4 +1,5 @@
 import { nowIso, parseUtc, secondsBetween } from './time.js';
+import { jsonArray, jsonObject } from './json.js';
 
 /**
  * Section timing shared by labs and exams.
@@ -22,12 +23,7 @@ export const NEAR_SHARE = 0.8;
 
 /** Parse a session's breaks column defensively. */
 export function breaksOf(session) {
-  try {
-    const v = JSON.parse(session?.breaks || '[]');
-    return Array.isArray(v) ? v.filter((b) => b && b.start) : [];
-  } catch {
-    return [];
-  }
+  return jsonArray(session?.breaks).filter((b) => b && b.start);
 }
 
 /** The running break, if any. */
@@ -54,14 +50,8 @@ function breakOverlap(fromMs, toMs, breaks, nowMs) {
  * A seat's section_times with the open section visit folded in up to `now`
  * (breaks excluded): what submitting stores, so the clock stops there.
  */
-export function closeOpenVisit(p, now, breaks) {
-  let times;
-  try {
-    times = JSON.parse(p.section_times || '{}');
-  } catch {
-    times = {};
-  }
-  if (!times || typeof times !== 'object' || Array.isArray(times)) times = {};
+export function closeOpenVisit(p, now, breaks = []) {
+  const times = { ...jsonObject(p.section_times) };
   const key = String(p.current_section);
   times[key] = (Number(times[key]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaks);
   return times;
@@ -91,13 +81,7 @@ export function sectionSecondsView(
   sectionCount,
   { now = nowIso(), breaks = [], frozen = false },
 ) {
-  let stored = {};
-  try {
-    const v = JSON.parse(p.section_times || '{}');
-    if (v && typeof v === 'object' && !Array.isArray(v)) stored = v;
-  } catch {
-    stored = {};
-  }
+  const stored = jsonObject(p.section_times);
   const out = [];
   for (let i = 0; i < sectionCount; i += 1) out.push(Number(stored[String(i)]) || 0);
   if (!frozen && p.current_section < sectionCount) {

@@ -48,3 +48,10 @@ export function httpError(status, message, code) {
   if (code) err.code = code;
   return err;
 }
+
+/** The numeric :id route parameter, or a 404 with `notFound` as the message. */
+export function idParam(req, notFound) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw httpError(404, notFound);
+  return id;
+}

@@ -9,6 +9,26 @@ future expansion. Every finding marked **verified** was reproduced against the
 real modules or a booted server (temporary database), not inferred from
 reading alone.
 
+## Status (1.19.0)
+
+**Fixed in 1.19.0** (see [CHANGES.md](../CHANGES.md); each bug has a test in
+`server/tests/robustness.test.js`, `templating.test.js` or `api.test.js`):
+
+- H1 and H2;
+- M1–M7. For M8, the offline Studio's AI Polish was removed rather than
+  repaired;
+- L1–L8;
+- everything under §2 (dead code, stale text, duplication).
+
+Two more dead endpoints the audit missed are also gone:
+`POST /api/templates/:id/preview` and `GET /api/templates/functions`. The
+portal stopped calling them when the Studio became the editor.
+
+**Still open:** L9 (soft-deleted sessions), L10 (CI checks that cannot
+fail, Studio formatting), L11 (backup integrity, restore script, encryption)
+and L12 (release artifacts instead of building on the Pi). §3 and §4 are
+unchanged, except where a fix above covers them.
+
 ## Baseline
 
 | Check                                   | Result                                                                                                                                                                                                        |

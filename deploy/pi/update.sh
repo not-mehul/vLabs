@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Update a running Pi to the latest main: backup → git pull → install → build →
-# restart → health check. Rolls the code back if the new version fails to boot.
+# restart → health check. Rolls the code back if the new version fails to boot,
+# and restores the backup too when the new version had already migrated the
+# database (an older vLabs refuses to start on a newer schema).
 #
 #   sudo /opt/vlabs/deploy/pi/update.sh            # pull origin/<current branch>
 #   sudo /opt/vlabs/deploy/pi/update.sh v1.3.0     # or any ref/tag/branch
@@ -16,12 +18,25 @@ TARGET_REF="${1:-}"
 
 as_admin() { sudo -u "$ADMIN_USER" -H env NODE_OPTIONS=--max-old-space-size=1024 bash -c "set -e; cd '$REPO_DIR'; $*"; }
 bold() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+healthy() {
+  for _ in $(seq 1 30); do
+    curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+DB_FILE="$( (set -a; [[ -f /etc/vlabs/vlabs.env ]] && . /etc/vlabs/vlabs.env; echo "${DB_PATH:-/var/lib/vlabs/vlabs.sqlite}") )"
+schema_version() { sqlite3 -readonly "$DB_FILE" 'PRAGMA user_version;' 2>/dev/null || echo unknown; }
 
 cd "$REPO_DIR"
 before=$(git rev-parse HEAD)
 
 bold "1/5  Backup"
 "$REPO_DIR/deploy/pi/backup.sh"
+BACKUP_FILE="$(ls -1 "$(dirname "$DB_FILE")"/backups/vlabs-*.sqlite 2>/dev/null | sort | tail -n 1 || true)"
+SCHEMA_BEFORE="$(schema_version)"
+echo "  database schema $SCHEMA_BEFORE, backup ${BACKUP_FILE:-missing}"
 
 bold "2/5  Fetch"
 as_admin "git fetch --tags --prune origin"
@@ -63,20 +78,36 @@ systemctl restart vlabs-caddy-refresh.service 2>/dev/null || true
 
 bold "5/5  Restart + health check"
 systemctl restart vlabs
-ok=""
-for _ in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then ok=1; break; fi
-  sleep 1
-done
-if [[ -z "$ok" ]]; then
+if ! healthy; then
   echo "  new version failed to start — rolling code back to ${before:0:7}" >&2
   journalctl -u vlabs -n 40 --no-pager >&2
+  schema_after="$(schema_version)"
   as_admin "git checkout --quiet '$before'"
   as_admin "(cd server && npm ci --omit=dev --no-audit --no-fund)"
   as_admin "(cd client && npm ci --no-audit --no-fund && npm run build)"
+  # Migrations are one-way, and the old code will not run on a newer schema:
+  # put the step-1 backup back. The migrated file is kept next to it.
+  if [[ "$schema_after" != "$SCHEMA_BEFORE" ]]; then
+    if [[ -z "$BACKUP_FILE" ]]; then
+      echo "  the database was migrated (schema $SCHEMA_BEFORE → $schema_after) and no backup was found;" >&2
+      echo "  restore one from $(dirname "$DB_FILE")/backups by hand." >&2
+      exit 1
+    fi
+    echo "  the database was migrated (schema $SCHEMA_BEFORE → $schema_after); restoring $BACKUP_FILE" >&2
+    systemctl stop vlabs
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    for sfx in '' -wal -shm; do
+      if [[ -e "$DB_FILE$sfx" ]]; then mv -f "$DB_FILE$sfx" "$DB_FILE.failed-$stamp$sfx"; fi
+    done
+    install -m 0640 -o vlabs -g vlabs "$BACKUP_FILE" "$DB_FILE"
+    echo "  (the migrated database is kept as $DB_FILE.failed-$stamp)" >&2
+  fi
   systemctl restart vlabs
-  echo "  rolled back. NOTE: database migrations are one-way; if the new version migrated the schema," >&2
-  echo "  restore the backup taken in step 1 from /var/lib/vlabs/backups." >&2
+  if healthy; then
+    echo "  rolled back to ${before:0:7}; vLabs is up." >&2
+  else
+    echo "  rolled back to ${before:0:7}, but vLabs is still not healthy: sudo journalctl -u vlabs -n 50" >&2
+  fi
   exit 1
 fi
 systemctl reload caddy 2>/dev/null || true
