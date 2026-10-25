@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { usePolling } from '../hooks/usePolling.js';
 import { fmtDuration, excerpt } from '../lib/format.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
 import Icon from './Icon.jsx';
@@ -61,20 +62,20 @@ export default function SectionDrawer({ sessionId, index, onClose, onParticipant
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
-    try {
-      setD(await call((t) => api.getSection(t, sessionId, index)));
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [call, sessionId, index]);
-
-  useEffect(() => {
-    load();
-    const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
-  }, [load]);
+  const load = useCallback(
+    async (isCurrent) => {
+      try {
+        const res = await call((t) => api.getSection(t, sessionId, index));
+        if (!isCurrent()) return;
+        setD(res);
+        setError('');
+      } catch (err) {
+        if (isCurrent()) setError(err.message);
+      }
+    },
+    [call, sessionId, index],
+  );
+  usePolling(load, 5000);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();

@@ -1,4 +1,5 @@
 import { sectionItems, sectionLayout, isSubmitSection } from '../../../shared/exam-schema.js';
+import { jsonArray, jsonObject } from './json.js';
 
 /**
  * Pushing a new template version into a running session (Push latest version)
@@ -108,15 +109,6 @@ export function contentRemap(oldContent, newContent, kind) {
   return { secMap, keys, lastSection: Math.max(newL.sections.length - 1, 0) };
 }
 
-const parse = (json, fallback) => {
-  try {
-    const v = JSON.parse(json);
-    return v ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
-
 /** Move one key ("si.sti", "si.qi", "si.tN"); a hint key "si.sti.hi" keeps its hint index. */
 function moveKey(map, key) {
   if (map.has(key)) return map.get(key);
@@ -141,13 +133,13 @@ export function remapParticipant(p, remap) {
   };
   const keyList = (json) =>
     JSON.stringify(
-      parse(json, [])
+      jsonArray(json)
         .map((k) => moveKey(keys, String(k)))
         .filter((k) => k !== null),
     );
   const keyObject = (json) => {
     const out = {};
-    for (const [k, v] of Object.entries(parse(json, {}))) {
+    for (const [k, v] of Object.entries(jsonObject(json))) {
       const to = moveKey(keys, k);
       if (to !== null) out[to] = v;
     }
@@ -155,7 +147,7 @@ export function remapParticipant(p, remap) {
   };
 
   const times = {};
-  for (const [k, v] of Object.entries(parse(p.section_times, {}))) {
+  for (const [k, v] of Object.entries(jsonObject(p.section_times))) {
     const to = moveSection(Number(k));
     if (to !== null) times[to] = (times[to] || 0) + (Number(v) || 0);
   }
@@ -172,7 +164,7 @@ export function remapParticipant(p, remap) {
     hints_taken: keyList(p.hints_taken),
     revealed_solutions: keyList(p.revealed_solutions),
     checkpoint_log: JSON.stringify(
-      parse(p.checkpoint_log, [])
+      jsonArray(p.checkpoint_log)
         .map((e) => ({ ...e, k: moveKey(keys, String(e?.k ?? '')) }))
         .filter((e) => e.k !== null),
     ),

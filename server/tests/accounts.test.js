@@ -95,7 +95,7 @@ test('the bootstrap account is asked to change its password until it does', asyn
   ro.close();
 });
 
-test('creating an instructor needs a signed-in instructor or valid authorising credentials', async () => {
+test('creating an instructor needs a signed-in instructor (credentials in the body are not enough)', async () => {
   const anon = await call('/api/auth/instructors', { method: 'POST', body: { username: 'alice' } });
   assert.equal(anon.status, 401);
 

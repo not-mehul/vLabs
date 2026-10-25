@@ -171,8 +171,10 @@ matters to you.
 2. **Admin → Your password** (the banner nags until you do).
 3. Extra instructors: **Admin → Add an instructor** in the portal. Anyone
    signed in can add an account, but only the **admin** account (the
-   bootstrap `instructor`, or the oldest account if that one is gone) can
-   reset another instructor's password or remove an account. CLI fallback
+   bootstrap `instructor`, stored as such in the database; `instructors
+   list` marks it) can reset another instructor's password or remove an
+   account. Changing `SEED_INSTRUCTOR_USERNAME` later does not move the role.
+   CLI fallback
    (e.g. if everyone is locked out):
    ```bash
    sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors create alice
@@ -234,8 +236,11 @@ ansiutf8 https://vlabs.local`). Have the root-cert URL on the same slide for
 - **Updates:** `sudo /opt/vlabs/deploy/pi/update.sh` — backup → `git pull`
   (fast-forward only) → `npm ci` → `vite build` → refresh units → restart →
   health check. If the new version doesn't come up it checks the previous
-  commit back out and restarts. Migrations are one-way, so if the schema moved
-  restore the backup it took first. `update.sh v1.3.0` pins a tag.
+  commit back out and restarts; migrations are one-way, so when the new
+  version had already migrated the database it also puts back the backup it
+  took first (keeping the migrated file as `vlabs.sqlite.failed-<time>`).
+  An older vLabs refuses to start on a newer schema rather than run on it.
+  `update.sh v1.3.0` pins a tag.
 - **Logs:** `sudo journalctl -u vlabs -f` (one line per request plus
   lifecycle/audit events), `sudo journalctl -u caddy -f`,
   `/var/log/caddy/vlabs-access.log`.

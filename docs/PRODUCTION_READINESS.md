@@ -1,13 +1,15 @@
 # vLabs production readiness
 
-Scope: the whole system as of **1.18.1** — server, data layer,
+Scope: the whole system as of **1.19.0** — server, data layer,
 authentication and authorisation, the lab and exam participant flows, the
 instructor portal and Template Studio, deployment on the Raspberry Pi
-(systemd, Caddy, backups, updates) and CI. Checked 2026-10-17.
+(systemd, Caddy, backups, updates) and CI. Checked 2026-10-25.
 
 The full audit was done at 1.5.1 and re-checked at each release that changed
-the exam model; what each release fixed is in [CHANGES.md](../CHANGES.md).
-This page is the current state.
+the exam model; a code-level audit at 1.18.1 is in
+[CODEBASE_AUDIT.md](CODEBASE_AUDIT.md), and 1.19.0 fixes its findings. What
+each release fixed is in [CHANGES.md](../CHANGES.md). This page is the
+current state.
 
 ## Verdict
 
@@ -16,17 +18,19 @@ This page is the current state.
 design trade-offs and features to plan for, not blockers for a LAN classroom.
 A public/internet deployment needs the extra items marked **(hosted)**.
 
-## Verification at 1.18.1
+## Verification at 1.19.0
 
 | Check                                                                   | Result                                                                                            |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Server test suite (`npm test --prefix server`)                          | 106 / 106 pass                                                                                    |
+| Server test suite (`npm test --prefix server`)                          | 123 / 123 pass                                                                                    |
 | Client test suite (`npm test --prefix client`)                          | 31 / 31 pass                                                                                      |
 | Lint and format check (as CI), Studio scripts linted together           | Clean                                                                                             |
 | Client production build; offline Studio matches its sources             | Clean; `check:studio` up to date                                                                  |
 | Production boot with real secrets (as CI's smoke test)                  | `/api/health` ok, SPA and both Studio builds served; CSP, HSTS and `nosniff` present              |
 | Production boot with weak secrets                                       | Refused with FATAL, exit 1                                                                        |
-| Upgrade: a database created by 1.14.1 (schema 8) booted on 1.18.1       | Migrations 9–12 ran; schema 12; sample exam rewritten with items and stable ids                   |
+| Production boot on a database from a newer release                      | Refused with FATAL, exit 1; the database untouched                                                |
+| Upgrade: a database created by 1.18.1 (schema 12) booted on 1.19.0      | Migration 13 ran; admin flagged, name keys normalised, `answer_log` dropped; integrity check ok   |
+| Browser smoke test (Playwright) of the production build                 | Dashboard, lab and exam monitors, Studio + history revert, participant lab, offline Studio: no errors; monitors stop polling in hidden tabs |
 | `npm audit --omit=dev` (server, client)                                 | Server: 0. Client: 2 moderate in react-router (item 9 below)                                      |
 | `npm audit` including dev tooling (client)                              | Also flags build-time packages (`braces` via Tailwind's file watcher); never shipped to the Pi app |
 

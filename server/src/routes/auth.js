@@ -2,13 +2,19 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import db, { checkpoint } from '../db/index.js';
-import config from '../config.js';
 import { signInstructorToken } from '../lib/tokens.js';
 import { requireInstructor } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { asyncHandler, httpError } from '../middleware/errorHandler.js';
 import { nowIso } from '../lib/time.js';
 import { log } from '../lib/logger.js';
+import {
+  BCRYPT_ROUNDS,
+  USERNAME_RULE,
+  isValidUsername,
+  passwordProblem,
+  randomPassword,
+} from '../lib/accounts.js';
 
 const router = Router();
 
@@ -40,18 +46,20 @@ const q = {
   ),
   reassignSessions: db.prepare('UPDATE sessions SET instructor_id = ? WHERE instructor_id = ?'),
   remove: db.prepare('DELETE FROM instructors WHERE id = ?'),
+  admin: db.prepare('SELECT id FROM instructors WHERE is_admin = 1 ORDER BY id LIMIT 1'),
   firstId: db.prepare('SELECT MIN(id) AS id FROM instructors'),
 };
 
 /**
- * The admin account: the bootstrap instructor (SEED_INSTRUCTOR_USERNAME,
- * "instructor" by default), or the oldest account if that one no longer
- * exists. Only the admin can reset or remove other instructors' accounts;
- * anyone can add one or change their own password.
+ * The admin account: the one flagged is_admin, which is the bootstrap
+ * instructor (migration 13 / the seeder). Stored, not worked out from
+ * SEED_INSTRUCTOR_USERNAME: that used to let anyone take the role by creating
+ * an account under a newly configured seed name. The oldest account stands in
+ * only if no account is flagged. Only the admin can reset or remove other
+ * instructors' accounts; anyone can add one or change their own password.
  */
 function adminId() {
-  const seed = q.byUsername.get(config.seedInstructor.username);
-  return seed ? seed.id : q.firstId.get().id;
+  return (q.admin.get() || q.firstId.get())?.id ?? null;
 }
 
 const isAdmin = (id) => id === adminId();
@@ -64,9 +72,7 @@ function requireAdmin(req) {
 
 // A real bcrypt hash of a random value, computed once at boot, so a login
 // attempt for an unknown username costs the same as one for a known user.
-const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10);
-
-const USERNAME_RE = /^[A-Za-z0-9._-]{2,64}$/;
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), BCRYPT_ROUNDS);
 
 /**
  * True while the account still uses a password somebody else chose: the
@@ -86,14 +92,9 @@ function publicInstructor(row) {
 }
 
 function validatePassword(pw) {
-  if (pw.length < config.minPasswordLength) {
-    throw httpError(400, `Password must be at least ${config.minPasswordLength} characters`);
-  }
-  if (pw.length > 200) throw httpError(400, 'Password is too long');
+  const problem = passwordProblem(pw);
+  if (problem) throw httpError(400, problem);
 }
-
-/** 16 URL-safe characters ≈ 95 bits; comfortably above MIN_PASSWORD_LENGTH. */
-const randomPassword = () => crypto.randomBytes(12).toString('base64url');
 
 /** Check a username/password pair; returns the instructor row or null. */
 async function checkCredentials(username, password) {
@@ -158,7 +159,7 @@ router.put(
     const ok = await bcrypt.compare(current, row.password_hash);
     if (!ok) throw httpError(401, 'Current password is incorrect');
 
-    const hash = await bcrypt.hash(next, 10);
+    const hash = await bcrypt.hash(next, BCRYPT_ROUNDS);
     q.setPassword.run(hash, nowIso(), row.id);
     checkpoint();
     const fresh = q.byId.get(row.id);
@@ -206,18 +207,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const actor = req.instructor;
     const username = String(req.body?.username ?? '').trim();
-    if (!USERNAME_RE.test(username)) {
-      throw httpError(
-        400,
-        'Username must be 2–64 characters: letters, digits, dot, dash or underscore',
-      );
-    }
+    if (!isValidUsername(username)) throw httpError(400, USERNAME_RULE);
     if (q.byUsername.get(username)) throw httpError(409, `Instructor "${username}" already exists`);
     const supplied = req.body?.password ? String(req.body.password) : '';
     if (supplied) validatePassword(supplied);
     const password = supplied || randomPassword();
 
-    const info = q.insert.run(username, await bcrypt.hash(password, 10));
+    const info = q.insert.run(username, await bcrypt.hash(password, BCRYPT_ROUNDS));
     checkpoint();
     log.info('auth.instructor.created', {
       instructor: Number(info.lastInsertRowid),
@@ -248,7 +244,7 @@ router.post(
       throw httpError(400, 'Change your own password under Your password on the Admin page');
     }
     const password = randomPassword();
-    q.resetPassword.run(await bcrypt.hash(password, 10), row.id);
+    q.resetPassword.run(await bcrypt.hash(password, BCRYPT_ROUNDS), row.id);
     checkpoint();
     log.info('auth.instructor.reset', { instructor: row.id, by: req.instructor.id });
     res.json({ instructor: publicInstructor(q.byId.get(row.id)), temporary_password: password });

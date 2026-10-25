@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api.js';
+import { usePolling } from '../hooks/usePolling.js';
 import { fmtDuration, excerpt } from '../lib/format.js';
 import { formatDateTime } from '../lib/datetime.js';
 import { useInstructorApi } from '../hooks/useInstructorApi.js';
@@ -225,19 +226,20 @@ function Drawer({ label, onClose, head, children }) {
 function usePolled(loader) {
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
-  const reload = useCallback(async () => {
-    try {
-      setD(await loader());
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [loader]);
-  useEffect(() => {
-    reload();
-    const t = setInterval(reload, 5000);
-    return () => clearInterval(t);
-  }, [reload]);
+  const reload = useCallback(
+    async (isCurrent = () => true) => {
+      try {
+        const res = await loader();
+        if (!isCurrent()) return;
+        setD(res);
+        setError('');
+      } catch (err) {
+        if (isCurrent()) setError(err.message);
+      }
+    },
+    [loader],
+  );
+  usePolling(reload, 5000);
   return { d, error, reload };
 }
 
@@ -698,7 +700,7 @@ export default function ExamMonitor({ data, sessionId, onChanged }) {
           <span className="muted small">
             {data.seat_source &&
               `Seats from ${data.seat_source.title} (${data.seat_source.room_code}) · `}
-            {data.submitted_count} of {data.participants.length} submitted · click a row for every
+            {data.complete_count} of {data.participants.length} submitted · click a row for every
             answer
           </span>
         </div>

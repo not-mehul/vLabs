@@ -69,7 +69,8 @@ Offline, `src/documents.js` keeps each template as a document in IndexedDB
 (several at once, images included), saves to and opens `.zip` files, and
 says so when the browser will not store one.
 
-In the portal the Studio hides AI Polish (it needs the open internet, which
-the portal's CSP does not allow), its theme switch (it follows the
-portal's), **Documents** and **New** (a template's kind is fixed once saved;
-the portal has **New lab** and **New exam**).
+In the portal the Studio hides its theme switch (it follows the portal's),
+**Documents** and **New** (a template's kind is fixed once saved; the portal
+has **New lab** and **New exam**). The Studio makes no requests outside the
+page: the AI text-polishing feature of earlier versions, which sent template
+text and an API key to outside services, was removed in 1.19.0.

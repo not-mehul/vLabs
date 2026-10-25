@@ -57,6 +57,6 @@ import {
   examToMarkdown,
   looksLikeExamMarkdown as sharedLooksLikeExamMarkdown,
 } from '../../../shared/exam-format.js';
-import { validateTemplatePayload } from '../../../shared/validate-template.js';
+import { validateTemplatePayload, variableIssues } from '../../../shared/validate-template.js';
 import { validateExamPayload } from '../../../shared/validate-exam.js';
 import { renderMarkdown } from '../../src/lib/markdown.js';

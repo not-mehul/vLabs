@@ -65,11 +65,28 @@ export function parseTrustProxy(value) {
   return v;
 }
 
+/**
+ * Settings that were given but cannot be used. Each falls back to its default
+ * and index.js warns about it at start-up: `MIN_PASSWORD_LENGTH=abc` used to
+ * become NaN, and `length < NaN` accepted any password at all.
+ */
+const invalidSettings = [];
+
+/** An integer setting within [min, max]; anything else falls back (and is reported). */
+function intSetting(name, fallback, min, max) {
+  const raw = process.env[name];
+  if (raw === undefined || String(raw).trim() === '') return fallback;
+  const n = Number(String(raw).trim());
+  if (Number.isInteger(n) && n >= min && n <= max) return n;
+  invalidSettings.push({ name, value: raw, fallback });
+  return fallback;
+}
+
 const env = process.env.NODE_ENV || 'development';
 
 const config = {
   env,
-  port: parseInt(process.env.PORT || '4000', 10),
+  port: intSetting('PORT', 4000, 1, 65535),
 
   // Interface to bind. Defaults to loopback: in development the browser talks
   // to the Vite dev server (which proxies /api), and on the Pi Caddy sits in
@@ -91,8 +108,9 @@ const config = {
   jwt: {
     instructorSecret: process.env.JWT_INSTRUCTOR_SECRET || DEV_INSTRUCTOR_SECRET,
     participantSecret: process.env.JWT_PARTICIPANT_SECRET || DEV_PARTICIPANT_SECRET,
-    // Instructor sessions last a work day; participant tokens are additionally
-    // gated by the live session record so this is only an upper bound.
+    // Instructor sessions last a work day. A participant token lasts this long
+    // past its session's expiry (lib/tokens.js) and is gated by the live
+    // session record on every request, so this is only an upper bound.
     instructorTtl: process.env.JWT_INSTRUCTOR_TTL || '12h',
     participantTtl: process.env.JWT_PARTICIPANT_TTL || '12h',
   },
@@ -118,7 +136,7 @@ const config = {
   addressesFile: process.env.VLABS_ADDRESSES_FILE || '/run/vlabs-net/addresses.json',
 
   // Instructor password policy (applies to the change-password endpoint).
-  minPasswordLength: parseInt(process.env.MIN_PASSWORD_LENGTH || '10', 10),
+  minPasswordLength: intSetting('MIN_PASSWORD_LENGTH', 10, 1, 200),
 
   // Structured logging. LOG_LEVEL: debug | info | warn | error | silent.
   // LOG_FORMAT: json (default in production) | pretty (default elsewhere).
@@ -140,7 +158,9 @@ const config = {
   // Sessions still marked active this long after `expires_at` are swept to
   // "ended" so their room codes recycle. The grace window preserves the
   // instructor's ability to "+30" a session that just ran out.
-  expiredSessionGraceMinutes: parseInt(process.env.EXPIRED_SESSION_GRACE_MINUTES || '60', 10),
+  expiredSessionGraceMinutes: intSetting('EXPIRED_SESSION_GRACE_MINUTES', 60, 0, 7 * 24 * 60),
+
+  invalidSettings,
 };
 
 config.weakSecrets =
@@ -148,8 +168,5 @@ config.weakSecrets =
 config.sameSecrets = config.jwt.instructorSecret === config.jwt.participantSecret;
 config.seedPasswordIsDefault = config.seedInstructor.password === DEV_SEED_PASSWORD;
 config.devSeedPassword = DEV_SEED_PASSWORD;
-
-// Kept for backwards compatibility with older log/readme wording.
-config.usingDefaultSecrets = config.weakSecrets;
 
 export default config;

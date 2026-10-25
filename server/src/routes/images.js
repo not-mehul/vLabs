@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import { requireInstructor } from '../middleware/auth.js';
-import { asyncHandler, httpError } from '../middleware/errorHandler.js';
+import { httpError } from '../middleware/errorHandler.js';
+import { imageLimiter } from '../middleware/rateLimit.js';
 import { LIMITS } from '../../../shared/template-schema.js';
 import {
   listImages,
@@ -12,23 +13,20 @@ import {
 } from '../lib/images.js';
 import { log } from '../lib/logger.js';
 
-const router = Router();
-
-/** GET /api/images/:id/references — where an image is used (editor delete confirm).
- *  Declared before the public serve route so "references" is never read as a file name. */
-router.get('/:id/references', requireInstructor, (req, res) => {
-  const row = getImage(req.params.id);
-  if (!row) throw httpError(404, 'Image not found');
-  res.json({ id: row.id, name: row.name, url: imageUrl(row), ...imageReferences(row.name) });
-});
-
 /**
  * GET /api/images/:id/:name — serve an image. Public by design: <img> tags
  * cannot send a bearer token, so the random 128-bit id is the capability.
  * The name segment is cosmetic (nice "Save as…" names, readable logs); the
  * id alone identifies the row. Cacheable: a replaced image gets a new id.
+ *
+ * Mounted ahead of the API-wide limit (app.js) with its own: without a token
+ * every image counts against the client IP, and a class behind one NAT
+ * opening an image-heavy section at once would otherwise be throttled.
  */
-router.get('/:id/:name?', (req, res) => {
+export const publicImageRoutes = Router();
+publicImageRoutes.get('/:id/:name?', imageLimiter, (req, res, next) => {
+  // `/:id/references` is the instructor route below, not a file name.
+  if (req.params.name === 'references') return next();
   const row = getImage(req.params.id);
   if (!row) return res.status(404).end();
   res.set('Content-Type', row.mime);
@@ -40,7 +38,15 @@ router.get('/:id/:name?', (req, res) => {
 });
 
 /* Everything below is instructor-only. */
+const router = Router();
 router.use(requireInstructor);
+
+/** GET /api/images/:id/references — where an image is used (editor delete confirm). */
+router.get('/:id/references', (req, res) => {
+  const row = getImage(req.params.id);
+  if (!row) throw httpError(404, 'Image not found');
+  res.json({ id: row.id, name: row.name, url: imageUrl(row), ...imageReferences(row.name) });
+});
 
 /** GET /api/images — library listing (no bytes). */
 router.get('/', (req, res) => {
@@ -53,27 +59,23 @@ router.get('/', (req, res) => {
  * sends `fetch(url, { body: file })`. The type is sniffed server-side.
  * 409 + code IMAGE_EXISTS when the name is taken and replace is not set.
  */
-router.post(
-  '/',
-  express.raw({ type: () => true, limit: LIMITS.imageBytes + 1024 }),
-  asyncHandler(async (req, res) => {
-    const name = String(req.query.name || req.get('x-image-name') || '').trim();
-    if (!name) throw httpError(400, 'Provide the file name as ?name=');
-    const saved = saveImage({
-      name,
-      data: req.body,
-      replace: req.query.replace === '1',
-      instructorId: req.instructor.id,
-    });
-    log.info(saved.replaced ? 'image.replaced' : 'image.uploaded', {
-      image: saved.id,
-      name: saved.name,
-      size: saved.size,
-      instructor: req.instructor.id,
-    });
-    res.status(saved.replaced ? 200 : 201).json(saved);
-  }),
-);
+router.post('/', express.raw({ type: () => true, limit: LIMITS.imageBytes + 1024 }), (req, res) => {
+  const name = String(req.query.name || req.get('x-image-name') || '').trim();
+  if (!name) throw httpError(400, 'Provide the file name as ?name=');
+  const saved = saveImage({
+    name,
+    data: req.body,
+    replace: req.query.replace === '1',
+    instructorId: req.instructor.id,
+  });
+  log.info(saved.replaced ? 'image.replaced' : 'image.uploaded', {
+    image: saved.id,
+    name: saved.name,
+    size: saved.size,
+    instructor: req.instructor.id,
+  });
+  res.status(saved.replaced ? 200 : 201).json(saved);
+});
 
 /** DELETE /api/images/:id — refused (409) while a template or active session uses it. */
 router.delete('/:id', (req, res) => {

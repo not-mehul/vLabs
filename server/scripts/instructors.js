@@ -13,10 +13,15 @@
  * uses the production configuration and database:
  *   sudo /opt/vlabs/deploy/pi/vlabs-cli.sh instructors list
  */
-import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import db from '../src/db/index.js';
-import config from '../src/config.js';
+import db, { checkpoint, schema } from '../src/db/index.js';
+import {
+  BCRYPT_ROUNDS,
+  USERNAME_RULE,
+  isValidUsername,
+  passwordProblem,
+  randomPassword,
+} from '../src/lib/accounts.js';
 
 const [cmd, username, passwordArg] = process.argv.slice(2);
 
@@ -32,19 +37,17 @@ function usage(code = 1) {
   process.exit(code);
 }
 
-function randomPassword() {
-  // 16 URL-safe characters ≈ 95 bits; satisfies MIN_PASSWORD_LENGTH.
-  return crypto.randomBytes(12).toString('base64url');
-}
-
-function validUsername(u) {
-  return typeof u === 'string' && /^[A-Za-z0-9._-]{2,64}$/.test(u);
+function checkUsername() {
+  if (isValidUsername(username)) return;
+  console.error(`${USERNAME_RULE}.`);
+  usage();
 }
 
 function pickPassword() {
   if (passwordArg !== undefined) {
-    if (passwordArg.length < config.minPasswordLength) {
-      console.error(`Password must be at least ${config.minPasswordLength} characters.`);
+    const problem = passwordProblem(passwordArg);
+    if (problem) {
+      console.error(`${problem}.`);
       process.exit(1);
     }
     return { password: passwordArg, generated: false };
@@ -52,12 +55,20 @@ function pickPassword() {
   return { password: randomPassword(), generated: true };
 }
 
+if (schema.ahead) {
+  console.error(
+    `The database is at schema version ${schema.version}, newer than this vLabs (${schema.latest}). ` +
+      'Restore the backup taken before the update, or use the newer release.',
+  );
+  process.exit(1);
+}
+
 try {
   switch (cmd) {
     case 'list': {
       const rows = db
         .prepare(
-          `SELECT i.id, i.username, i.created_at, i.password_changed_at, i.token_version,
+          `SELECT i.id, i.username, i.created_at, i.password_changed_at, i.token_version, i.is_admin,
                   (SELECT COUNT(*) FROM sessions s WHERE s.instructor_id = i.id) AS sessions
              FROM instructors i ORDER BY i.id`,
         )
@@ -65,7 +76,7 @@ try {
       if (!rows.length) console.log('No instructors.');
       for (const r of rows) {
         console.log(
-          `#${r.id}\t${r.username}\tcreated ${r.created_at}\t` +
+          `#${r.id}\t${r.username}${r.is_admin ? ' (admin)' : ''}\tcreated ${r.created_at}\t` +
             `password ${r.password_changed_at ? `changed ${r.password_changed_at}` : 'never changed'}\t` +
             `sessions ${r.sessions}`,
         );
@@ -73,23 +84,23 @@ try {
       break;
     }
     case 'create': {
-      if (!validUsername(username)) usage();
+      checkUsername();
       if (db.prepare('SELECT 1 FROM instructors WHERE username = ?').get(username)) {
         console.error(`Instructor "${username}" already exists.`);
         process.exit(1);
       }
       const { password, generated } = pickPassword();
-      db.prepare('INSERT INTO instructors (username, password_hash, password_changed_at) VALUES (?, ?, NULL)').run(
-        username,
-        bcrypt.hashSync(password, 10),
-      );
+      db.prepare(
+        'INSERT INTO instructors (username, password_hash, password_changed_at) VALUES (?, ?, NULL)',
+      ).run(username, bcrypt.hashSync(password, BCRYPT_ROUNDS));
+      checkpoint();
       console.log(`Created instructor "${username}".`);
       if (generated) console.log(`Temporary password (shown once): ${password}`);
       console.log('Ask them to change it from Admin → Your password.');
       break;
     }
     case 'reset-password': {
-      if (!validUsername(username)) usage();
+      checkUsername();
       const row = db.prepare('SELECT id FROM instructors WHERE username = ?').get(username);
       if (!row) {
         console.error(`No instructor named "${username}".`);
@@ -100,7 +111,8 @@ try {
         `UPDATE instructors
             SET password_hash = ?, token_version = token_version + 1, password_changed_at = NULL
           WHERE id = ?`,
-      ).run(bcrypt.hashSync(password, 10), row.id);
+      ).run(bcrypt.hashSync(password, BCRYPT_ROUNDS), row.id);
+      checkpoint();
       console.log(`Password reset for "${username}"; all their existing sign-ins were revoked.`);
       if (generated) console.log(`Temporary password (shown once): ${password}`);
       break;

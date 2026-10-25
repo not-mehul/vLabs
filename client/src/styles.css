@@ -3234,12 +3234,6 @@ body.has-drawer {
   flex: 1 1 280px;
 }
 
-@media (max-width: 900px) {
-  .split {
-    grid-template-columns: 1fr;
-  }
-}
-
 .drawer__actions {
   display: flex;
   flex-wrap: wrap;

@@ -1,5 +1,6 @@
 import { allocatedSeconds, sectionAverages, timeStatus } from './sectionTiming.js';
 import { stepHasCheckpoint, checkpointMode } from '../../../shared/templating.js';
+import { jsonArray } from './json.js';
 
 /**
  * The monitor's section drawer (labs and exams): who is on a section, who has
@@ -87,15 +88,6 @@ export function sectionTimeDetail(section, i, views) {
   };
 }
 
-const parseList = (json) => {
-  try {
-    const v = JSON.parse(json || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-};
-
 /**
  * LAB sections: per-step activity across the class — hints opened, solutions
  * revealed and, for checkpoint steps, how many cleared it, wrong attempts and
@@ -107,10 +99,10 @@ const parseList = (json) => {
  */
 export function labStepStats(section, si, rows) {
   const parsed = rows.map((p) => ({
-    hints: parseList(p.hints_taken),
-    solutions: parseList(p.revealed_solutions),
-    cleared: new Set(parseList(p.completed_checkpoints)),
-    log: parseList(p.checkpoint_log),
+    hints: jsonArray(p.hints_taken),
+    solutions: jsonArray(p.revealed_solutions),
+    cleared: new Set(jsonArray(p.completed_checkpoints)),
+    log: jsonArray(p.checkpoint_log),
   }));
   return (section.steps || []).map((step, sti) => {
     const key = `${si}.${sti}`;

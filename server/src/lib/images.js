@@ -1,10 +1,16 @@
 import crypto from 'node:crypto';
 import db from '../db/index.js';
-import { IMAGE_MIMES, LIMITS, normaliseImageName } from '../../../shared/template-schema.js';
+import {
+  IMAGE_MD_RE,
+  IMAGE_MIMES,
+  LIMITS,
+  imageRefName,
+  normaliseImageName,
+} from '../../../shared/template-schema.js';
+import { httpError } from '../middleware/errorHandler.js';
 import { nowIso } from './time.js';
 import { sniffImage } from './imageSniff.js';
-
-export { sniffImage };
+import { jsonArray } from './json.js';
 
 /**
  * Instance-wide image library.
@@ -30,11 +36,13 @@ const q = {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
   remove: db.prepare('DELETE FROM images WHERE id = ?'),
-  referencingTemplates: db.prepare(
-    `SELECT id, title FROM templates WHERE archived_at IS NULL AND content LIKE ? ESCAPE '\\'`,
+  // Candidates only (a cheap substring prefilter); imageReferences checks
+  // each one's references exactly.
+  candidateTemplates: db.prepare(
+    `SELECT id, title, archived_at, content FROM templates WHERE content LIKE ? ESCAPE '\\'`,
   ),
-  referencingSessions: db.prepare(
-    `SELECT id, title FROM sessions WHERE is_active = 1 AND content LIKE ? ESCAPE '\\'`,
+  candidateSessions: db.prepare(
+    `SELECT id, title, content FROM sessions WHERE is_active = 1 AND content LIKE ? ESCAPE '\\'`,
   ),
 };
 
@@ -91,22 +99,22 @@ export function getImage(id) {
 export function saveImage({ name, data, replace = false, instructorId = null }) {
   const clean = normaliseImageName(name);
   if (!clean || !/\.[A-Za-z0-9]+$/.test(clean)) {
-    throw httpErr(400, 'Image name must be a file name with an extension, e.g. rack.png');
+    throw httpError(400, 'Image name must be a file name with an extension, e.g. rack.png');
   }
-  if (!Buffer.isBuffer(data) || data.length === 0) throw httpErr(400, 'Empty upload');
+  if (!Buffer.isBuffer(data) || data.length === 0) throw httpError(400, 'Empty upload');
   if (data.length > LIMITS.imageBytes) {
-    throw httpErr(
+    throw httpError(
       413,
       `Image is too large (max ${Math.round(LIMITS.imageBytes / 1024 / 1024)} MB)`,
     );
   }
   const sniffed = sniffImage(data);
   if (!sniffed || !IMAGE_MIMES[sniffed.mime]) {
-    throw httpErr(415, 'Unsupported image type — use PNG, JPEG, GIF or WebP');
+    throw httpError(415, 'Unsupported image type — use PNG, JPEG, GIF or WebP');
   }
   const existing = q.byName.get(clean);
   if (existing && !replace) {
-    const err = httpErr(409, `An image named "${existing.name}" already exists`);
+    const err = httpError(409, `An image named "${existing.name}" already exists`);
     err.code = 'IMAGE_EXISTS';
     err.existing = {
       id: existing.id,
@@ -145,26 +153,58 @@ export function saveImage({ name, data, replace = false, instructorId = null }) 
   return { ...row, url: imageUrl(row), replaced: Boolean(existing) };
 }
 
-/** Templates / active sessions whose content mentions this image name. */
+/**
+ * Library names (lower-cased) referenced by `![…](name.png)` anywhere in some
+ * stored content, labs and exams alike. Per-seat names (`bench-{{ SEAT_ID }}.png`)
+ * cannot be known here and are skipped, as validation skips them.
+ */
+function referencedNames(json) {
+  const names = new Set();
+  const walk = (v) => {
+    if (typeof v === 'string') {
+      for (const m of v.matchAll(IMAGE_MD_RE)) {
+        const name = /\{\{/.test(m[2]) ? null : imageRefName(m[2]);
+        if (name) names.add(name.toLowerCase());
+      }
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(jsonArray(json));
+  return names;
+}
+
+/**
+ * Templates (archived ones too: restoring one must find its images) and
+ * active sessions that use this image, matched by exact file name — `a.png`
+ * is not used by a template that shows `rack-a.png`.
+ */
 export function imageReferences(name) {
+  const key = String(name).toLowerCase();
   const needle = `%${String(name).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const uses = (row) => referencedNames(row.content).has(key);
   return {
-    templates: q.referencingTemplates.all(needle),
-    sessions: q.referencingSessions.all(needle),
+    templates: q.candidateTemplates
+      .all(needle)
+      .filter(uses)
+      .map((t) => ({ id: t.id, title: t.title, archived: Boolean(t.archived_at) })),
+    sessions: q.candidateSessions
+      .all(needle)
+      .filter(uses)
+      .map((x) => ({ id: x.id, title: x.title })),
   };
 }
 
 /** Delete an image unless a live template/session still references it. */
 export function deleteImage(id) {
   const row = q.byId.get(String(id));
-  if (!row) throw httpErr(404, 'Image not found');
+  if (!row) throw httpError(404, 'Image not found');
   const refs = imageReferences(row.name);
   if (refs.templates.length || refs.sessions.length) {
     const where = [
-      ...refs.templates.map((t) => `template "${t.title}"`),
+      ...refs.templates.map((t) => `${t.archived ? 'archived ' : ''}template "${t.title}"`),
       ...refs.sessions.map((s) => `active session "${s.title}"`),
     ];
-    throw httpErr(
+    throw httpError(
       409,
       `"${row.name}" is still used by ${where.slice(0, 3).join(', ')}${where.length > 3 ? ` and ${where.length - 3} more` : ''}`,
     );
@@ -172,10 +212,4 @@ export function deleteImage(id) {
   q.remove.run(row.id);
   invalidate();
   return row;
-}
-
-function httpErr(status, message) {
-  const err = new Error(message);
-  err.status = status;
-  return err;
 }

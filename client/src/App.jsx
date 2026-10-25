@@ -37,8 +37,6 @@ export default function App() {
 
         {/* Instructor portal */}
         <Route path="/instructor/login" element={<InstructorLogin />} />
-        {/* Unlinked: reached by URL or the discreet link under the sign-in
-            form. An existing instructor's credentials authorise the account. */}
         <Route
           path="/instructor"
           element={
