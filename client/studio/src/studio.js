@@ -199,31 +199,18 @@ function promptNewBlankLab() {
   });
 }
 
-// --- Settings & Theme Initialization ---
-const DEFAULT_SYSTEM_PROMPT = "You are an expert technical curriculum designer for vLabs. Polish and enhance the following instructions. Keep language clear, imperative, concise, and professional. Retain all placeholders like {{ TOKEN }} exactly as written.";
-
-let appSettings = {
-  theme: 'dark',
-  aiProvider: 'gemini',
-  aiModel: 'gemini-2.5-flash',
-  aiApiKey: '',
-  aiCustomUrl: '',
-  aiSystemPrompt: DEFAULT_SYSTEM_PROMPT
-};
-
-const PROVIDER_MODELS = {
-  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  anthropic: ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
-  custom: ['default-model']
-};
+// --- Theme ---
+// Only the theme is kept between visits. Studios before 1.19.0 also kept the
+// removed AI text-polishing feature's settings here, an API key among them;
+// reading the settings rewrites them without those.
+let appSettings = { theme: 'dark' };
 
 function loadAppSettings() {
   try {
-    const saved = localStorage.getItem('vlabs_studio_settings');
-    if (saved) {
-      appSettings = { ...appSettings, ...JSON.parse(saved) };
-    }
+    const saved = JSON.parse(localStorage.getItem('vlabs_studio_settings') || 'null');
+    if (!saved || typeof saved !== 'object') return;
+    if (saved.theme === 'dark' || saved.theme === 'light') appSettings.theme = saved.theme;
+    if (Object.keys(saved).some(k => k !== 'theme')) saveAppSettings();
   } catch (_) {}
 }
 
@@ -234,28 +221,20 @@ function saveAppSettings() {
 }
 
 function initTheme() {
-  if (appSettings.theme === 'dark') {
-    document.documentElement.classList.add('dark');
-    updateSettingsThemeButton(true);
-  } else {
-    document.documentElement.classList.remove('dark');
-    updateSettingsThemeButton(false);
-  }
+  const isDark = appSettings.theme === 'dark';
+  document.documentElement.classList.toggle('dark', isDark);
+  updateThemeButton(isDark);
 }
 
 function toggleDarkMode() {
   const isDark = document.documentElement.classList.toggle('dark');
   appSettings.theme = isDark ? 'dark' : 'light';
   saveAppSettings();
-  updateSettingsThemeButton(isDark);
+  updateThemeButton(isDark);
 }
 
-function updateSettingsThemeButton(isDark) {
-  const icon = document.getElementById('settingsThemeIcon');
-  const text = document.getElementById('settingsThemeText');
+function updateThemeButton(isDark) {
   const headerIcon = document.getElementById('headerThemeIcon');
-  if (icon) icon.className = isDark ? 'ph ph-moon' : 'ph ph-sun';
-  if (text) text.textContent = isDark ? 'Dark Mode' : 'Light Mode';
   if (headerIcon) headerIcon.className = isDark ? 'ph ph-sun text-base' : 'ph ph-moon text-base';
 }
 
@@ -537,9 +516,6 @@ function renderStepCard(parentEl, sIdx, stepIdx, step, sampleCtx) {
                       <input type="text" value="${escapeHtml(hint.label || '')}" placeholder="Question prompt (e.g. Where is the patch panel?)"
                         class="text-xs font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-surface-850 border border-slate-200/80 dark:border-white/[0.07] rounded-md px-2.5 py-1 flex-1 focus:outline-none focus:border-brand-500"
                         data-action="update-hint-field" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" data-field="label">
-                      <button type="button" data-on-click="triggerAiPolish('${hintTextId}', 'hint')" class="text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05] flex items-center gap-1 transition">
-                        <i class="ph ph-sparkle"></i> Polish
-                      </button>
                       <button data-action="delete-hint" data-sec-idx="${sIdx}" data-step-idx="${stepIdx}" data-hint-idx="${hIdx}" class="text-slate-400 hover:text-rose-600 p-1 rounded">
                         <i class="ph ph-x text-xs pointer-events-none"></i>
                       </button>
@@ -561,9 +537,6 @@ function renderStepCard(parentEl, sIdx, stepIdx, step, sampleCtx) {
                 <span>Walkthrough Solution</span>
                 <span class="text-[10px] text-slate-400 dark:text-slate-500 font-normal">· ${(step.hints && step.hints.length > 0) ? 'Unlocked after hints' : 'Available immediately'}</span>
               </span>
-              <button type="button" data-on-click="triggerAiPolish('solution-${sIdx}-${stepIdx}', 'solution')" class="text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/[0.05] flex items-center gap-1 transition">
-                <i class="ph ph-sparkle"></i> Polish
-              </button>
             </div>
             <textarea id="solution-${sIdx}-${stepIdx}" rows="2" placeholder="Optional step-by-step solution revealed after hints are opened..."
               class="autogrow-textarea w-full text-xs font-mono text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-surface-900 border border-slate-200/80 dark:border-white/[0.07] rounded-lg p-2.5 focus:outline-none focus:border-brand-500 min-h-[3.25rem] transition"
@@ -740,10 +713,6 @@ function renderMarkdownToolbar(textareaId, sIdx, stepIdx) {
       <button type="button" data-on-click="pickTokenForTextarea('${textareaId}', ${sIdx}, ${stepIdx})" class="px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-slate-900 dark:hover:text-white rounded text-[11px] font-medium flex items-center gap-1 text-brand-600 dark:text-brand-400 transition">
         <i class="ph ph-brackets-curly text-xs"></i>
         <span>Token</span>
-      </button>
-      <button type="button" data-on-click="triggerAiPolish('${textareaId}', 'body')" class="px-2 py-0.5 hover:bg-slate-200/70 dark:hover:bg-white/[0.07] hover:text-brand-600 dark:hover:text-brand-400 rounded text-[11px] font-medium flex items-center gap-1 ml-auto transition">
-        <i class="ph ph-sparkle text-xs"></i>
-        <span>Polish</span>
       </button>
     </div>
   `;
@@ -2131,61 +2100,21 @@ function renderParticipantPreview() {
   container.innerHTML = html;
 }
 
-/** Variable names, reserved words and formulas (labs and exams); returns the declared names. */
+/**
+ * Variable names and formulas (labs and exams), by vLabs' own rules
+ * (shared/validate-template.js: every formula for seats 1–100), shown at each
+ * variable. Returns the declared names.
+ */
 function collectVariableIssues(addError) {
   const vars = templateData.variables || [];
-  if (vars.length > 100) {
-    addError("Variables", `Too many variables (${vars.length} / 100 max)`, { view: 'variables' });
+  if (vars.length > LIMITS.variables) {
+    addError("Variables", `Too many variables (${vars.length} / ${LIMITS.variables} max)`, { view: 'variables' });
   }
-
-  // 2. Variable Naming, Reserved Words & Formula Evaluation (§4, §14)
-  const declaredVarNames = new Set();
-  const ctxSeat1 = { seat: 1, first_name: 'Sample', last_name: 'Participant' };
-  const ctxSeat24 = { seat: 24, first_name: 'Sample', last_name: 'Participant' };
-  const ctxSeat100 = { seat: 100, first_name: 'Sample', last_name: 'Participant' };
-
-  vars.forEach((v, idx) => {
-    const name = (v.name || '').trim();
-    const expr = (v.expression || '').trim();
-    const vLoc = `Variable #${idx + 1}${name ? ` (${name})` : ''}`;
-
-    if (!name) {
-      addError(vLoc, `Variable #${idx + 1} is missing a name`, { view: 'variables' });
-      return;
-    }
-    if (!VALID_VAR_NAME_RE.test(name)) {
-      addError(vLoc, `Variable "${name}" has an invalid name (must match [A-Za-z_][A-Za-z0-9_]*)`, { view: 'variables' });
-    }
-    if (RESERVED_NAMES.has(name)) {
-      addError(vLoc, `Variable "${name}" is reserved`, { view: 'variables' });
-    }
-    if (declaredVarNames.has(name)) {
-      addError(vLoc, `Variable "${name}" is declared more than once`, { view: 'variables' });
-    }
-    if (!expr) {
-      addError(vLoc, `Variable "${name}" has no formula`, { view: 'variables' });
-    } else if (expr.length > 500) {
-      addError(vLoc, `Variable "${name}" formula exceeds 500 characters`, { view: 'variables' });
-    } else {
-      const r1 = evaluateFormulaTyped(expr, ctxSeat1, declaredVarNames);
-      const r24 = evaluateFormulaTyped(expr, ctxSeat24, declaredVarNames);
-      const r100 = evaluateFormulaTyped(expr, ctxSeat100, declaredVarNames);
-
-      if (r1.error) {
-        addError(vLoc, `Error in variable "${name}" (seat 1): ${r1.display.replace(/^⟨FormulaError:\s*|⟩$/g, '')}`, { view: 'variables' });
-      } else if (r24.error) {
-        addError(vLoc, `Error in variable "${name}" (seat 24): ${r24.display.replace(/^⟨FormulaError:\s*|⟩$/g, '')}`, { view: 'variables' });
-      } else if (r100.error) {
-        addError(vLoc, `Error in variable "${name}" (seat 100): ${r100.display.replace(/^⟨FormulaError:\s*|⟩$/g, '')}`, { view: 'variables' });
-      } else {
-        ctxSeat1[name] = r1.value;
-        ctxSeat24[name] = r24.value;
-        ctxSeat100[name] = r1.value !== undefined ? r100.value : '';
-      }
-    }
-    declaredVarNames.add(name);
-  });
-  return declaredVarNames;
+  const list = vars.map(v => ({ name: (v.name || '').trim(), expression: (v.expression || '').trim() }));
+  for (const { index, name, message } of variableIssues(list)) {
+    addError(`Variable #${index + 1}${name ? ` (${name})` : ''}`, message, { view: 'variables' });
+  }
+  return new Set(list.map(v => v.name).filter(Boolean));
 }
 
 function runFullValidation(showToasts = true) {
@@ -2385,7 +2314,7 @@ function runFullValidation(showToasts = true) {
   return renderValidationIssues(
     issues,
     showToasts,
-    `Checked metadata limits, ${declaredVarNames.size} formula(s) across seats 1/24/100, ${allCaptureLocations.size} capture(s), placeholders, masks, and image assets.`
+    `Checked metadata limits, ${declaredVarNames.size} formula(s) for seats 1–100, ${allCaptureLocations.size} capture(s), placeholders, masks, and image assets.`
   );
 }
 
@@ -2639,342 +2568,6 @@ function copyMarkdownToClipboard() {
   document.getElementById('exportMenu')?.classList.add('hidden');
   const md = generateMarkdown();
   copySnippet(md, "Markdown copied to clipboard");
-}
-
-async function callLiveAiProvider({ provider, model, apiKey, customUrl, systemPrompt, userPrompt, maxTokens = 1000 }) {
-  const cleanKey = (apiKey || '').trim();
-  const cleanModel = (model || '').trim();
-
-  if (provider !== 'custom' && !cleanKey) {
-    throw new Error('API Key is required. Configure it in Settings.');
-  }
-
-  if (provider === 'gemini') {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent?key=${encodeURIComponent(cleanKey)}`;
-    const body = {
-      contents: [{ parts: [{ text: userPrompt }] }]
-    };
-    if (systemPrompt && systemPrompt.trim()) {
-      body.systemInstruction = { parts: [{ text: systemPrompt }] };
-    }
-    if (maxTokens) {
-      body.generationConfig = { maxOutputTokens: maxTokens };
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (text === undefined) throw new Error('No candidate content returned by Gemini.');
-    return text;
-  }
-
-  if (provider === 'openai') {
-    const url = 'https://api.openai.com/v1/chat/completions';
-    const messages = [];
-    if (systemPrompt && systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt });
-    messages.push({ role: 'user', content: userPrompt });
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cleanKey}`
-      },
-      body: JSON.stringify({
-        model: cleanModel,
-        messages,
-        max_tokens: maxTokens
-      })
-    });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
-    if (text === undefined) throw new Error('No completion returned by OpenAI.');
-    return text;
-  }
-
-  if (provider === 'anthropic') {
-    const url = 'https://api.anthropic.com/v1/messages';
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cleanKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: cleanModel,
-        system: systemPrompt || undefined,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: userPrompt }]
-      })
-    });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    const text = data?.content?.[0]?.text;
-    if (text === undefined) throw new Error('No message content returned by Anthropic.');
-    return text;
-  }
-
-  if (provider === 'custom') {
-    const base = (customUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
-    const url = `${base}/chat/completions`;
-    const headers = { 'Content-Type': 'application/json' };
-    if (cleanKey) headers['Authorization'] = `Bearer ${cleanKey}`;
-
-    const messages = [];
-    if (systemPrompt && systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt });
-    messages.push({ role: 'user', content: userPrompt });
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: cleanModel || 'default',
-        messages,
-        max_tokens: maxTokens
-      })
-    });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content;
-    if (text === undefined) throw new Error('No content returned by custom endpoint.');
-    return text;
-  }
-
-  throw new Error(`Unsupported provider: ${provider}`);
-}
-
-async function fetchLiveModelsForProvider() {
-  const prov = document.getElementById('settingsAiProvider').value;
-  const key = document.getElementById('settingsAiApiKey').value.trim();
-  const customUrl = document.getElementById('settingsAiCustomUrl')?.value.trim();
-  const modelSelect = document.getElementById('settingsAiModel');
-  const btn = document.getElementById('refreshModelsBtn');
-  const originalText = btn.innerHTML;
-
-  btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-[11px]"></i> Fetching...`;
-
-  try {
-    let fetchedModels = [];
-
-    if (prov === 'gemini') {
-      if (!key) throw new Error("API Key required to query models");
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-      }
-      const data = await res.json();
-      fetchedModels = (data.models || [])
-        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-        .map(m => m.name.replace('models/', ''));
-    } else if (prov === 'openai') {
-      if (!key) throw new Error("API Key required to query models");
-      const res = await fetch('https://api.openai.com/v1/models', {
-        headers: { 'Authorization': `Bearer ${key}` }
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.error?.message || `HTTP ${res.status}: ${res.statusText}`);
-      }
-      const data = await res.json();
-      fetchedModels = (data.data || [])
-        .map(m => m.id)
-        .filter(id => id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3'))
-        .sort();
-    } else if (prov === 'anthropic') {
-      fetchedModels = [
-        'claude-3-7-sonnet-latest',
-        'claude-3-5-sonnet-latest',
-        'claude-3-5-haiku-latest',
-        'claude-3-opus-latest'
-      ];
-    } else if (prov === 'custom') {
-      const base = (customUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
-      const res = await fetch(`${base}/models`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const data = await res.json();
-      fetchedModels = (data.data || data.models || []).map(m => m.id || m.name);
-    }
-
-    if (fetchedModels && fetchedModels.length > 0) {
-      modelSelect.innerHTML = fetchedModels.map(m => `<option value="${m}">${m}</option>`).join('');
-      showToast(`Loaded ${fetchedModels.length} models for ${prov}`, 'success');
-    } else {
-      showToast(`No matching models found. Using defaults.`, 'info');
-    }
-  } catch (err) {
-    showToast(`Could not fetch live models: ${err.message}`, 'error');
-  } finally {
-    btn.innerHTML = originalText;
-  }
-}
-
-async function testAiConnection() {
-  const status = document.getElementById('testConnectionStatus');
-  const btn = document.getElementById('testConnectionBtn');
-  if (!status || !btn) return;
-
-  const prov = document.getElementById('settingsAiProvider').value;
-  const model = document.getElementById('settingsAiModel').value;
-  const key = document.getElementById('settingsAiApiKey').value.trim();
-  const customUrl = document.getElementById('settingsAiCustomUrl').value.trim();
-
-  const origBtnHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-sm"></i><span>Testing...</span>`;
-  status.textContent = 'Connecting...';
-  status.className = 'text-[11px] font-medium text-amber-500 max-w-xs truncate text-right';
-
-  const startTime = performance.now();
-
-  try {
-    await callLiveAiProvider({
-      provider: prov,
-      model,
-      apiKey: key,
-      customUrl,
-      systemPrompt: 'Respond strictly with: OK',
-      userPrompt: 'Ping test. Reply OK.',
-      maxTokens: 5
-    });
-
-    const elapsedMs = Math.round(performance.now() - startTime);
-    status.innerHTML = `<span class="flex items-center gap-1 text-emerald-500 font-semibold"><i class="ph-bold ph-check"></i> Connected (${elapsedMs}ms)</span>`;
-    status.className = 'text-[11px] font-medium text-emerald-500 max-w-xs truncate text-right';
-    showToast(`AI Connected successfully (${prov} · ${elapsedMs}ms)`, 'success');
-  } catch (err) {
-    const errorMsg = err.message || 'Connection failed';
-    status.innerHTML = `<span class="flex items-center gap-1 text-rose-500 font-semibold" title="${escapeHtml(errorMsg)}"><i class="ph-bold ph-warning-circle"></i> Failed</span>`;
-    status.className = 'text-[11px] font-medium text-rose-500 max-w-xs truncate text-right';
-    showToast(`Connection failed: ${errorMsg}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = origBtnHtml;
-  }
-}
-
-let aiActiveTarget = null;
-function triggerAiPolish(elId, type) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-
-  const selStart = el.selectionStart;
-  const selEnd = el.selectionEnd;
-  const rawVal = el.value || '';
-  const isPartial = (selStart !== undefined && selEnd !== undefined && selEnd > selStart);
-  const textToPolish = isPartial ? rawVal.substring(selStart, selEnd) : rawVal;
-
-  aiActiveTarget = {
-    elId,
-    type,
-    fullText: rawVal,
-    original: textToPolish,
-    isPartial,
-    selStart: selStart || 0,
-    selEnd: selEnd || 0
-  };
-
-  document.getElementById('aiPolishOriginalPreview').textContent = textToPolish || '(Empty text)';
-  document.getElementById('aiPolishResultPreview').value = textToPolish;
-  document.getElementById('aiCustomInstructionInput').value = '';
-  const statusBadge = document.getElementById('aiPolishStatusBadge');
-  if (statusBadge) statusBadge.textContent = isPartial ? 'Polishing selected segment' : 'Polishing entire text';
-
-  document.getElementById('aiPolishModal').classList.remove('hidden');
-  autoGrowAllTextareas(document.getElementById('aiPolishModal'));
-}
-
-function closeAiPolishModal() {
-  document.getElementById('aiPolishModal').classList.add('hidden');
-  aiActiveTarget = null;
-}
-
-async function runAiPolishGeneration() {
-  if (!aiActiveTarget || !aiActiveTarget.original.trim()) {
-    showToast('No text available to polish.', 'info');
-    return;
-  }
-
-  const btn = document.getElementById('regenerateAiPolishBtn');
-  const origBtnHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<i class="ph ph-circle-notch animate-spin text-purple-600"></i> Polishing...`;
-
-  const customInstruction = document.getElementById('aiCustomInstructionInput')?.value.trim();
-  const baseSystemPrompt = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
-  const combinedSystem = `${baseSystemPrompt}\nCRITICAL: Keep all vLabs tokens like {{ VARIABLE }} intact. Maintain imperative instructional style for technical lab manuals. Return ONLY the polished text without any preamble or conversational framing.`;
-
-  const userPrompt = customInstruction
-    ? `Instruction: ${customInstruction}\n\nText to polish:\n${aiActiveTarget.original}`
-    : `Polish the following lab instructions:\n${aiActiveTarget.original}`;
-
-  try {
-    const polished = await callLiveAiProvider({
-      provider: appSettings.aiProvider,
-      model: appSettings.aiModel,
-      apiKey: appSettings.aiApiKey,
-      customUrl: appSettings.aiCustomUrl,
-      systemPrompt: combinedSystem,
-      userPrompt,
-      maxTokens: 2000
-    });
-
-    document.getElementById('aiPolishResultPreview').value = polished.trim();
-    autoGrowAllTextareas(document.getElementById('aiPolishModal'));
-    showToast('Text polished successfully', 'success');
-  } catch (err) {
-    showToast(`AI Polish error: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = origBtnHtml;
-  }
-}
-
-function applyAiPolishedText() {
-  if (!aiActiveTarget) return;
-
-  const el = document.getElementById(aiActiveTarget.elId);
-  const polishedText = document.getElementById('aiPolishResultPreview').value;
-
-  if (el) {
-    if (aiActiveTarget.isPartial) {
-      const before = aiActiveTarget.fullText.substring(0, aiActiveTarget.selStart);
-      const after = aiActiveTarget.fullText.substring(aiActiveTarget.selEnd);
-      el.value = before + polishedText + after;
-    } else {
-      el.value = polishedText;
-    }
-
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    autoGrowTextarea(el);
-  }
-
-  closeAiPolishModal();
-  showToast('Polished text applied', 'success');
 }
 
 const GUIDE_PRESETS_MARKDOWN = {
@@ -3362,51 +2955,6 @@ function updateBadges() {
   const imgBadge = document.getElementById('imgCountBadge');
   if (varBadge) varBadge.textContent = (templateData.variables || []).length;
   if (imgBadge) imgBadge.textContent = (templateData.images || []).length;
-}
-
-function openSettingsModal() {
-  const modal = document.getElementById('settingsModal');
-  if (!modal) return;
-  document.getElementById('settingsAiProvider').value = appSettings.aiProvider || 'gemini';
-  onAiProviderChanged();
-  document.getElementById('settingsAiModel').value = appSettings.aiModel || 'gemini-2.5-flash';
-  document.getElementById('settingsAiApiKey').value = appSettings.aiApiKey || '';
-  document.getElementById('settingsAiCustomUrl').value = appSettings.aiCustomUrl || '';
-  document.getElementById('settingsAiSystemPrompt').value = appSettings.aiSystemPrompt || DEFAULT_SYSTEM_PROMPT;
-  document.getElementById('testConnectionStatus').textContent = '';
-  modal.classList.remove('hidden');
-  autoGrowAllTextareas(modal);
-}
-
-function closeSettingsModal() {
-  document.getElementById('settingsModal')?.classList.add('hidden');
-}
-
-function saveAppSettingsModal() {
-  appSettings.aiProvider = document.getElementById('settingsAiProvider').value;
-  appSettings.aiModel = document.getElementById('settingsAiModel').value;
-  appSettings.aiApiKey = document.getElementById('settingsAiApiKey').value.trim();
-  appSettings.aiCustomUrl = document.getElementById('settingsAiCustomUrl').value.trim();
-  appSettings.aiSystemPrompt = document.getElementById('settingsAiSystemPrompt').value.trim();
-  saveAppSettings();
-  closeSettingsModal();
-  showToast('Settings saved successfully', 'success');
-}
-
-function onAiProviderChanged() {
-  const prov = document.getElementById('settingsAiProvider').value;
-  const customRow = document.getElementById('customEndpointRow');
-  const modelSelect = document.getElementById('settingsAiModel');
-  if (prov === 'custom') {
-    customRow?.classList.remove('hidden');
-  } else {
-    customRow?.classList.add('hidden');
-  }
-  const models = PROVIDER_MODELS[prov] || ['default'];
-  modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
-  if (appSettings.aiProvider === prov && models.includes(appSettings.aiModel)) {
-    modelSelect.value = appSettings.aiModel;
-  }
 }
 
 function openTokenCheatsheet(callback = null, maxSIdx = null, maxStepIdx = null) {
@@ -3852,11 +3400,9 @@ window.addEventListener('click', (e) => {
 // Global keyboard shortcuts (Escape + Undo/Redo when not inside native text inputs, or global Ctrl+Z/Y)
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closeSettingsModal();
     closeImportModal();
     closeTokenCheatsheet();
     closeImagePickerModal();
-    closeAiPolishModal();
     closeConfirmModal();
     return;
   }

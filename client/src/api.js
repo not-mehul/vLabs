@@ -107,7 +107,7 @@ export const participantSession = {
  * until the instructor releases the seat.
  */
 const seatId = (roomCode, first, last) =>
-  `${roomCode}:${`${first} ${last}`.trim().replace(/\s+/g, ' ').toLowerCase()}`;
+  `${roomCode}:${`${first} ${last}`.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase()}`;
 
 export const resumeKeys = {
   get(roomCode, first, last) {
@@ -169,9 +169,12 @@ export const api = {
 
   listTemplates: (token, { includeArchived = false } = {}) =>
     request(`/templates${includeArchived ? '?include_archived=1' : ''}`, { token }),
-  templateFunctions: (token) => request('/templates/functions', { token }),
   getTemplate: (token, id) => request(`/templates/${id}`, { token }),
+  /** Change history, newest first: what each entry changed, no snapshots. */
   getTemplateAudit: (token, id) => request(`/templates/${id}/audit`, { token }),
+  /** One history entry with its full snapshot (revert). */
+  getTemplateVersion: (token, id, entryId) =>
+    request(`/templates/${id}/audit/${entryId}`, { token }),
   createTemplate: (token, payload) =>
     request('/templates', { method: 'POST', body: payload, token }),
   updateTemplate: (token, id, payload) =>
@@ -182,12 +185,6 @@ export const api = {
   restoreTemplate: (token, id) => request(`/templates/${id}/restore`, { method: 'POST', token }),
   duplicateTemplate: (token, id, title) =>
     request(`/templates/${id}/duplicate`, { method: 'POST', body: title ? { title } : {}, token }),
-  previewTemplate: (token, id, seatId, draft) =>
-    request(`/templates/${id}/preview`, {
-      method: 'POST',
-      body: { seat_id: seatId, draft },
-      token,
-    }),
 
   /** This instructor's sessions; { all: true } adds everyone else's (read-only for them). */
   listSessions: (token, { all = false } = {}) =>
@@ -202,7 +199,6 @@ export const api = {
   exportSession: (token, id) => request(`/sessions/${id}/export`, { token }),
   getParticipant: (token, sessionId, participantId) =>
     request(`/sessions/${sessionId}/participants/${participantId}`, { token }),
-  /** Exam sessions: mark a response correct / incorrect (null clears the mark). */
   /** Exams: mark a response by hand. body: { correct } | { points } | { comment } (null clears). */
   markResponse: (token, sessionId, participantId, key, body) =>
     request(`/sessions/${sessionId}/participants/${participantId}/marks/${key}`, {
@@ -236,7 +232,7 @@ export const api = {
       method: 'POST',
       token,
     }),
-  /** Exams: give the participant another seat number (and so that seat's values). */
+  /** Labs and exams: give the participant another seat number (and so that seat's values). */
   changeSeat: (token, sessionId, participantId, seatNumber) =>
     request(`/sessions/${sessionId}/participants/${participantId}/seat`, {
       method: 'PUT',

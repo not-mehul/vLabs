@@ -47,12 +47,30 @@ const common = {
   },
 };
 
+/**
+ * The /64 prefix of an IPv6 address, written out in full: "2001:db8::1" and
+ * "2001:db8:0:0:ffff::2" are the same network. (Splitting the written form on
+ * ":" took the whole of a compressed address as its prefix.)
+ */
+export function ipv6Prefix64(ip) {
+  const addr = String(ip).split('%')[0];
+  const [head, tail] = addr.split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const groups =
+    tail === undefined
+      ? left
+      : [...left, ...Array(8 - left.length - right.length).fill('0'), ...right];
+  return groups
+    .slice(0, 4)
+    .map((g) => (parseInt(g, 16) || 0).toString(16))
+    .join(':');
+}
+
 /** IPv6 clients get a /64 bucket so one host can't rotate through its prefix. */
 function ipKey(req) {
   const ip = req.ip || 'unknown';
-  if (ip.includes(':') && !ip.includes('.')) {
-    return `ip6:${ip.split(':').slice(0, 4).join(':')}`;
-  }
+  if (ip.includes(':') && !ip.includes('.')) return `ip6:${ipv6Prefix64(ip)}`;
   return `ip:${ip}`;
 }
 
@@ -120,6 +138,19 @@ export const contentLimiter = rateLimit({
   windowMs: 60_000,
   limit: 120,
   message: { error: 'Content requests throttled (anti-scraping).' },
+});
+
+/**
+ * Public image serving (no token, so per IP). Generous: the random id is the
+ * capability, so this only guards against floods, and a class behind one NAT
+ * may open an image-heavy section all at once.
+ */
+export const imageLimiter = rateLimit({
+  ...common,
+  keyGenerator: ipKey,
+  windowMs: 60_000,
+  limit: 3000,
+  message: { error: 'Too many image requests. Try again shortly.' },
 });
 
 export const actionLimiter = rateLimit({

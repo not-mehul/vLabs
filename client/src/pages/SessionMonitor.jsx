@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { usePolling } from '../hooks/usePolling.js';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, copyToClipboard, clockOffset } from '../api.js';
 import { downloadFile } from '../lib/files.js';
@@ -66,28 +67,22 @@ function ParticipantDrawer({ sessionId, participantId, readOnly, onClose, onRemo
   const { call } = useInstructorApi();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
-  const [reload, setReload] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
+  const load = useCallback(
+    async (isCurrent = () => true) => {
       try {
         const res = await call((t) => api.getParticipant(t, sessionId, participantId));
-        if (!cancelled) {
+        if (isCurrent()) {
           setD(res);
           setError('');
         }
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (isCurrent()) setError(err.message);
       }
-    };
-    load();
-    const timer = setInterval(load, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [call, sessionId, participantId, reload]);
+    },
+    [call, sessionId, participantId],
+  );
+  usePolling(load, 5000);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -118,7 +113,7 @@ function ParticipantDrawer({ sessionId, participantId, readOnly, onClose, onRemo
     }
     try {
       await call((t) => api.unlockCheckpoint(t, sessionId, participantId, c.key, value));
-      setReload((n) => n + 1);
+      await load();
     } catch (err) {
       setError(err.message);
     }
@@ -206,7 +201,7 @@ function ParticipantDrawer({ sessionId, participantId, readOnly, onClose, onRemo
                   what="Their manual and checkpoints"
                   onSave={async (seat) => {
                     await call((t) => api.changeSeat(t, sessionId, participantId, seat));
-                    setReload((n) => n + 1);
+                    await load();
                     onChanged();
                   }}
                   onError={setError}
@@ -402,36 +397,31 @@ export default function SessionMonitor() {
     offsetMs,
   });
 
-  const refresh = useCallback(async () => {
-    try {
-      setData(await call((t) => api.getSession(t, id)));
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [call, id]);
-
-  useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 5000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  const refresh = useCallback(
+    async (isCurrent = () => true) => {
+      try {
+        const res = await call((t) => api.getSession(t, id));
+        if (!isCurrent()) return;
+        setData(res);
+        setError('');
+      } catch (err) {
+        if (isCurrent()) setError(err.message);
+      }
+    },
+    [call, id],
+  );
+  usePolling(refresh, 5000);
 
   // Join addresses: they change when the Pi is moved to another network.
   const [joinUrls, setJoinUrls] = useState([]);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
+  const loadJoinUrls = useCallback(
+    (isCurrent) =>
       call((t) => api.serverAddresses(t))
-        .then((r) => !cancelled && setJoinUrls(r.urls || []))
-        .catch(() => {});
-    load();
-    const timer = setInterval(load, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [call]);
+        .then((r) => isCurrent() && setJoinUrls(r.urls || []))
+        .catch(() => {}),
+    [call],
+  );
+  usePolling(loadJoinUrls, 30000);
 
   async function act(fn, { confirmText, okMessage } = {}) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -647,7 +637,7 @@ export default function SessionMonitor() {
           <>
             <div className="stat">
               <span className="stat__num">
-                {data.submitted_count}
+                {data.complete_count}
                 <span className="muted">/{data.participants.length}</span>
               </span>
               <span className="stat__label">Submitted</span>

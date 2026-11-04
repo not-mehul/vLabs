@@ -568,7 +568,16 @@ export function normaliseImageName(raw) {
 export function imageRefName(src) {
   const s = String(src ?? '').trim();
   if (!s || /^[a-z][a-z0-9+.-]*:/i.test(s) || s.startsWith('/') || s.startsWith('#')) return null;
-  return normaliseImageName(decodeURIComponent(s));
+  return normaliseImageName(decodeIfEncoded(s));
+}
+
+/** `rack%20a.png` → `rack a.png`; a bare `%` (`50%-done.png`) is kept as written. */
+function decodeIfEncoded(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
 }
 
 /**
@@ -606,9 +615,4 @@ export function findMissingImages(tpl, available) {
     out.push(ref);
   }
   return out;
-}
-
-/** Total number of steps across all sections. */
-export function countSteps(sections) {
-  return (sections || []).reduce((n, s) => n + ((s && s.steps && s.steps.length) || 0), 0);
 }

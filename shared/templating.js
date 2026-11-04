@@ -44,6 +44,21 @@ const TOKEN_RE = /\s*([0-9]*\.?[0-9]+|'[^']*'|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[+\
 const MAX_EXPRESSION_LENGTH = 500;
 /** Hard cap on nesting depth (parentheses / function calls). */
 const MAX_DEPTH = 32;
+/**
+ * Hard cap on a text value. Without it, composing formulas (A1 = A0 + A0, …)
+ * doubles a string per variable: 25 of them made 256 MB, enough to exhaust a
+ * Pi's memory once rendered.
+ */
+export const MAX_VALUE_LENGTH = 1000;
+
+/** Concatenation, refusing text past MAX_VALUE_LENGTH. */
+function concat(a, b) {
+  const out = `${a}${b}`;
+  if (out.length > MAX_VALUE_LENGTH) {
+    throw new Error(`Text is too long (max ${MAX_VALUE_LENGTH} characters)`);
+  }
+  return out;
+}
 
 function tokenize(expr) {
   if (expr.length > MAX_EXPRESSION_LENGTH) {
@@ -201,7 +216,9 @@ function evaluateExpression(expr, scope) {
       if (op === '+') {
         // String concatenation when either operand is a string, else numeric.
         left =
-          typeof left === 'string' || typeof right === 'string' ? `${left}${right}` : left + right;
+          typeof left === 'string' || typeof right === 'string'
+            ? concat(left, right)
+            : left + right;
       } else {
         left = toNum(left) - toNum(right);
       }
@@ -319,6 +336,9 @@ export const RESERVED_NAMES = Object.freeze([...BUILTIN_PLACEHOLDERS, ...BUILTIN
  *                                 when the template is validated).
  * @param {Map}    [who.images]    lower-cased image name → URL (see lib/images.js);
  *                                 attached under the IMAGES symbol for injectVariables.
+ * @param {Function} [who.onError] (name, error) => void. Without it the first
+ *                                 failing formula throws; with it that variable
+ *                                 reads as ⟨error:NAME⟩ and the rest still resolve.
  * @returns {Object} Map of placeholder name -> resolved value.
  */
 export function resolveVariables(variables, seatId, who = {}) {
@@ -338,23 +358,34 @@ export function resolveVariables(variables, seatId, who = {}) {
     FULL_NAME: `${firstName} ${lastName}`.trim(),
   };
 
+  // Strict (validation) throws; lenient (participant pages) reports and goes on.
+  const fail = (name, message) => {
+    const err = new Error(message);
+    if (!who.onError) throw err;
+    who.onError(name, err);
+  };
+
   for (const def of variables || []) {
     if (!def || !def.name) continue;
     const name = String(def.name).trim();
     if (!IDENT_RE.test(name)) {
-      throw new Error(`Invalid variable name "${def.name}"`);
+      fail(name, `Invalid variable name "${def.name}"`);
+      continue;
     }
     if (Object.prototype.hasOwnProperty.call(FUNCTIONS, name)) {
-      throw new Error(`Variable name "${name}" clashes with a built-in function`);
+      fail(name, `Variable name "${name}" clashes with a built-in function`);
+      continue;
     }
     if (RESERVED_NAMES.includes(name)) {
-      throw new Error(`Variable name "${name}" is reserved`);
+      fail(name, `Variable name "${name}" is reserved`);
+      continue;
     }
     let value;
     try {
       value = evaluateExpression(def.expression ?? '', scope);
     } catch (err) {
-      throw new Error(`Error in variable "${name}": ${err.message}`);
+      fail(name, `Error in variable "${name}": ${err.message}`);
+      value = `⟨error:${name}⟩`;
     }
     // Expose resolved value to subsequent formulas (allows composition) and to
     // the placeholder-injection context.
@@ -475,17 +506,6 @@ export function normaliseAnswer(value) {
 }
 
 /**
- * All accepted checkpoint answers for a seat (server-side only), normalised.
- * The primary `answer` plus any authored alternatives (`answers`). Empty for
- * pattern checkpoints, which have no enumerable answers.
- */
-export function checkpointAnswers(step, context) {
-  if (!stepHasCheckpoint(step) || checkpointMode(step) !== 'exact') return [];
-  const all = [step.checkpoint.answer, ...(step.checkpoint.answers || [])];
-  return [...new Set(all.map((a) => normaliseAnswer(injectVariables(String(a), context))))];
-}
-
-/**
  * Check a submission against a step's checkpoint.
  *
  * @returns {{ ok: boolean, value: string|null }} `value` is the canonical form
@@ -512,20 +532,6 @@ export function matchCheckpoint(step, context, submitted) {
     if (normaliseAnswer(resolved) === want) return { ok: true, value: resolved };
   }
   return { ok: false, value: null };
-}
-
-/**
- * Compute the primary expected checkpoint answer for a seat (server-side only).
- * Kept for backwards compatibility; prefer `isCorrectAnswer` / `checkpointAnswers`.
- */
-export function checkpointAnswer(step, context) {
-  const all = checkpointAnswers(step, context);
-  return all.length ? all[0] : null;
-}
-
-/** Does a submitted value satisfy this step's checkpoint? */
-export function isCorrectAnswer(step, context, submitted) {
-  return matchCheckpoint(step, context, submitted).ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +633,7 @@ export function renderSection(section, context, sectionIndex, completedSet, step
 
 /** Total number of steps across all sections. */
 export function countSteps(sections) {
-  return (sections || []).reduce((n, s) => n + ((s.steps && s.steps.length) || 0), 0);
+  return (sections || []).reduce((n, s) => n + ((s && s.steps && s.steps.length) || 0), 0);
 }
 
 /**

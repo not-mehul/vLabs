@@ -269,7 +269,7 @@ test('the monitor grades automatically and lists what still needs a manual mark'
   assert.equal(res.data.kind, 'exam');
   assert.equal(res.data.question_count, 6);
   assert.equal(res.data.total_points, 2 + 1 + 1 + 1 + 1 + 5);
-  assert.equal(res.data.submitted_count, 1);
+  assert.equal(res.data.complete_count, 1);
 
   const a = res.data.participants.find((p) => p.name === 'Ada Lovelace');
   assert.equal(a.answered, 6);
@@ -514,8 +514,14 @@ test('the instructor can reopen a submission and remove a participant', async ()
 test('answer history lives in its own table, one small row per change', async () => {
   const n = db.prepare('SELECT COUNT(*) AS n FROM exam_answer_events').get().n;
   assert.ok(n >= 9);
-  const row = db.prepare("SELECT answer_log FROM participants WHERE first_name = 'Ada'").get();
-  assert.equal(row.answer_log, '[]', 'the participants row no longer carries the log');
+  const cols = db
+    .prepare('PRAGMA table_info(participants)')
+    .all()
+    .map((c) => c.name);
+  assert.ok(
+    !cols.includes('answer_log'),
+    'the participants row no longer carries a log (migration 13)',
+  );
   const st = await call('/api/participant/status', { token: ada });
   assert.ok(Date.parse(st.data.server_time) > 0, 'status reports server time');
 });
@@ -754,17 +760,6 @@ test('per-seat variables and saved answers resolve throughout the exam and its g
   assert.equal(tpl.status, 201, JSON.stringify(tpl.data));
   assert.deepEqual(tpl.data.variables, body.variables);
   assert.equal(tpl.data.content[1].items[1].capture, 'ROUTER_IP');
-
-  // The instructor preview resolves a chosen seat.
-  const pv = await call(`/api/templates/${tpl.data.id}/preview`, {
-    method: 'POST',
-    token,
-    body: { seat_id: 3 },
-  });
-  assert.equal(pv.status, 200);
-  assert.equal(pv.data.context.STORE, 103);
-  assert.equal(pv.data.sections[0].items[0].body, 'Store 103');
-  assert.match(pv.data.sections[2].title, /^Check \[answer to Section 2 · question 2\]$/);
 
   const sess = await call('/api/sessions', {
     method: 'POST',
@@ -1158,7 +1153,7 @@ test('ending an exam session hands in every open exam; the expiry sweep does the
   assert.equal(ended.data.auto_submitted, 1);
   const d = await call(`/api/sessions/${one.id}`, { token });
   const by = (first) => d.data.participants.find((p) => p.first_name === first);
-  assert.equal(d.data.submitted_count, 2);
+  assert.equal(d.data.complete_count, 2);
   assert.equal(by('Ann').auto_submitted, false);
   assert.equal(by('Ben').submitted, true);
   assert.equal(by('Ben').auto_submitted, true);
@@ -1174,7 +1169,7 @@ test('ending an exam session hands in every open exam; the expiry sweep does the
   const { sweepExpiredSessions } = await import('../src/lib/sessionLifecycle.js');
   assert.ok(sweepExpiredSessions() >= 1);
   const swept = await call(`/api/sessions/${two.id}`, { token });
-  assert.equal(swept.data.submitted_count, 2);
+  assert.equal(swept.data.complete_count, 2);
   assert.ok(swept.data.participants.every((p) => p.auto_submitted && p.submitted_at === expiredAt));
 });
 

@@ -218,7 +218,7 @@ test('examResultsToCsv: one time column per section when the export lists sectio
 
 test('exam Markdown is told apart from lab Markdown', async () => {
   const { looksLikeExamMarkdown } = await import('../../shared/exam-format.js');
-  const { SAMPLE_MARKDOWN } = await import('../../shared/template-format.js');
+  const { SAMPLE_MARKDOWN } = await import('./fixtures.js');
   assert.equal(looksLikeExamMarkdown(SAMPLE_EXAM_MARKDOWN), true);
   assert.equal(looksLikeExamMarkdown(SAMPLE_MARKDOWN), false);
   const exam = parseExamMarkdown(SAMPLE_EXAM_MARKDOWN);

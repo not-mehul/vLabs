@@ -224,7 +224,7 @@ export default function TemplateEditor() {
       try {
         const refs = await call((t) => api.imageReferences(t, img.id));
         const used = [
-          ...refs.templates.map((t) => `template "${t.title}"`),
+          ...refs.templates.map((t) => `${t.archived ? 'archived ' : ''}template "${t.title}"`),
           ...refs.sessions.map((x) => `active session "${x.title}"`),
         ];
         if (used.length) {
@@ -301,16 +301,21 @@ export default function TemplateEditor() {
     }
   }
 
-  function revert(entry) {
-    post('load', {
-      kind: record.kind,
-      template: entry.snapshot,
-      images,
-      kindLocked: record.kind,
-      reason: 'revert',
-    });
-    setShowHistory(false);
-    setNotice(`Loaded v${entry.version} into the Studio. Save to apply it as a new version.`);
+  async function revert(entry) {
+    try {
+      const { snapshot } = await call((t) => api.getTemplateVersion(t, record.id, entry.id));
+      post('load', {
+        kind: record.kind,
+        template: snapshot,
+        images,
+        kindLocked: record.kind,
+        reason: 'revert',
+      });
+      setShowHistory(false);
+      setNotice(`Loaded v${entry.version} into the Studio. Save to apply it as a new version.`);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   const kind = current?.kind || record?.kind || (id === 'new-exam' ? 'exam' : 'lab');

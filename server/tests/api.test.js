@@ -58,6 +58,27 @@ async function call(p, { method = 'GET', body, token } = {}) {
   return { status: res.status, data };
 }
 
+/**
+ * Launch a session from a template, join it as one participant and return
+ * what that seat is sent; the session is deleted again afterwards.
+ */
+async function renderedForSeat(templateId) {
+  const s = await call('/api/sessions', {
+    method: 'POST',
+    token: instructorToken,
+    body: { template_id: templateId },
+  });
+  assert.equal(s.status, 201, JSON.stringify(s.data));
+  const j = await call('/api/participant/join', {
+    method: 'POST',
+    body: { room_code: s.data.room_code, first_name: 'Render', last_name: 'Check' },
+  });
+  const content = await call('/api/participant/content', { token: j.data.token });
+  assert.equal(content.status, 200, JSON.stringify(content.data));
+  await call(`/api/sessions/${s.data.id}`, { method: 'DELETE', token: instructorToken });
+  return { seat: j.data.seat_number, content: content.data };
+}
+
 /** A minimal valid template payload for creating throwaway templates. */
 function tinyTemplate(title, opts = {}) {
   return {
@@ -572,16 +593,12 @@ test('image library: upload is sniffed, served publicly by id, replace/delete ru
     },
   });
   assert.equal(withImg.status, 201, JSON.stringify(withImg.data));
-  // Rendering (preview) rewrites the reference to the served URL; the dynamic
-  // one has no library match and is left as written.
-  const preview = await call(`/api/templates/${withImg.data.id}/preview`, {
-    method: 'POST',
-    token: instructorToken,
-    body: { seat_id: 3 },
-  });
-  const body = preview.data.sections[0].steps[0].body;
+  // Rendering for a seat rewrites the reference to the served URL; the
+  // dynamic one has no library match and is left as written.
+  const rendered = await renderedForSeat(withImg.data.id);
+  const body = rendered.content.sections[0].steps[0].body;
   assert.ok(body.includes(`![rack](${rep.data.url} "The rack")`), body);
-  assert.ok(body.includes('![d](bench-3.png)'), body);
+  assert.ok(body.includes(`![d](bench-${rendered.seat}.png)`), body);
   // References + delete refusal while a template uses it.
   const refs = await call(`/api/images/${rep.data.id}/references`, { token: instructorToken });
   assert.ok(refs.data.templates.some((t) => t.id === withImg.data.id));
@@ -598,14 +615,43 @@ test('image library: upload is sniffed, served publicly by id, replace/delete ru
     token: instructorToken,
   });
   assert.equal(del.status, 409);
-  // Archive the template (archived templates don't block), then delete works.
+  // An archived template still counts (restoring it must find its images)…
   await call(`/api/templates/${withImg.data.id}`, { method: 'DELETE', token: instructorToken });
+  const whileArchived = await call(`/api/images/${rep.data.id}`, {
+    method: 'DELETE',
+    token: instructorToken,
+  });
+  assert.equal(whileArchived.status, 409);
+  assert.match(whileArchived.data.error, /archived template "Img ok"/);
+  // …until it is deleted for good.
+  await call(`/api/templates/${withImg.data.id}?permanent=1`, {
+    method: 'DELETE',
+    token: instructorToken,
+  });
   const del2 = await call(`/api/images/${rep.data.id}`, {
     method: 'DELETE',
     token: instructorToken,
   });
   assert.equal(del2.status, 204);
   assert.equal((await fetch(`${base}${rep.data.url}`)).status, 404);
+
+  // References match whole file names: a template showing rack-a.png does not
+  // use a.png.
+  const a = await upload('a.png', PNG_1X1);
+  await upload('rack-a.png', PNG_1X1);
+  const other = await call('/api/templates', {
+    method: 'POST',
+    token: instructorToken,
+    body: {
+      ...tinyTemplate('Uses rack-a'),
+      content: [{ title: 'S', steps: [{ type: 'desk', title: 't', body: '![r](rack-a.png)' }] }],
+    },
+  });
+  assert.equal(other.status, 201, JSON.stringify(other.data));
+  const aRefs = await call(`/api/images/${a.data.id}/references`, { token: instructorToken });
+  assert.deepEqual(aRefs.data.templates, []);
+  const delA = await call(`/api/images/${a.data.id}`, { method: 'DELETE', token: instructorToken });
+  assert.equal(delA.status, 204);
 });
 
 test('template validation rejects unknown placeholders and bad formulas with details', async () => {
@@ -628,14 +674,10 @@ test('template formulas may use whitelisted helpers and alternative answers roun
   assert.equal(res.status, 201);
   assert.deepEqual(res.data.content[0].steps[0].checkpoint.answers, ['{{ HOST_IP }}/24']);
 
-  const preview = await call(`/api/templates/${res.data.id}/preview`, {
-    method: 'POST',
-    body: { seat_id: 7 },
-    token: instructorToken,
-  });
-  assert.equal(preview.status, 200);
-  assert.equal(preview.data.context.TAG, 'S007');
-  assert.equal(preview.data.sections[0].steps[0].checkpoint.answer, undefined);
+  const { seat, content } = await renderedForSeat(res.data.id);
+  const step = content.sections[0].steps[0];
+  assert.ok(step.body.includes(`tag S${String(seat).padStart(3, '0')}`), step.body);
+  assert.equal(step.checkpoint.answer, undefined);
 
   // Clean up (permanently — no sessions reference it).
   const del = await call(`/api/templates/${res.data.id}?permanent=1`, {
@@ -775,7 +817,21 @@ test('permanent deletion is refused with active sessions and otherwise detaches 
     token: instructorToken,
   });
   assert.equal(audit.data[0].action, 'deleted', 'audit history survives deletion');
-  assert.ok(audit.data[0].snapshot, 'deletion keeps a final snapshot');
+  assert.deepEqual(audit.data[0].changes, ['Template deleted']);
+  // The list says what changed but carries no snapshots; one is fetched on demand.
+  assert.ok(audit.data.every((a) => !('snapshot' in a)));
+  assert.ok(audit.data[0].has_snapshot, 'deletion keeps a final snapshot');
+  const created = audit.data.at(-1);
+  assert.deepEqual(created.changes, ['Initial version']);
+  const entry = await call(`/api/templates/${archivedTemplateId}/audit/${audit.data[0].id}`, {
+    token: instructorToken,
+  });
+  assert.equal(entry.status, 200);
+  assert.equal(entry.data.snapshot.title, 'To archive');
+  const elsewhere = await call(`/api/templates/${templateId}/audit/${audit.data[0].id}`, {
+    token: instructorToken,
+  });
+  assert.equal(elsewhere.status, 404, "an entry is only read through its own template's id");
 });
 
 /* ------------------------------------------------------------------------ */
@@ -923,8 +979,8 @@ test('template audit log is append-only (immutability triggers)', () => {
   assert.throws(() => db.prepare('DELETE FROM template_audit WHERE id = 1').run(), /append-only/);
 });
 
-test('database schema version is recorded (migration 12: legacy exam sections rewritten)', () => {
-  assert.equal(db.pragma('user_version', { simple: true }), 12);
+test('database schema version is recorded (migration 13: stored admin flag)', () => {
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
   const sessionCols = db
     .prepare('PRAGMA table_info(sessions)')
     .all()
@@ -943,7 +999,13 @@ test('database schema version is recorded (migration 12: legacy exam sections re
   ]) {
     assert.ok(cols.includes(c), c);
   }
+  assert.ok(!cols.includes('answer_log'), 'dropped by migration 13');
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='images'").get());
+  assert.deepEqual(
+    db.prepare('SELECT username FROM instructors WHERE is_admin = 1').all(),
+    [{ username: 'instructor' }],
+    'the bootstrap account is the stored admin',
+  );
 });
 
 test('template saves refuse to overwrite a newer version (optimistic concurrency)', async () => {

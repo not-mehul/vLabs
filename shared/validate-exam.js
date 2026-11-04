@@ -1,5 +1,11 @@
 import { IMAGE_MD_RE, imageRefName, LIMITS, assignItemIds } from './template-schema.js';
-import { minutesInvalid, optionalInvalid, cleanVariables, utf8Bytes } from './validate-template.js';
+import {
+  minutesInvalid,
+  optionalInvalid,
+  cleanVariables,
+  utf8Bytes,
+  fail,
+} from './validate-template.js';
 import {
   EXAM_LIMITS,
   normaliseExam,
@@ -122,11 +128,4 @@ export function validateExamPayload(payload, opts = {}) {
   if (errors.length) return fail(errors);
   assignItemIds(clean.content, (sec) => sec.items);
   return clean;
-}
-
-function fail(errors) {
-  const err = new Error(errors.join('; '));
-  err.status = 400;
-  err.details = errors;
-  throw err;
 }

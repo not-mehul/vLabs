@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS instructors (
   -- Bumped on password change; instructor JWTs carry it so old tokens die.
   token_version       INTEGER NOT NULL DEFAULT 0,
   password_changed_at TEXT,
+  -- 1 for the admin account (the bootstrap instructor): the only one that
+  -- resets or removes other accounts.
+  is_admin            INTEGER NOT NULL DEFAULT 0,
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -151,7 +154,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_active_code
 -- order (an exam linked to a lab reuses lab seats instead; see
 -- lib/seatSource.js); that number is what the templating engine uses as the
 -- seat value.
--- name_key (lowercased "first last") makes rejoin idempotent so a participant
+-- name_key (NFC, lowercased "first last") makes rejoin idempotent so a participant
 -- who closes their browser can return and resume the same seat and progress.
 -- Progress is tracked by SECTION: current_section is the section being viewed,
 -- section_entered_at powers time-on-section, joined_at powers total elapsed
@@ -180,10 +183,7 @@ CREATE TABLE IF NOT EXISTS participants (
   -- response per question); grades: instructor marks { key: { correct: 0|1
   -- or points: N, comment, by, at } }; submitted_at: when the exam was handed
   -- in, auto_submitted = 1 when the session's end handed it in.
-  -- (answer_log is the pre-1.5.1 change log, superseded by
-  -- exam_answer_events and no longer written.)
   answers                TEXT NOT NULL DEFAULT '{}',
-  answer_log             TEXT NOT NULL DEFAULT '[]',
   grades                 TEXT NOT NULL DEFAULT '{}',
   submitted_at           TEXT,
   auto_submitted         INTEGER NOT NULL DEFAULT 0,
@@ -494,7 +494,46 @@ const MIGRATIONS = [
       })();
     },
   },
+  {
+    version: 13,
+    name: 'stored admin flag, Unicode-normalised name keys, answer_log dropped',
+    up() {
+      db.transaction(() => {
+        // The admin used to be worked out on every request from
+        // SEED_INSTRUCTOR_USERNAME (else the oldest account), so changing that
+        // setting moved the role. Flag today's admin once.
+        addColumnIfMissing('instructors', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
+        if (!db.prepare('SELECT 1 FROM instructors WHERE is_admin = 1').get()) {
+          const admin =
+            db
+              .prepare('SELECT id FROM instructors WHERE username = ?')
+              .get(config.seedInstructor.username) ||
+            db.prepare('SELECT id FROM instructors ORDER BY id LIMIT 1').get();
+          if (admin) db.prepare('UPDATE instructors SET is_admin = 1 WHERE id = ?').run(admin.id);
+        }
+
+        // Joins now compare names in one Unicode form (NFC), so "José" typed
+        // either way is one seat. Bring stored keys to that form, leaving any
+        // that would collide with a seat already holding the NFC key.
+        const taken = db.prepare(
+          'SELECT 1 FROM participants WHERE session_id = ? AND name_key = ?',
+        );
+        const setKey = db.prepare('UPDATE participants SET name_key = ? WHERE id = ?');
+        for (const p of db.prepare('SELECT id, session_id, name_key FROM participants').all()) {
+          const key = p.name_key.normalize('NFC');
+          if (key !== p.name_key && !taken.get(p.session_id, key)) setKey.run(key, p.id);
+        }
+      })();
+      // Emptied by migration 6 and unused since 1.5.1.
+      if (columns('participants').includes('answer_log')) {
+        db.exec('ALTER TABLE participants DROP COLUMN answer_log');
+      }
+    },
+  },
 ];
+
+/** The schema version this code writes (the last migration). */
+export const LATEST_SCHEMA = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 /**
  * SQLite cannot alter foreign-key actions in place, so this follows the
@@ -603,9 +642,19 @@ function rebuildSessionsTable() {
   log.info('db.migrate.sessions.rebuild.done');
 }
 
-/** Apply every migration newer than the database's user_version. */
-export function migrate() {
+/**
+ * Apply every migration newer than the database's user_version. A database
+ * from a NEWER release (a rolled-back update) is left untouched and reported
+ * as `ahead`: running this code on it would read and write a schema it does
+ * not know. index.js refuses to start then; the backup tool still works.
+ *
+ * @returns {{ version: number, latest: number, ahead: boolean }}
+ */
+function migrate() {
   const current = db.pragma('user_version', { simple: true });
+  if (current > LATEST_SCHEMA) {
+    return { version: current, latest: LATEST_SCHEMA, ahead: true };
+  }
   for (const m of MIGRATIONS) {
     if (m.version <= current) continue;
     log.info('db.migrate', { version: m.version, name: m.name });
@@ -615,8 +664,10 @@ export function migrate() {
   // Always converge to the baseline shape (no-op when already current); this
   // also creates any brand-new table added to SCHEMA in a later release.
   db.exec(SCHEMA);
+  return { version: LATEST_SCHEMA, latest: LATEST_SCHEMA, ahead: false };
 }
 
-migrate();
+/** The database's schema version after start-up migrations (see migrate). */
+export const schema = migrate();
 
 export default db;
