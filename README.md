@@ -240,8 +240,10 @@ defined variables (so formulas can compose), and a small whitelist of pure
 helpers: `pad`, `hex`, `floor`, `ceil`, `round`, `abs`, `mod`, `min`, `max`,
 `upper`, `lower`, `str`, `slug`, `initials`. Anything else — unknown
 identifiers, prototype names, `constructor(...)`, semicolons — is rejected.
-Expressions are capped in length and nesting depth, and division by zero is an
-error.
+Expressions are capped in length and nesting depth, text values at 1000
+characters, and division by zero is an error. Saving a template evaluates
+every formula for every seat 1–100, so a formula that fails for one seat is
+refused with that seat's number.
 
 Participant names are first-class: `{{ FIRST_NAME }}`, `{{ LAST_NAME }}` and
 `{{ FULL_NAME }}` are always available, and formulas can derive from them —
@@ -431,13 +433,14 @@ devices and keep room codes private.
 ## Data model
 
 SQLite tables (`server/src/db/index.js`), migrated with `PRAGMA user_version`
-(current version **12**; each migration is listed in [CHANGES.md](CHANGES.md)
+(current version **13**; each migration is listed in [CHANGES.md](CHANGES.md)
 with the release that added it):
 
 - **`instructors`** — `id`, `username`, `password_hash`, `token_version`
   (bumped on password change or reset; embedded in JWTs),
-  `password_changed_at` (NULL = temporary password), `created_at`. The
-  bootstrap account (or the oldest, if it is gone) is the admin.
+  `password_changed_at` (NULL = temporary password), `is_admin` (the
+  bootstrap account; stored, so `SEED_INSTRUCTOR_USERNAME` changing later
+  does not move it), `created_at`.
 - **`templates`** — `id`, `kind` (`lab | exam`, fixed at creation), `title`,
   `description`, `content` (JSON sections), `variables` (JSON formulas),
   `version`, `archived_at`, `created_by`, timestamps.
@@ -451,8 +454,10 @@ with the release that added it):
   `is_active`, `expires_at`, `created_at`, `ended_at`, `breaks` (JSON class
   breaks), `seat_source_session_id` (**Seats from**). A partial unique index
   keeps room codes unique among _active_ sessions only.
-- **`participants`** — `id`, `session_id`, `seat_number` (1–100),
-  `first_name`, `last_name`, `name_key`, `current_section`, `max_section`,
+- **`participants`** — `id`, `session_id`, `seat_number` (from 1 in join
+  order, at most 100 participants per session; **Change seat** allows up to
+  999), `first_name`, `last_name`, `name_key` (NFC, lower-cased "first last"),
+  `current_section`, `max_section`,
   `completed_checkpoints` (JSON `"section.step"` keys), `captured_values`
   (JSON `{ NAME: "canonical value" }` from capturing checkpoints),
   `checkpoint_log` (JSON `[{ k, a, ok, at, by? }]`, every attempt as typed,
@@ -530,7 +535,6 @@ instructor who launched it can **change** it (`403 NOT_SESSION_OWNER`).
 | `POST`   | `/auth/instructors/:id/reset-password`                    | **Admin only.** New temporary password; signs that instructor out everywhere (`403 ADMIN_ONLY` for anyone else)                                                                                                                                                                                           |
 | `DELETE` | `/auth/instructors/:id`                                   | **Admin only.** Remove an account (not yourself); its sessions move to you                                                                                                                                                                                                                                |
 | `GET`    | `/templates`                                              | List (add `?include_archived=1`); includes `session_count`, `active_session_count`, `archived_at`                                                                                                                                                                                                         |
-| `GET`    | `/templates/functions`                                    | Formula helper names                                                                                                                                                                                                                                                                                      |
 | `POST`   | `/templates`                                              | Create (validated; `400` with `details[]`). `kind: 'exam'` creates an exam (fixed at creation)                                                                                                                                                                                                            |
 | `GET`    | `/templates/:id`                                          | Full template                                                                                                                                                                                                                                                                                             |
 | `PUT`    | `/templates/:id`                                          | Update → new version; running sessions unaffected. Optional `expected_version` → `409 VERSION_CONFLICT` if someone saved in between                                                                                                                                                                       |
@@ -538,8 +542,8 @@ instructor who launched it can **change** it (`403 NOT_SESSION_OWNER`).
 | `DELETE` | `/templates/:id?permanent=1`                              | Permanently delete; `409` while sessions are active                                                                                                                                                                                                                                                       |
 | `POST`   | `/templates/:id/restore`                                  | Un-archive                                                                                                                                                                                                                                                                                                |
 | `POST`   | `/templates/:id/duplicate`                                | `{ title? }` → a new template (v1) with the same kind, content and variables, titled "… (copy)" by default                                                                                                                                                                                                |
-| `GET`    | `/templates/:id/audit`                                    | Change history (newest first)                                                                                                                                                                                                                                                                             |
-| `POST`   | `/templates/:id/preview`                                  | `{ seat_id, first_name?, last_name?, draft? }` → rendered manual for one seat (solutions inline; captures stood in by mask examples). Exams: `{ context, sections }` with tokens resolved for that seat; saved answers stand in as `[answer to …]`                                                        |
+| `GET`    | `/templates/:id/audit`                                    | Change history (newest first): each entry's `changes` in words and `has_snapshot`, no snapshots                                                                                                                                                                                                         |
+| `GET`    | `/templates/:id/audit/:entryId`                           | One history entry with its full `snapshot` (revert)                                                                                                                                                                                                                                                       |
 | `GET`    | `/sessions`                                               | This instructor's sessions (`?scope=all`: everyone's, with `owner` and `can_manage`) with `participant_count`, `template_version`, `update_available`                                                                                                                                                     |
 | `POST`   | `/sessions`                                               | `{ template_id, title?, duration_minutes?, seat_source_session_id? }` → session (snapshot taken; `409` if template archived). Default length: 480 min for a lab, 60 for an exam                                                                                                                           |
 | `GET`    | `/sessions/:id`                                           | Detail + live analytics (`section_distribution` with `minutes` / `avg_seconds` / `completed_count` / `final`, `on_break`, per-participant `time_status` against the section's allocation, `participants[]` incl. `captured`, `capture_names`, `template_exists`, `template_archived`)                     |
@@ -561,8 +565,8 @@ instructor who launched it can **change** it (`403 NOT_SESSION_OWNER`).
 | `PUT`    | `/sessions/:id/participants/:pid/seat`                    | `{ seat_number }` — give the participant another seat (and so its values); `409 SEAT_IN_USE` when taken                                                                                                                                                                                                   |
 | `GET`    | `/images`                                                 | Image library listing                                                                                                                                                                                                                                                                                     |
 | `POST`   | `/images?name=…[&replace=1]`                              | Upload one image as the raw body (type sniffed; PNG/JPEG/GIF/WebP ≤ 3 MB); `409 IMAGE_EXISTS` unless `replace`                                                                                                                                                                                            |
-| `GET`    | `/images/:id/references`                                  | Templates / active sessions using the image                                                                                                                                                                                                                                                               |
-| `DELETE` | `/images/:id`                                             | Delete (409 while referenced)                                                                                                                                                                                                                                                                             |
+| `GET`    | `/images/:id/references`                                  | Templates (archived ones flagged `archived`) and active sessions using the image, by exact file name                                                                                                                                                                                                       |
+| `DELETE` | `/images/:id`                                             | Delete (409 while a template, archived or not, or an active session uses it)                                                                                                                                                                                                                              |
 
 ### Participant (Bearer participant token; every call re-validates the session)
 
@@ -584,7 +588,8 @@ Participant error codes: `SESSION_ENDED`, `SESSION_EXPIRED`, `SEAT_REMOVED`,
 `SEAT_RELEASED`, `SEAT_TAKEN`, `WRONG_KIND` (lab route on an exam session or
 vice versa), `SUBMITTED`. Instructor: `TOKEN_REVOKED`, `VERSION_CONFLICT`.
 
-Rate limits (per minute unless noted): API 300 per identity/IP; join 20 failed
+Rate limits (per minute unless noted): API 300 per identity/IP; library
+images 3000 per IP (they are fetched without a token); join 20 failed
 per IP / 5 min and 300 total per IP / 5 min; login 10 failed per IP / 15 min;
 per seat: checkpoint 30, content/status/solution 120, other actions 120.
 
@@ -606,15 +611,19 @@ password.
 | `DB_PATH`                                               | `server/data/vlabs.sqlite`      | SQLite file location (`/var/lib/vlabs/vlabs.sqlite` on the Pi)                                                        |
 | `JWT_INSTRUCTOR_SECRET`                                 | dev value                       | Instructor token key (≥ 32 chars in production)                                                                       |
 | `JWT_PARTICIPANT_SECRET`                                | dev value                       | Participant token key (must differ from the above)                                                                    |
-| `JWT_INSTRUCTOR_TTL` / `JWT_PARTICIPANT_TTL`            | `12h`                           | Token lifetimes                                                                                                       |
-| `SEED_INSTRUCTOR_USERNAME` / `SEED_INSTRUCTOR_PASSWORD` | `instructor` / `labmanual123`   | Bootstrap instructor (first run only)                                                                                 |
-| `MIN_PASSWORD_LENGTH`                                   | `10`                            | Policy for the change-password endpoint                                                                               |
+| `JWT_INSTRUCTOR_TTL` / `JWT_PARTICIPANT_TTL`            | `12h`                           | Token lifetimes; a participant token lasts this long past its session's expiry                                        |
+| `SEED_INSTRUCTOR_USERNAME` / `SEED_INSTRUCTOR_PASSWORD` | `instructor` / `labmanual123`   | Bootstrap instructor, the admin (first run only)                                                                      |
+| `MIN_PASSWORD_LENGTH`                                   | `10`                            | Policy for new passwords (portal and CLI), 1–200                                                                      |
 | `TRUST_PROXY`                                           | unset (`false`)                 | Express `trust proxy`: `1` behind Caddy on the Pi, `true`, a hop count, or CIDR list                                  |
 | `SERVE_PLAIN_HTTP`                                      | `false`                         | Only for TLS-less `http://` access: drops HSTS + `upgrade-insecure-requests`. Not needed on the Pi (Caddy does HTTPS) |
 | `CORS_ORIGINS`                                          | `http://localhost:5173`         | Allowed origins (empty in prod, same-origin)                                                                          |
 | `LOG_LEVEL`                                             | `info` (`silent` in tests)      | `debug                                                                                                                | info | warn | error | silent` |
 | `LOG_FORMAT`                                            | `pretty` (`json` in production) | Log line format                                                                                                       |
 | `EXPIRED_SESSION_GRACE_MINUTES`                         | `60`                            | Expired sessions auto-end after this, freeing their room code                                                         |
+
+A numeric setting that cannot be used (`MIN_PASSWORD_LENGTH=abc`, a port out
+of range) falls back to its default, and the server warns about it at
+start-up.
 
 ## Testing & CI
 
@@ -650,6 +659,11 @@ Suites, all under Node's built-in test runner:
   **`legacyExam.test.js`** — push-time remapping by stable id, progress and
   optional sections, and migration 12's rewrite of old exam sections.
 - **`server/tests/time.test.js`** — UTC parsing of SQLite and ISO timestamps.
+- **`server/tests/robustness.test.js`** — formulas that fail for some seats
+  (refused on save for seats 1–100, `⟨error:NAME⟩` past them), a bare `%` in
+  an image name, names in another Unicode form, corrupt JSON columns, the
+  stored admin role, participant token lifetimes, rate-limit buckets,
+  unusable settings, and refusing a database from a newer release.
 - **`client/tests/templateFormat.test.js`**, **`examFormat.test.js`** —
   lossless Markdown/JSON round-trips for labs and exams, code fences,
   multi-line hints, escapes, alternatives and the bundled samples.

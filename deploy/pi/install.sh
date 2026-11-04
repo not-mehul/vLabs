@@ -213,5 +213,5 @@ Done.
   Instructor    : username 'instructor', password in $ENV_FILE
   Logs          : sudo journalctl -u vlabs -f      sudo journalctl -u caddy -f
   Update        : sudo $REPO_DIR/deploy/pi/update.sh
-  Add instructor: portal → Instructors (or sudo $REPO_DIR/deploy/pi/vlabs-cli.sh instructors create <name>)
+  Add instructor: portal → Admin (or sudo $REPO_DIR/deploy/pi/vlabs-cli.sh instructors create <name>)
 EOF

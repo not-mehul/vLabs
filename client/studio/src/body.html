@@ -227,9 +227,6 @@
           <i class="ph ph-brackets-curly text-brand-600 dark:text-brand-400"></i>
           <span class="sidebar-label">Tokens</span>
         </button>
-        <button data-on-click="openSettingsModal()" class="p-1.5 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-surface-850 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-800 border border-slate-200/70 dark:border-white/[0.07] rounded-lg transition" title="AI & Studio Settings">
-          <i class="ph ph-gear text-sm"></i>
-        </button>
       </div>
     </aside>
 
@@ -265,10 +262,6 @@
                 <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Title</label>
                 <div class="flex items-center space-x-2">
                   <span id="titleCharCounter" class="text-[10px] font-mono text-slate-400 dark:text-slate-500">0 / 200</span>
-                  <button type="button" data-on-click="triggerAiPolish('templateTitle', 'title')" class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/[0.05] transition" title="Polish title with AI">
-                    <i class="ph ph-sparkle"></i>
-                    <span>Polish</span>
-                  </button>
                 </div>
               </div>
               <input type="text" id="templateTitle" placeholder="e.g. Switch & Host Addressing — Bench Lab"
@@ -281,10 +274,6 @@
                 <label class="block text-[11px] font-medium text-slate-500 dark:text-slate-400">Description</label>
                 <div class="flex items-center space-x-2">
                   <span id="descCharCounter" class="text-[10px] font-mono text-slate-400 dark:text-slate-500">0 / 1000</span>
-                  <button type="button" data-on-click="triggerAiPolish('templateDescription', 'description')" class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/[0.05] transition" title="Polish description with AI">
-                    <i class="ph ph-sparkle"></i>
-                    <span>Polish</span>
-                  </button>
                 </div>
               </div>
               <textarea id="templateDescription" rows="2" placeholder="Concise summary of audience, duration, and seat capacity..."
@@ -443,7 +432,7 @@
                 Specification Audit (vLabs %STUDIO_VERSION%)
               </h2>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Verifies structural limits, formulas across Seats 1/24/100, placeholder resolution, capture order, pattern masks, and image assets.
+                Verifies structural limits, formulas for seats 1–100, placeholder resolution, capture order, pattern masks, and image assets.
               </p>
             </div>
             <button data-on-click="runFullValidation(true)" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 text-white rounded-lg text-xs font-medium shadow-2xs transition flex items-center gap-1.5 shrink-0">
@@ -455,136 +444,6 @@
       </section>
 
     </main>
-  </div>
-
-  <!-- MODAL: Settings -->
-  <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <i class="ph ph-gear text-brand-600"></i> Template Studio Settings
-        </h3>
-        <button data-on-click="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">
-          <i class="ph ph-x"></i>
-        </button>
-      </div>
-
-      <div class="space-y-4 text-xs">
-        <!-- Appearance Toggle -->
-        <div>
-          <label class="block text-[11px] font-bold uppercase text-slate-400 mb-1">Appearance</label>
-          <button type="button" id="settingsThemeToggleBtn" data-on-click="toggleDarkMode()"
-            class="flex items-center space-x-2 px-3 py-2 bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 w-full justify-between">
-            <span class="flex items-center gap-2">
-              <i id="settingsThemeIcon" class="ph ph-moon"></i>
-              <span id="settingsThemeText">Dark Mode</span>
-            </span>
-            <span class="text-[10px] text-slate-400 font-mono">Toggle Theme</span>
-          </button>
-        </div>
-
-        <!-- AI Provider Configuration -->
-        <div class="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <label class="block text-[11px] font-bold uppercase text-slate-400">AI Text Polish Provider</label>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-[10px] text-slate-400 mb-0.5">Provider</label>
-              <select id="settingsAiProvider" data-on-change="onAiProviderChanged()" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200">
-                <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic Claude</option>
-                <option value="custom">Custom Endpoint</option>
-              </select>
-            </div>
-            <div>
-              <div class="flex items-center justify-between mb-0.5">
-                <label class="block text-[10px] text-slate-400">Model</label>
-                <button type="button" data-on-click="fetchLiveModelsForProvider()" id="refreshModelsBtn" class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-0.5" title="Fetch latest models from provider API">
-                  <i class="ph ph-arrows-clockwise text-[11px]"></i>
-                  <span>Refresh</span>
-                </button>
-              </div>
-              <select id="settingsAiModel" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200"></select>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-[10px] text-slate-400 mb-0.5">API Key</label>
-            <input type="password" id="settingsAiApiKey" placeholder="sk-... or AIza..." class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
-          </div>
-
-          <div id="customEndpointRow" class="hidden">
-            <label class="block text-[10px] text-slate-400 mb-0.5">Custom Base URL</label>
-            <input type="text" id="settingsAiCustomUrl" placeholder="http://localhost:11434/v1" class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-800 dark:text-slate-200 font-mono">
-          </div>
-
-          <div>
-            <label class="block text-[10px] text-slate-400 mb-0.5">Default System / Polish Instruction</label>
-            <textarea id="settingsAiSystemPrompt" rows="2" class="autogrow-textarea w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-800 dark:text-slate-200 min-h-[3rem]"></textarea>
-          </div>
-
-          <div class="flex items-center justify-between pt-1">
-            <button type="button" data-on-click="testAiConnection()" id="testConnectionBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
-              <i class="ph ph-plugs-connected text-sm"></i>
-              <span>Test Connection</span>
-            </button>
-            <span id="testConnectionStatus" class="text-[11px] font-medium text-slate-400 max-w-xs truncate text-right"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-        <button data-on-click="saveAppSettingsModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-xs">
-          Save Settings
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: AI Text Polish -->
-  <div id="aiPolishModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-surface-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-        <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-          <i class="ph ph-sparkle text-purple-600"></i> Polish Lab Content
-        </h3>
-        <button data-on-click="closeAiPolishModal()" class="text-slate-400 hover:text-slate-600 text-lg">
-          <i class="ph ph-x"></i>
-        </button>
-      </div>
-
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Specific Polish Instruction</label>
-          <input type="text" id="aiCustomInstructionInput" placeholder="e.g. Make it more concise, emphasize safety"
-            class="w-full text-xs bg-slate-50 dark:bg-surface-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200">
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Original Text</label>
-            <div id="aiPolishOriginalPreview" class="p-3 bg-slate-50 dark:bg-surface-850/80 border border-slate-200 dark:border-slate-700 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap"></div>
-          </div>
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="block text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400">Polished Result</label>
-              <span id="aiPolishStatusBadge" class="text-[10px] text-slate-400"></span>
-            </div>
-            <textarea id="aiPolishResultPreview" class="autogrow-textarea w-full p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 rounded-xl h-44 overflow-y-auto text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-        <button type="button" data-on-click="runAiPolishGeneration()" id="regenerateAiPolishBtn" class="px-3 py-1.5 bg-slate-100 dark:bg-surface-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
-          <i class="ph ph-sparkle text-purple-600"></i> Polish with AI
-        </button>
-        <div class="flex items-center space-x-2">
-          <button data-on-click="closeAiPolishModal()" class="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xs font-medium">Discard</button>
-          <button data-on-click="applyAiPolishedText()" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs">Accept & Apply</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- MODAL: Tokens & Captures Cheatsheet -->

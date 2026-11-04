@@ -17,6 +17,13 @@ export const utf8Bytes = (s) => new TextEncoder().encode(s).length;
 const SAMPLE_WHO = { firstName: 'Sample', lastName: 'Participant' };
 
 /**
+ * Seats every formula is evaluated for on save: a session takes at most 100
+ * participants, numbered from 1. Checking seat 1 alone let `10 / (seat - 2)`
+ * save, then fail participant #2's every page load.
+ */
+const CHECKED_SEATS = 100;
+
+/**
  * Validate & normalise instructor-authored template payloads before they hit
  * the database.
  *
@@ -152,46 +159,78 @@ export function validateTemplatePayload(payload, opts = {}) {
 }
 
 /**
- * Check a template's variables (labs and exams alike): names valid, not
- * reserved, unique, each with a formula, and every formula evaluating for a
- * sample participant (in order, so later ones may use earlier ones). Pushes
- * problems onto `errors`; returns the clean list and the set of names.
+ * Problems with a template's variables (labs and exams alike), each with the
+ * variable's position: names valid, not reserved, unique, each with a
+ * formula; then, once the names are sound, every formula evaluating for every
+ * seat 1–100 in order (later ones may use earlier ones). Only the first
+ * failing formula is reported, for the first seat it fails: the ones after it
+ * would only fail because of it. The Studio shows these at each variable.
+ *
+ * @param {Array<{name:string, expression:string}>} list normalised variables
+ * @returns {Array<{ index: number, name: string, message: string }>}
+ */
+export function variableIssues(list) {
+  const issues = [];
+  const names = new Set();
+  const formulas = [];
+  for (const [index, v] of (list || []).entries()) {
+    const name = String(v?.name ?? '').trim();
+    const expression = String(v?.expression ?? '').trim();
+    const issue = (message) => issues.push({ index, name, message });
+    if (!name) issue(`Variable #${index + 1} is missing a name`);
+    else if (!IDENT_RE.test(name)) issue(`Variable "${name}" has an invalid name`);
+    else if (RESERVED_NAMES.includes(name)) issue(`Variable "${name}" is reserved`);
+    else if (names.has(name)) issue(`Variable "${name}" is declared more than once`);
+    else {
+      names.add(name);
+      if (!expression) issue(`Variable "${name}" has no formula`);
+      else formulas.push({ index, name, expression });
+    }
+  }
+  if (issues.length) return issues;
+
+  for (let seat = 1; seat <= CHECKED_SEATS; seat += 1) {
+    let first = null;
+    resolveVariables(formulas, seat, {
+      ...SAMPLE_WHO,
+      onError: (name, err) => {
+        first ??= { name, err };
+      },
+    });
+    if (!first) continue;
+    const { index, name } = formulas.find((f) => f.name === first.name);
+    const prefix = `Error in variable "${name}": `;
+    const reason = first.err.message.startsWith(prefix)
+      ? first.err.message.slice(prefix.length)
+      : first.err.message;
+    issues.push({
+      index,
+      name,
+      message:
+        seat === 1
+          ? `${prefix}${reason}`
+          : `Error in variable "${name}" for seat ${seat}: ${reason}`,
+    });
+    break;
+  }
+  return issues;
+}
+
+/**
+ * Check a template's variables (variableIssues). Pushes problems onto
+ * `errors`; returns the usable list and the set of declared names.
  */
 export function cleanVariables(list, errors) {
-  const variables = [];
+  const issues = variableIssues(list);
+  errors.push(...issues.map((i) => i.message));
   const names = new Set();
-  const before = errors.length;
-  for (const [i, v] of (list || []).entries()) {
-    if (!v.name) {
-      errors.push(`Variable #${i + 1} is missing a name`);
-      continue;
-    }
-    if (!IDENT_RE.test(v.name)) {
-      errors.push(`Variable "${v.name}" has an invalid name`);
-      continue;
-    }
-    if (RESERVED_NAMES.includes(v.name)) {
-      errors.push(`Variable "${v.name}" is reserved`);
-      continue;
-    }
-    if (names.has(v.name)) {
-      errors.push(`Variable "${v.name}" is declared more than once`);
-      continue;
-    }
-    names.add(v.name);
-    if (!v.expression) {
-      errors.push(`Variable "${v.name}" has no formula`);
-      continue;
-    }
-    variables.push({ name: v.name, expression: v.expression });
-  }
-  // Every formula must evaluate for a sample participant (and compose in order).
-  if (errors.length === before) {
-    try {
-      resolveVariables(variables, 1, SAMPLE_WHO);
-    } catch (err) {
-      errors.push(err.message);
-    }
+  const variables = [];
+  for (const v of list || []) {
+    const name = String(v?.name ?? '').trim();
+    if (!IDENT_RE.test(name) || RESERVED_NAMES.includes(name) || names.has(name)) continue;
+    names.add(name);
+    const expression = String(v?.expression ?? '').trim();
+    if (expression) variables.push({ name, expression });
   }
   return { variables, names };
 }
@@ -262,7 +301,8 @@ export function minutesInvalid(v) {
   return v !== undefined && v !== null && v !== '' && normaliseMinutes(v) === null;
 }
 
-function fail(errors) {
+/** Throw the 400 a save is refused with, listing every problem. */
+export function fail(errors) {
   const err = new Error(errors.join('; '));
   err.status = 400;
   err.details = errors;

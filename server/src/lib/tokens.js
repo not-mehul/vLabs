@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
+import { parseUtc } from './time.js';
 
 /**
  * Two token audiences with independent secrets:
@@ -17,6 +18,16 @@ import config from '../config.js';
  */
 
 const ALG = { algorithms: ['HS256'] };
+
+/**
+ * JWT_PARTICIPANT_TTL in seconds, read exactly as jsonwebtoken reads an
+ * `expiresIn` ("12h", "2 days", …). An unusable value fails here, at start-up,
+ * rather than at the first join.
+ */
+const PARTICIPANT_TTL_SECONDS = (() => {
+  const claims = jwt.decode(jwt.sign({}, 'ttl', { expiresIn: config.jwt.participantTtl }));
+  return claims.exp - claims.iat;
+})();
 
 export function signInstructorToken(instructor) {
   return jwt.sign(
@@ -37,7 +48,16 @@ export function verifyInstructorToken(token) {
   return claims;
 }
 
+/**
+ * A participant token lasts JWT_PARTICIPANT_TTL past its session's expiry
+ * (as it stood at join), not past the join: a 12 h token used to sign people
+ * out of a longer session. Ending the session still revokes it at once.
+ */
 export function signParticipantToken(participant, session) {
+  const now = Math.floor(Date.now() / 1000);
+  const sessionEnd = Math.floor(parseUtc(session.expires_at) / 1000);
+  const exp =
+    Math.max(now, Number.isFinite(sessionEnd) ? sessionEnd : now) + PARTICIPANT_TTL_SECONDS;
   return jwt.sign(
     {
       sub: String(participant.id),
@@ -48,9 +68,10 @@ export function signParticipantToken(participant, session) {
       // Seat version: bumped when the instructor releases the seat, which
       // signs out the device that held it.
       tv: participant.token_version ?? 0,
+      exp,
     },
     config.jwt.participantSecret,
-    { expiresIn: config.jwt.participantTtl, algorithm: 'HS256' },
+    { algorithm: 'HS256' },
   );
 }
 

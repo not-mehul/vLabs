@@ -16,7 +16,15 @@ const pretty = config.log.format === 'pretty';
 
 function write(level, msg, fields) {
   if (LEVELS[level] < threshold) return;
-  const record = { time: new Date().toISOString(), level, msg, ...(fields || {}) };
+  // A `msg` field is the human-readable detail; it must not replace the event name.
+  const { msg: detail, ...rest } = fields || {};
+  const record = {
+    time: new Date().toISOString(),
+    level,
+    msg,
+    ...(detail === undefined ? {} : { detail }),
+    ...rest,
+  };
   if (record.err instanceof Error) {
     record.err = {
       message: record.err.message,

@@ -16,7 +16,7 @@ import templateRoutes from './routes/templates.js';
 import sessionRoutes from './routes/sessions.js';
 import participantRoutes from './routes/participant.js';
 import examRoutes from './routes/exam.js';
-import imageRoutes from './routes/images.js';
+import imageRoutes, { publicImageRoutes } from './routes/images.js';
 import serverRoutes from './routes/server.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -95,6 +95,10 @@ export function createApp() {
       res.status(503).json({ status: 'degraded', error: 'database unavailable' });
     }
   });
+
+  // Library images are fetched by <img> tags without a token: they have their
+  // own per-IP limit (routes/images.js) instead of the API-wide one.
+  app.use('/api/images', publicImageRoutes);
 
   // Broad rate limit across the whole API surface.
   app.use('/api', apiLimiter);

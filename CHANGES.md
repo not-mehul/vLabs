@@ -1,6 +1,6 @@
 # vLabs — change log
 
-Newest entry at the bottom (1.18.1). The first section is the original code
+Newest entry at the bottom (1.19.0). The first section is the original code
 review change set, kept for the record.
 
 ## 1.1.0 — code review change set
@@ -1046,3 +1046,84 @@ what the earlier releases left behind.
 ### Upgrading
 
 `deploy/pi/update.sh` as usual. No migration.
+
+## 1.19.0 — audit fixes
+
+The fixes from the [codebase audit](docs/CODEBASE_AUDIT.md), with a test
+for each (`server/tests/robustness.test.js`).
+
+- **A formula that fails for one seat can no longer break that seat.**
+  Saving used to evaluate formulas for seat 1 only, so `10 / (seat - 2)`
+  saved and then failed participant #2's every page load (and silently
+  dropped every variable from that seat's exam, grading correct answers
+  wrong). Saving now evaluates every formula for seats 1–100 and names the
+  seat it fails for. A seat moved past 100 by hand where a formula still
+  fails shows `⟨error:NAME⟩` for that value; the page and the other
+  variables still work. The Studio's audit runs the same check (it had its
+  own, for seats 1, 24 and 100).
+- **The admin account is stored, not worked out.** The admin used to be
+  "the account named `SEED_INSTRUCTOR_USERNAME`", so changing that setting
+  after install let any instructor create an account under the new name and
+  take the role. Migration 13 flags the current admin; the setting is only
+  read when the first account is created.
+- **Image names with a bare `%`** (`![chart](50%-done.png)`) are a
+  validation message instead of an internal server error on save.
+- **"Still in use" checks for images match whole file names** (`a.png` is
+  not used by a template showing `rack-a.png`) and count archived templates,
+  so deleting an image can no longer break a template you restore later.
+- **A database from a newer release is refused.** An older vLabs started on
+  a database a newer one had migrated now stops with a clear message instead
+  of running on a schema it does not know. `update.sh` restores the backup it
+  took when a failed update had already migrated the database, keeping the
+  migrated file beside it.
+- **Lighter monitors.** The session and exam monitors grade each participant
+  once per refresh (they did it two or three times), the grade-by-question
+  view grades only its question, and every live view stops polling while its
+  tab is hidden and never overlaps its own requests.
+- **History without snapshots.** A template's history lists what each
+  version changed (worked out on the server) without sending every full
+  snapshot; **Revert** fetches the one version it needs.
+- **Smaller fixes:** an instructor unlocking a checkpoint that saves its
+  answer kept it lower-cased (`rack-7-a` for `Rack-7-A`); formula text is
+  capped at 1000 characters (composing formulas could build a 256 MB
+  string); an unusable numeric setting such as `MIN_PASSWORD_LENGTH=abc` no
+  longer turns into "any password is long enough", it falls back to its
+  default with a warning; names typed with combining accents join the same
+  seat as precomposed ones; participant tokens last 12 h past the session's
+  expiry instead of 12 h past the join; library images have their own rate
+  limit, so a class behind one NAT opening an image-heavy section is not
+  throttled; IPv6 rate-limit buckets are the real /64 for compressed
+  addresses; template saves and their history entries, and ending a session
+  with its open break, are written together; one corrupt JSON column no
+  longer breaks a monitor.
+- **AI Polish is removed from the offline Studio.** It sent template text
+  and an API key to outside services, offered only retired models, and kept
+  the key in the browser's storage. Opening the new Studio clears those
+  stored settings; the settings dialog (which held them) is gone, and the
+  theme switch stays in the header.
+- **Dead code and duplication removed.** The unused `POST
+  /api/templates/:id/preview` and `GET /api/templates/functions` endpoints
+  (the Studio previews by itself), unused helpers (`checkpointAnswer`,
+  `isCorrectAnswer`, `parseJsonTemplate`, a second `countSteps`, an unused
+  config field and image re-export), the `participants.answer_log` column
+  (empty since 1.5.1; migration 13 drops it), a duplicate `submitted_count`
+  in the exam monitor's data, and stale comments. About a dozen copies of a
+  "read this JSON column safely" helper are one (`server/src/lib/json.js`);
+  the lab and exam routes share their presence, no-store and re-read
+  helpers; the portal and the command-line tool share the account rules;
+  the portal and the server share timestamp parsing.
+- **Dependencies:** `body-parser` 1.20.9 (high-severity advisory).
+
+### Upgrading
+
+`deploy/pi/update.sh` as usual. Migration 13 runs on start: it flags the
+admin account, brings stored name keys to one Unicode form and drops the
+unused `answer_log` column. Rolling back to 1.18.x afterwards needs the
+database backup taken before the update (`update.sh` restores it if this
+update fails to start).
+
+API changes for scripts that call vLabs directly: `GET
+/api/templates/:id/audit` entries carry `changes` and `has_snapshot` instead
+of `snapshot` (fetch one with `GET /api/templates/:id/audit/:entryId`); the
+exam monitor's `submitted_count` is `complete_count`; `POST
+/api/templates/:id/preview` and `GET /api/templates/functions` are gone.

@@ -240,7 +240,9 @@ Formulas** view). Each has a **name** and an **expression**.
 | Concatenation | `'S' + seat` → `S7` | `+` concatenates when **either** side is a string; otherwise it adds. `'1' + 2` → `12`, `1 + 2` → `3`. |
 | Helpers | `pad(seat, 2)` | Whitelisted pure functions only (below). Nothing else is callable. |
 
-Max expression length 500 characters, nesting depth 32. Anything outside this
+Max expression length 500 characters, nesting depth 32, and a text value of
+at most 1000 characters (so formulas that build on each other cannot grow
+without bound). Anything outside this
 grammar — unknown identifiers, `constructor`, semicolons, assignment, `=`,
 comparisons, `if` — is rejected at save time.
 
@@ -289,8 +291,11 @@ ROLE        = mod(seat, 2)              # 1 = odd seats, 0 = even seats
 PARTNER     = seat + 1 - 2 * mod(seat + 1, 2)   # pairs 1↔2, 3↔4 …
 ```
 
-Formulas are checked at save time by evaluating them for **seat 1, "Sample
-Participant"** — so a formula must at least work for that input. There is no
+Formulas are checked at save time by evaluating them for **every seat from 1
+to 100** (a session's capacity), as "Sample Participant", so a formula that
+divides by `seat - 2` is refused with the seat it fails for. A seat moved
+past 100 with **Change seat** where a formula still fails shows
+`⟨error:NAME⟩` in place of that value instead of failing the page. There is no
 conditional logic; if you need different text for different seats, derive a
 value (`ROLE`) and write the body so it reads correctly either way, or split
 the cohort into two templates/sessions.
@@ -821,7 +826,8 @@ problems at once. Locations read `Section N · step M <field>`.
 | `Variable "X" is reserved` | Rename; see §4.1. |
 | `Variable "X" is declared more than once` | Remove the duplicate. |
 | `Variable "X" has no formula` | Right-hand side empty. |
-| `Error in variable "X": …` | The formula failed for seat 1 — unknown identifier (declared below it? typo?), unknown function, division by zero, bad token. |
+| `Error in variable "X": …` | The formula failed for seat 1: unknown identifier (declared below it? typo?), unknown function, division by zero, bad token, text over 1000 characters. |
+| `Error in variable "X" for seat N: …` | It works for seat 1 but fails for seat N (`10 / (seat - N)`); every seat 1–100 is checked. |
 | `Unknown placeholder {{ X }} in …` | Declare the variable, fix the spelling, or (if it is a capture) move the reference after the capturing step. |
 | `{{ X }} is used in … before the checkpoint that captures it` | Captures exist from the following step onward. |
 | `… checkpoint pattern: Pattern has no wildcards …` | Use an exact answer, or add `9/A/X/?/*`. |
@@ -866,7 +872,7 @@ error: it is treated as **no checkpoint** and dropped. Watch for this when a
 Before you save or hand a template to someone else:
 
 - [ ] Front matter has a `title`; `description` says who the lab is for.
-- [ ] Every variable works for seat 1 and makes sense for seat 100 (`100 +
+- [ ] Every variable makes sense for seat 1 and for seat 100 (`100 +
       seat` → `.200`; does your subnet allow it? Pods of 4 → 25 pods?).
 - [ ] Every `{{ PLACEHOLDER }}` is declared, built-in, or a capture used
       *after* its checkpoint (the Studio's Validation Audit is clean).

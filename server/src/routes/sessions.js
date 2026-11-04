@@ -2,18 +2,17 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import db from '../db/index.js';
 import { requireInstructor } from '../middleware/auth.js';
-import { asyncHandler, httpError } from '../middleware/errorHandler.js';
+import { httpError, idParam } from '../middleware/errorHandler.js';
 import { isoInMinutes, nowIso, secondsBetween, parseUtc } from '../lib/time.js';
 import {
   isSectionCleared,
   stepHasCheckpoint,
   checkpointMode,
   checkpointKey,
-  checkpointAnswer,
   computeUnlockedSection,
   isStepReachable,
   matchCheckpoint,
-  resolveVariables,
+  injectVariables,
   injectImages,
 } from '../../../shared/templating.js';
 import { imageUrlMap } from '../lib/images.js';
@@ -34,10 +33,10 @@ import {
   examQuestionStats,
   examQuestionResponses,
   gradeParticipant,
-  parseObject,
-  parseArray,
   sessionAnswerLog,
 } from '../lib/examGrading.js';
+import { jsonArray, jsonObject } from '../lib/json.js';
+import { seatContext } from '../lib/seatContext.js';
 import {
   listQuestions,
   totalPoints,
@@ -52,6 +51,7 @@ import {
   sweepExpiredSessions,
   snapshotTemplateIntoSession,
   collectExamSubmissions,
+  completeLabSeat,
 } from '../lib/sessionLifecycle.js';
 import { sectionTimeDetail, labStepStats } from '../lib/sectionDetail.js';
 import {
@@ -67,7 +67,7 @@ const router = Router();
 router.use(requireInstructor);
 
 /** Session length when the launcher sends none, in minutes. */
-export const DEFAULT_SESSION_MINUTES = Object.freeze({ lab: 8 * 60, exam: 60 });
+const DEFAULT_SESSION_MINUTES = Object.freeze({ lab: 8 * 60, exam: 60 });
 
 const q = {
   codeClash: db.prepare('SELECT 1 FROM sessions WHERE room_code = ? AND is_active = 1'),
@@ -113,10 +113,6 @@ const q = {
     `UPDATE participants SET completed_checkpoints = ?, captured_values = ?, checkpoint_log = ?
       WHERE id = ?`,
   ),
-  complete: db.prepare(
-    `UPDATE participants SET completed_at = ?, section_times = ?
-      WHERE id = ? AND completed_at IS NULL`,
-  ),
   // Unbinds the exam seat from its device and signs that device out; the next
   // join with the same name (on any device) takes the seat over.
   releaseSeat: db.prepare(
@@ -129,7 +125,7 @@ const q = {
   ),
 };
 
-/** The participant :pid of an owned session, or 404. */
+/** The participant :pid of the session, or 404. */
 function participantOr404(req, row) {
   const pid = Number(req.params.pid);
   const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
@@ -168,19 +164,15 @@ function sessionStatus(row) {
   return 'active';
 }
 
-/** Parse and validate a numeric :id param. */
-function idParam(req) {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) throw httpError(404, 'Session not found');
-  return id;
-}
-
 /** A session's per-seat variable formulas (exams resolve them per participant). */
-const variablesOf = (row) => parseArray(row.variables);
+const variablesOf = (row) => jsonArray(row.variables);
+
+/** A session's own copy of the manual or exam. */
+const contentOf = (row) => jsonArray(row.content);
 
 /** Any session, for reading (every instructor can open any monitor), or 404. */
 function viewableOr404(req) {
-  const row = q.detail.get(idParam(req));
+  const row = q.detail.get(idParam(req, 'Session not found'));
   if (!row) throw httpError(404, 'Session not found');
   return row;
 }
@@ -196,16 +188,6 @@ function ownedOr404(req) {
     );
   }
   return row;
-}
-
-/** Parse a JSON object column defensively. */
-function safeObject(json) {
-  try {
-    const v = JSON.parse(json || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
 }
 
 /** Names captured by pattern checkpoints, in template order. */
@@ -265,7 +247,7 @@ function breakView(row) {
  */
 function participantView(p, sections, breaks = []) {
   const now = nowIso();
-  const completed = new Set(JSON.parse(p.completed_checkpoints));
+  const completed = new Set(jsonArray(p.completed_checkpoints));
   const sectionCount = sections.length;
   const progress = labProgress(sections, p, completed);
   // "Complete" is recorded server-side the moment the lab is cleared, so a
@@ -301,10 +283,10 @@ function participantView(p, sections, breaks = []) {
     counting_sections: progress.countingTotal,
     sections_done: progress.done,
     completed_checkpoints: [...completed],
-    captured: safeObject(p.captured_values),
-    hints_taken: JSON.parse(p.hints_taken || '[]').length,
-    solutions_revealed: JSON.parse(p.revealed_solutions || '[]').length,
-    wrong_attempts: (safeArray(p.checkpoint_log) || []).filter((e) => !e.ok).length,
+    captured: jsonObject(p.captured_values),
+    hints_taken: jsonArray(p.hints_taken).length,
+    solutions_revealed: jsonArray(p.revealed_solutions).length,
+    wrong_attempts: jsonArray(p.checkpoint_log).filter((e) => !e.ok).length,
     complete,
     completed_at: completedAt,
     finished,
@@ -325,15 +307,6 @@ function participantView(p, sections, breaks = []) {
     last_seen_at: p.last_seen_at,
     seconds_since_seen: secondsSinceSeen,
   };
-}
-
-function safeArray(json) {
-  try {
-    const v = JSON.parse(json || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -361,7 +334,7 @@ function participantDetail(p, sections, breaks = []) {
       .map((n) => parseInt(n, 10));
 
   // Checkpoints in manual order with their attempts.
-  const log = safeArray(p.checkpoint_log);
+  const log = jsonArray(p.checkpoint_log);
   const completedSet = new Set(view.completed_checkpoints);
   const checkpoints = [];
   sections.forEach((sec, si) => {
@@ -394,12 +367,12 @@ function participantDetail(p, sections, breaks = []) {
     });
   });
 
-  const hints = safeArray(p.hints_taken).map((k) => {
+  const hints = jsonArray(p.hints_taken).map((k) => {
     const [si, sti, hi] = parseKey(k);
     const label = sections[si]?.steps?.[sti]?.hints?.[hi]?.label || `Hint ${hi + 1}`;
     return { key: k, ...stepTitle(si, sti), hint_index: hi, label };
   });
-  const solutions = safeArray(p.revealed_solutions).map((k) => {
+  const solutions = jsonArray(p.revealed_solutions).map((k) => {
     const [si, sti] = parseKey(k);
     return { key: k, ...stepTitle(si, sti) };
   });
@@ -449,57 +422,54 @@ function summarise(row, viewerId) {
  * The template's current title/content/variables are COPIED into the session
  * (frozen at launch). Archived templates cannot be launched.
  */
-router.post(
-  '/',
-  asyncHandler(async (req, res) => {
-    sweepExpiredSessions();
-    const templateId = Number(req.body?.template_id);
-    const title = String(req.body?.title || '')
-      .trim()
-      .slice(0, 200);
+router.post('/', (req, res) => {
+  sweepExpiredSessions();
+  const templateId = Number(req.body?.template_id);
+  const title = String(req.body?.title || '')
+    .trim()
+    .slice(0, 200);
 
-    const template = Number.isInteger(templateId) ? q.template.get(templateId) : null;
-    if (!template) throw httpError(400, 'template_id does not reference a template');
-    if (template.archived_at)
-      throw httpError(409, 'This template is archived — restore it to launch a session');
+  const template = Number.isInteger(templateId) ? q.template.get(templateId) : null;
+  if (!template) throw httpError(400, 'template_id does not reference a template');
+  if (template.archived_at)
+    throw httpError(409, 'This template is archived — restore it to launch a session');
 
-    const exam = template.kind === 'exam';
-    // Default length: a lab day (8 h) or an exam hour.
-    const fallback = DEFAULT_SESSION_MINUTES[exam ? 'exam' : 'lab'];
-    const durationMinutes = Math.min(
-      Math.max(parseInt(req.body?.duration_minutes ?? fallback, 10) || fallback, 5),
-      24 * 60,
-    );
+  const exam = template.kind === 'exam';
+  // Default length: a lab day (8 h) or an exam hour.
+  const fallback = DEFAULT_SESSION_MINUTES[exam ? 'exam' : 'lab'];
+  const durationMinutes = Math.min(
+    Math.max(parseInt(req.body?.duration_minutes ?? fallback, 10) || fallback, 5),
+    24 * 60,
+  );
 
-    // Optional: reuse the seat numbers of one of the instructor's labs (an exam
-    // after a lab, or day two of a multi-day lab).
-    const seatSource = checkSeatSource(req.body?.seat_source_session_id, req.instructor.id);
+  // Optional: reuse the seat numbers of one of the instructor's labs (an exam
+  // after a lab, or day two of a multi-day lab).
+  const seatSource = checkSeatSource(req.body?.seat_source_session_id, req.instructor.id);
 
-    const roomCode = generateRoomCode();
-    const info = q.insert.run(
-      roomCode,
-      title || template.title,
-      exam ? 'exam' : 'lab',
-      template.id,
-      req.instructor.id,
-      template.version,
-      template.title,
-      template.content,
-      template.variables,
-      isoInMinutes(durationMinutes),
-      seatSource,
-    );
+  const roomCode = generateRoomCode();
+  const info = q.insert.run(
+    roomCode,
+    title || template.title,
+    exam ? 'exam' : 'lab',
+    template.id,
+    req.instructor.id,
+    template.version,
+    template.title,
+    template.content,
+    template.variables,
+    isoInMinutes(durationMinutes),
+    seatSource,
+  );
 
-    const row = q.detail.get(info.lastInsertRowid);
-    log.info('session.created', {
-      session: row.id,
-      template: template.id,
-      instructor: req.instructor.id,
-      seat_source: seatSource,
-    });
-    res.status(201).json(summarise(row, req.instructor.id));
-  }),
-);
+  const row = q.detail.get(info.lastInsertRowid);
+  log.info('session.created', {
+    session: row.id,
+    template: template.id,
+    instructor: req.instructor.id,
+    seat_source: seatSource,
+  });
+  res.status(201).json(summarise(row, req.instructor.id));
+});
 
 /** GET /api/sessions — list this instructor's sessions with live counts. */
 router.get('/', (req, res) => {
@@ -521,10 +491,8 @@ router.get('/', (req, res) => {
  */
 router.get('/:id/participants/:pid', (req, res) => {
   const row = viewableOr404(req);
-  const pid = Number(req.params.pid);
-  const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
-  if (!p) throw httpError(404, 'Participant not found');
-  const content = JSON.parse(row.content);
+  const p = participantOr404(req, row);
+  const content = contentOf(row);
   if (!isExam(row)) {
     return res.json({
       ...participantDetail(p, content, breaksOf(row)),
@@ -589,14 +557,14 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
   if (isExam(row)) throw httpError(409, 'Only lab checkpoints can be unlocked');
   if (sessionStatus(row) !== 'active') throw httpError(409, 'The session is not active');
   const p = participantOr404(req, row);
-  const sections = JSON.parse(row.content);
+  const sections = contentOf(row);
   const [si, sti] = String(req.params.key)
     .split('.')
     .map((n) => (/^\d+$/.test(n) ? Number(n) : NaN));
   const step = sections[si]?.steps?.[sti];
   if (!step || !stepHasCheckpoint(step)) throw httpError(404, 'Checkpoint not found');
   const key = checkpointKey(si, sti);
-  const completed = new Set(JSON.parse(p.completed_checkpoints || '[]'));
+  const completed = new Set(jsonArray(p.completed_checkpoints));
   if (completed.has(key)) return res.json({ ok: true, already: true });
   if (
     si > computeUnlockedSection(sections, completed) ||
@@ -605,11 +573,11 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
     throw httpError(409, 'The participant has not reached this checkpoint yet');
   }
 
-  const captured = safeObject(p.captured_values);
+  const captured = jsonObject(p.captured_values);
   const capture = step.checkpoint.capture || null;
   let value = null;
   if (capture) {
-    const context = resolveVariables(variablesOf(row), p.seat_number, {
+    const context = seatContext(variablesOf(row), p.seat_number, {
       firstName: p.first_name,
       lastName: p.last_name,
       captured,
@@ -626,13 +594,15 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
       }
       value = match.value;
     } else {
-      value = checkpointAnswer(step, context);
+      // The seat's own answer as authored (placeholders resolved, casing kept),
+      // exactly what the participant entering it would have saved.
+      value = injectVariables(String(step.checkpoint.answer), context).trim();
     }
-    if (value !== null) captured[capture] = value;
+    captured[capture] = value;
   }
 
   const now = nowIso();
-  const entries = safeArray(p.checkpoint_log);
+  const entries = jsonArray(p.checkpoint_log);
   entries.push({ k: key, a: value ?? '', ok: 1, at: now, by: req.instructor.username });
   completed.add(key);
   q.setCheckpoints.run(
@@ -642,13 +612,7 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
     p.id,
   );
   // Clearing the last checkpoint completes the lab, as it would for the participant.
-  if (!p.completed_at && labProgress(sections, p, completed).complete) {
-    const times = safeObject(p.section_times);
-    const k = String(p.current_section);
-    times[k] =
-      (Number(times[k]) || 0) + activeSecondsBetween(p.section_entered_at, now, breaksOf(row));
-    q.complete.run(now, JSON.stringify(times), p.id);
-  }
+  if (labProgress(sections, p, completed).complete) completeLabSeat(p, now, breaksOf(row));
   log.info('checkpoint.unlocked', {
     session: row.id,
     participant: p.id,
@@ -672,19 +636,18 @@ router.post('/:id/participants/:pid/checkpoints/:key/unlock', (req, res) => {
 router.put('/:id/participants/:pid/marks/:key', (req, res) => {
   const row = ownedOr404(req);
   if (!isExam(row)) throw httpError(409, 'Marks only apply to exam sessions');
-  const pid = Number(req.params.pid);
-  const p = Number.isInteger(pid) ? q.participant.get(pid, row.id) : null;
-  if (!p) throw httpError(404, 'Participant not found');
-  const content = JSON.parse(row.content);
+  const p = participantOr404(req, row);
+  const content = contentOf(row);
   const key = String(req.params.key);
-  if (!listQuestions(content).some((x) => x.key === key)) throw httpError(404, 'Unknown question');
+  const entry = listQuestions(content).find((x) => x.key === key);
+  if (!entry) throw httpError(404, 'Unknown question');
   const body = req.body || {};
   const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
   if (!has('correct') && !has('points') && !has('comment')) {
     throw httpError(400, 'Give correct, points or comment');
   }
-  const question = listQuestions(content).find((x) => x.key === key).q;
-  const grades = parseObject(p.grades);
+  const question = entry.q;
+  const grades = jsonObject(p.grades);
   const mark = { ...(grades[key] || {}) };
   if (has('correct')) {
     const verdict = body.correct;
@@ -792,7 +755,7 @@ router.get('/:id/questions/:key', (req, res) => {
   if (!isExam(row)) throw httpError(409, 'Only exam sessions have questions');
   const out = examQuestionResponses(
     q.participants.all(row.id),
-    JSON.parse(row.content),
+    contentOf(row),
     String(req.params.key),
     variablesOf(row),
   );
@@ -809,7 +772,7 @@ router.get('/:id/questions/:key', (req, res) => {
 router.get('/:id/sections/:index', (req, res) => {
   const row = viewableOr404(req);
   const index = Number(req.params.index);
-  const content = JSON.parse(row.content);
+  const content = contentOf(row);
   if (!Number.isInteger(index) || index < 0 || index >= content.length) {
     throw httpError(404, 'Unknown section');
   }
@@ -817,13 +780,15 @@ router.get('/:id/sections/:index', (req, res) => {
   const rows = q.participants.all(row.id);
   const breaks = breaksOf(row);
   if (isExam(row)) {
-    const views = rows.map((p) => examParticipantView(p, content, breaks, variablesOf(row)));
+    const variables = variablesOf(row);
+    const graded = rows.map((p) => gradeParticipant(p, content, variables));
+    const views = rows.map((p, i) => examParticipantView(p, content, breaks, variables, graded[i]));
     return res.json({
       kind: 'exam',
       ...sectionTimeDetail(section, index, views),
       optional: !isSubmitSection(section) && isOptionalSection(section),
       question_count: sectionItems(section).filter(isQuestion).length,
-      questions: examQuestionStats(rows, content, variablesOf(row)).filter(
+      questions: examQuestionStats(rows, content, variables, graded).filter(
         (x) => x.section_index === index,
       ),
     });
@@ -840,12 +805,15 @@ router.get('/:id/sections/:index', (req, res) => {
 
 /** Monitor data for an EXAM session. */
 function examSessionDetail(row, viewerId) {
-  const content = JSON.parse(row.content);
+  const content = contentOf(row);
   const rows = q.participants.all(row.id);
   const variables = variablesOf(row);
+  const breaks = breaksOf(row);
   const labSeats = labSeatMap(row);
-  const participants = rows.map((p) => ({
-    ...examParticipantView(p, content, breaksOf(row), variables),
+  // Each seat's exam is rendered and graded once, for the rows and the statistics.
+  const graded = rows.map((p) => gradeParticipant(p, content, variables));
+  const participants = rows.map((p, i) => ({
+    ...examParticipantView(p, content, breaks, variables, graded[i]),
     lab_seat: labSeatOf(labSeats, p),
   }));
   return {
@@ -861,12 +829,12 @@ function examSessionDetail(row, viewerId) {
       optional: !isSubmitSection(sec) && isOptionalSection(sec),
       question_count: sectionItems(sec).filter(isQuestion).length,
     })),
+    // Exams are complete once submitted.
     complete_count: participants.filter((p) => p.submitted).length,
     question_count: listQuestions(content).length,
     total_points: totalPoints(content),
-    submitted_count: participants.filter((p) => p.submitted).length,
     pending_count: participants.reduce((n, p) => n + p.pending_count, 0),
-    questions: examQuestionStats(rows, content, variables),
+    questions: examQuestionStats(rows, content, variables, graded),
     participants,
   };
 }
@@ -875,7 +843,7 @@ function examSessionDetail(row, viewerId) {
 router.get('/:id', (req, res) => {
   const row = viewableOr404(req);
   if (isExam(row)) return res.json(examSessionDetail(row, req.instructor.id));
-  const sections = JSON.parse(row.content);
+  const sections = contentOf(row);
   const sectionCount = sections.length;
   const breaks = breaksOf(row);
   const labSeats = labSeatMap(row);
@@ -948,11 +916,9 @@ router.post('/:id/terminate', (req, res) => {
   // A break still running when the class ends is closed at the end time.
   const breaks = breaksOf(row);
   const running = currentBreak(breaks);
-  if (running) {
-    running.end = now;
-    q.setBreaks.run(JSON.stringify(breaks), row.id);
-  }
+  if (running) running.end = now;
   const collected = db.transaction(() => {
+    if (running) q.setBreaks.run(JSON.stringify(breaks), row.id);
     q.terminate.run(now, row.id);
     return isExam(row)
       ? collectExamSubmissions({ ...row, breaks: JSON.stringify(breaks) }, now)
@@ -1019,17 +985,16 @@ router.delete('/:id', (req, res) => {
 router.get('/:id/export', (req, res) => {
   const row = viewableOr404(req);
   if (isExam(row)) return res.json(examExport(row));
-  const sections = JSON.parse(row.content);
+  const sections = contentOf(row);
   const captureNames = captureNamesOf(sections);
+  const rows = q.participants.all(row.id);
+  const breaks = breaksOf(row);
+  const details = rows.map((p) => participantDetail(p, sections, breaks));
 
   // Self-describing index of the manual so consumers (and the CSV builder)
   // can lay out uniform per-section / per-checkpoint columns without parsing
   // the template themselves.
-  const breaks = breaksOf(row);
-  const averages = sectionAverages(
-    sections,
-    q.participants.all(row.id).map((p) => participantView(p, sections, breaks)),
-  );
+  const averages = sectionAverages(sections, details);
   const sectionIndex = sections.map((sec, i) => ({
     index: i,
     number: i + 1,
@@ -1061,8 +1026,8 @@ router.get('/:id/export', (req, res) => {
     });
   });
 
-  const participants = q.participants.all(row.id).map((p) => {
-    const d = participantDetail(p, sections, breaksOf(row));
+  const participants = rows.map((p, pi) => {
+    const d = details[pi];
     return {
       number: d.seat_number,
       first_name: p.first_name,
@@ -1173,7 +1138,7 @@ router.get('/:id/export', (req, res) => {
       template_title: row.template_title,
       template_version: row.template_version,
       status: sessionStatus(row),
-      break_total_seconds: totalBreakSeconds(breaksOf(row)),
+      break_total_seconds: totalBreakSeconds(breaks),
       section_count: sections.length,
       capture_names: captureNames,
       created_at: row.created_at,
@@ -1194,11 +1159,12 @@ router.get('/:id/export', (req, res) => {
  * answer change across the class.
  */
 function examExport(row) {
-  const content = JSON.parse(row.content);
+  const content = contentOf(row);
   const rows = q.participants.all(row.id);
   const breaks = breaksOf(row);
   const variables = variablesOf(row);
-  const views = rows.map((p) => examParticipantView(p, content, breaks, variables));
+  const graded = rows.map((p) => gradeParticipant(p, content, variables));
+  const views = rows.map((p, i) => examParticipantView(p, content, breaks, variables, graded[i]));
   const averages = sectionAverages(content, views);
   const sectionIndex = content.map((sec, i) => ({
     index: i,
@@ -1245,7 +1211,7 @@ function examExport(row) {
       section_seconds: v.section_seconds,
       joined_at: p.joined_at,
       last_seen_at: p.last_seen_at,
-      responses: gradeParticipant(p, content, variables).map((g) => ({
+      responses: graded[pi].map((g) => ({
         key: g.key,
         number: g.number,
         response: g.response,
@@ -1273,7 +1239,7 @@ function examExport(row) {
       template_title: row.template_title,
       template_version: row.template_version,
       status: sessionStatus(row),
-      break_total_seconds: totalBreakSeconds(breaksOf(row)),
+      break_total_seconds: totalBreakSeconds(breaks),
       section_count: content.length,
       question_count: questions.length,
       total_points: totalPoints(content),
@@ -1288,5 +1254,4 @@ function examExport(row) {
   };
 }
 
-export { sessionStatus };
 export default router;

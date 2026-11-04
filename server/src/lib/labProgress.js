@@ -1,5 +1,6 @@
 import { countingSections } from '../../../shared/lab-progress.js';
 import { isSectionCleared } from '../../../shared/templating.js';
+import { jsonObject } from './json.js';
 
 /**
  * Sections a participant has opened: every section with recorded time, the
@@ -7,13 +8,9 @@ import { isSectionCleared } from '../../../shared/templating.js';
  * participant viewing that section).
  */
 export function visitedSections(p) {
-  let times = {};
-  try {
-    times = JSON.parse(p.section_times || '{}') || {};
-  } catch {
-    times = {};
-  }
-  const opened = new Set(Object.keys(times).map(Number).filter(Number.isInteger));
+  const opened = new Set(
+    Object.keys(jsonObject(p.section_times)).map(Number).filter(Number.isInteger),
+  );
   if (Number.isInteger(p.current_section)) opened.add(p.current_section);
   if (Number.isInteger(p.max_section)) opened.add(p.max_section);
   return opened;

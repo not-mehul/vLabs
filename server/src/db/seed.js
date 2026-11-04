@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
+import { pathToFileURL } from 'node:url';
 import db from './index.js';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
+import { BCRYPT_ROUNDS } from '../lib/accounts.js';
 import { parseExamMarkdown, SAMPLE_EXAM_MARKDOWN } from '../../../shared/exam-format.js';
 import { assignItemIds } from '../../../shared/template-schema.js';
 
@@ -191,9 +193,10 @@ export function accountsOnDefaultPassword() {
 export function ensureSeed() {
   let instructorId;
   if (needsBootstrapInstructor()) {
-    const hash = bcrypt.hashSync(config.seedInstructor.password, 10);
+    const hash = bcrypt.hashSync(config.seedInstructor.password, BCRYPT_ROUNDS);
+    // The bootstrap account is the admin (routes/auth.js).
     const info = db
-      .prepare('INSERT INTO instructors (username, password_hash) VALUES (?, ?)')
+      .prepare('INSERT INTO instructors (username, password_hash, is_admin) VALUES (?, ?, 1)')
       .run(config.seedInstructor.username, hash);
     instructorId = info.lastInsertRowid;
     log.info('seed.instructor', { username: config.seedInstructor.username });
@@ -249,7 +252,7 @@ export function ensureSeed() {
 }
 
 // Allow `npm run seed` as a standalone command.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   ensureSeed();
   console.log('  Seeding complete.');
   process.exit(0);
