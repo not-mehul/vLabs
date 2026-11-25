@@ -24,6 +24,9 @@ server/data/
 npm-debug.log*
 logs/
 
+# Templates
+templates/
+
 # Editor / OS
 .DS_Store
 .vscode/
